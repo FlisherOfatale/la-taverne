@@ -1,0 +1,51 @@
+name: Bug report / Signaler un bug
+description: Something doesn't work as expected. / Quelque chose ne marche pas comme prévu.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! English or French, as you like.
+        Merci pour le signalement ! En anglais ou en français, comme vous préférez.
+
+  - type: input
+    id: version
+    attributes:
+      label: La Taverne version / Version de La Taverne
+      description: In the addon list, or the CurseForge app. / Dans la liste des addons, ou l'application CurseForge.
+      placeholder: 0.31.2-alpha
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / Que s'est-il passé ?
+      description: What you did, what you expected, and what happened instead. / Ce que vous avez fait, ce que vous attendiez, et ce qui s'est passé à la place.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again / Comment le reproduire
+      description: If you know. / Si vous savez.
+      placeholder: |
+        1.
+        2.
+        3.
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Error report / Rapport d'erreurs
+      description: |
+        If La Taverne reported an error: Options > Error report (or `/taverne errors`), copy the text here.
+        Si La Taverne a signalé une erreur : Options > Rapport d'erreurs (ou `/taverne errors`), copiez le texte ici.
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else / Autre chose
+      description: Game language, other addons that may be involved, screenshots... / Langue du jeu, autres addons possiblement en cause, captures d'écran...

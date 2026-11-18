@@ -1,0 +1,22 @@
+name: Suggestion
+description: An idea or an improvement. / Une idée ou une amélioration.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or French, as you like. / En anglais ou en français, comme vous préférez.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea / Votre idée
+      description: What would you like La Taverne to do? / Qu'aimeriez-vous que La Taverne fasse ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why / Pourquoi
+      description: The situation where it would help. / La situation où ça aiderait.
