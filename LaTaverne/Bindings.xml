@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="LATAVERNE_TOGGLE" header="LATAVERNE" category="ADDONS">
+        LaTaverne_Toggle()
+    </Binding>
+</Bindings>

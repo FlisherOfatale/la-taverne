@@ -1,0 +1,9 @@
+# Claude Code local settings
+.claude/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+*.zip
