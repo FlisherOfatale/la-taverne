@@ -1,0 +1,19 @@
+# BigWigsMods packager (https://github.com/BigWigsMods/packager)
+# The addon lives in the LaTaverne/ subfolder: it's moved up to the top of the zip, and the
+# repo-level files stay out of the package. Libraries are embedded, so no externals.
+package-as: LaTaverne
+
+move-folders:
+  LaTaverne/LaTaverne: LaTaverne
+
+ignore:
+  - README.md
+  - CHANGELOG.md
+  - LICENSE
+
+# Release notes for CurseForge and GitHub: the notes of the version being tagged.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+enable-nolib-creation: no

@@ -1,0 +1,38 @@
+name: Release
+
+# Pushing a version tag (v1.0.0, v1.2.3-beta...) packages the addon and uploads it to
+# CurseForge and GitHub Releases. 0.x tags are the private pre-launch history: skipped.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ !startsWith(github.ref_name, 'v0.') }}
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that the tag matches the TOC version
+        run: |
+          toc=$(grep -m1 '^## Version:' LaTaverne/LaTaverne.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r[:space:]')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$toc" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the TOC version $toc"
+            exit 1
+          fi
+          if ! grep -q "^# La Taverne $tag\b" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md isn't the $tag notes"
+            exit 1
+          fi
+
+      - uses: BigWigsMods/packager@v2
