@@ -3001,7 +3001,9 @@ local function BuildPlayersPanel()
     p.showOthers = false
 
     function p:Layout(available, demandRows, showDemand)
-        local y = available and -94 or -68
+        -- Available: status line and note. Otherwise the status line only when it says
+        -- something (in a group); not available, it's empty and takes no room.
+        local y = available and -94 or ((self.status:GetText() or "") ~= "" and -68 or -40)
         self.demandHeader:SetShown(showDemand)
         self.anyLine:SetShown(showDemand)
         self.demand:SetShown(showDemand and demandRows > 0)
