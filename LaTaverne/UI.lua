@@ -3270,7 +3270,11 @@ local function BuildOfficerPanel()
     statusHit:SetScript("OnEnter", function(self) if self.tooltip then ShowTooltip(self, self.tooltip) end end)
     statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    local list = NewScrollList(p, 26, function(row, data)
+    -- The guilds: plain rows, as many as needed (the page scrolls, not this list).
+    local GUILD_ROW = 26
+    local list = CreateFrame("Frame", nil, p)
+    local guildRows = {}
+    local function InitGuildRow(row, data)
         if not row.init then
             row.init = true
             RowBackground(row)
@@ -3301,20 +3305,41 @@ local function BuildOfficerPanel()
         row.name:SetText(data.name .. (data.mine and (" |cff808080(" .. L["your guild"] .. ")|r") or ""))
         if not row.tag:HasFocus() then row.tag:SetText(data.tag or "") end
         row.remove:SetShown(not data.mine)
-    end)
+    end
     list:SetPoint("TOPLEFT", ally, "TOPLEFT", 20, -84)
     list:SetPoint("RIGHT", -20, 0)
-    list:SetHeight(26 * 3)
+    list:SetHeight(GUILD_ROW)
+    local function ShowGuilds(guilds)
+        for i, data in ipairs(guilds) do
+            local row = guildRows[i]
+            if not row then
+                row = CreateFrame("Frame", nil, list)
+                row:SetHeight(GUILD_ROW)
+                row:SetPoint("TOPLEFT", 0, -(i - 1) * GUILD_ROW)
+                row:SetPoint("RIGHT", list, "RIGHT", 0, 0)
+                guildRows[i] = row
+            end
+            InitGuildRow(row, data)
+            row:Show()
+        end
+        for i = #guilds + 1, #guildRows do guildRows[i]:Hide() end
+        list:SetHeight(math.max(1, #guilds) * GUILD_ROW)
+    end
+    -- What comes under the list hangs from its bottom.
+    local below = CreateFrame("Frame", nil, p)
+    below:SetHeight(1)
+    below:SetPoint("TOPLEFT", list, "BOTTOMLEFT", -20, 0)
+    below:SetPoint("RIGHT", p, "RIGHT", 0, 0)
 
     -- Add a guild: an empty row under the list, same columns (name, tag, button).
     local addName = NewInput(p, 300, 60)
-    addName:SetPoint("TOPLEFT", ally, "TOPLEFT", 32, -170)
+    addName:SetPoint("TOPLEFT", below, "TOPLEFT", 32, -8)
     SetPlaceholder(addName, L["Add a guild..."])
     NewLabel(p, L["Tag"], "GameFontNormalSmall"):SetPoint("LEFT", addName, "LEFT", 20 + TAG_X - 32, 0)
     local addTag = NewInput(p, 70, 6)
     addTag:SetPoint("LEFT", addName, "LEFT", 20 + TAG_X + 35 - 32, 0)
     local addButton = NewButton(p, L["Add"], 90)
-    addButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, -170)
+    addButton:SetPoint("TOPRIGHT", below, "TOPRIGHT", -26, -8)
     -- An ⓘ right of each field: what the name must be, what the tag is.
     local nameHint = NewInfoIcon(p, { L["Guild name"], L["Exact guild name, as the game writes it (capitals and accents included)."] })
     nameHint:SetPoint("LEFT", addName, "RIGHT", 6, 0)
@@ -3357,9 +3382,9 @@ local function BuildOfficerPanel()
 
     -- The shared key (small, last before saving: the one officers come back for)
     local step2 = NewLabel(p, "", "GameFontNormal")
-    step2:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -210)
+    step2:SetPoint("TOPLEFT", below, "TOPLEFT", 16, -48)
     local keyText = NewLabel(p, "", "GameFontHighlight")
-    keyText:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -234)
+    keyText:SetPoint("TOPLEFT", below, "TOPLEFT", 26, -72)
     local keyButton = NewButton(p, "", 170)
     keyButton:SetPoint("LEFT", keyText, "RIGHT", 24, 0)
     keyButton:SetScript("OnClick", function()
@@ -3372,13 +3397,13 @@ local function BuildOfficerPanel()
 
     -- Save both to the Guild Info, with a preview of La Taverne's lines ---------------------
     local saveHeader = NewSectionHeader(p, L["Save to your Guild Info"])
-    saveHeader:SetPoint("TOPLEFT", ally, "TOPLEFT", 8, -278)
+    saveHeader:SetPoint("TOPLEFT", below, "TOPLEFT", 8, -116)
     local previewLabel = NewLabel(p, "", "GameFontDisableSmall")
-    previewLabel:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -306)
+    previewLabel:SetPoint("TOPLEFT", below, "TOPLEFT", 26, -144)
     previewLabel:SetPoint("RIGHT", -8, 0)
     previewLabel:SetJustifyH("LEFT")
     local preview = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    preview:SetPoint("TOPLEFT", ally, "TOPLEFT", 24, -322)
+    preview:SetPoint("TOPLEFT", below, "TOPLEFT", 24, -160)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
     if preview.SetBackdrop then
@@ -3436,11 +3461,14 @@ local function BuildOfficerPanel()
             Say(nil)
             ns.TextDialog({
                 title = L["Paste into the Guild Info"],
-                hint = (ns.Guild:IsSandbox()
-                    and L["Test mode: the same steps as in a real guild. Press Ctrl+C to copy this text, then open the test guild window (button above the window)."]
-                    or L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your whole Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info."])
-                    .. " |cffff9900" .. L["Replace all of it: select everything (Ctrl+A), then paste (Ctrl+V). Don't add it at the end."] .. "|r "
-                    .. (ns.Guild:IsSandbox() and L["Then click Save there."] or L["Then accept."]),
+                -- Test mode: the same steps, in the test guild window.
+                hint = L["The game doesn't let addons write the Guild Info: you paste it yourself. This text is your whole Guild Info, with La Taverne's lines updated and the rest unchanged."]
+                    .. "\n\n" .. "1. " .. L["Copy it: Ctrl+C (it's already selected)."]
+                    .. "\n" .. "2. " .. (ns.Guild:IsSandbox() and L["Open the test guild window (button above La Taverne's window)."]
+                        or L["Open the guild window, then the Guild Info."])
+                    .. "\n" .. "3. |cffff9900" .. L["Replace everything: Ctrl+A to select all, then Ctrl+V. Don't add it at the end."] .. "|r"
+                    .. "\n" .. "4. " .. (ns.Guild:IsSandbox() and L["Click Save there."] or L["Accept."])
+                    .. "\n\n" .. L["La Taverne sees it within a few seconds, and this page shows it saved."],
                 text = paste,
                 selectAll = true,
             })
@@ -3459,7 +3487,10 @@ local function BuildOfficerPanel()
     exportButton:SetScript("OnClick", function()
         ns.TextDialog({
             title = L["Export the Guild Alliance setup"],
-            hint = L["Press Ctrl+C to copy, then send it to an officer of each allied guild (whisper, Discord...). In their guild they open La Taverne, Setup tab, Import, paste it, then Save. They can also paste these lines at the end of their Guild Info by hand."],
+            hint = L["Send this to an officer of each allied guild (whisper, Discord...)."]
+                .. "\n\n" .. "1. " .. L["Copy it: Ctrl+C (it's already selected)."]
+                .. "\n" .. "2. " .. L["They open La Taverne, Configuration tab, Import..., paste it and click Import."]
+                .. "\n" .. "3. " .. L["They check it, then Save (and paste into their Guild Info)."],
             text = table.concat(ns.Alliance.BuildLines(draft.guilds, draft.key), "\n"),
             selectAll = true,
         })
@@ -3468,7 +3499,8 @@ local function BuildOfficerPanel()
     local function ImportPasted()
         ns.TextDialog({
             title = L["Import a Guild Alliance setup"],
-            hint = L["Paste the setup an officer of an allied guild exported (Ctrl+V), then click Import. The Setup page then shows it, but nothing changes until you click Save."],
+            hint = L["Paste the setup an officer of an allied guild sent you (Ctrl+V), then click Import."]
+                .. "\n\n" .. L["Nothing changes yet: the Configuration page shows it, you check it, then Save."],
             text = "",
             button = L["Import"],
             -- GuildUnion's guilds, written in the text box like a pasted setup.
@@ -3575,7 +3607,7 @@ local function BuildOfficerPanel()
         cancelButton:SetEnabled(dirty)
         exportButton:SetEnabled(saved)
         -- The whole height, for the scroll: the steps down to the two lines under Save.
-        self:SetHeight(34 + rule:GetHeight() + 30 + 322 + preview:GetHeight() + 10 + 24 + 8 + 44)
+        self:SetHeight(34 + rule:GetHeight() + 30 + 84 + list:GetHeight() + 160 + preview:GetHeight() + 10 + 24 + 8 + 44)
     end
 
     function p:Refresh()
@@ -3604,7 +3636,7 @@ local function BuildOfficerPanel()
             status:SetText("|cff808080" .. L["Not set up"] .. "|r")
             statusHit.tooltip = nil
         end
-        SetListData(list, draft.guilds)
+        ShowGuilds(draft.guilds)
         self:RefreshDraft()
     end
     outer.Refresh = function() p:Refresh() end
