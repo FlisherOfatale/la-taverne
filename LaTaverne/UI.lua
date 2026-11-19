@@ -4113,13 +4113,13 @@ local SECTIONS = {
       },
       -- Browse and My group share one bottom tab (see LayoutBottomTabs).
       pages = { "browse", "players", "mygroup" } },
+    -- The Guild Alliance; its Setup page only for players who can edit the Guild Info.
+    { key = "network", label = "Alliance", icon = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
+      pages = { "network", "officers" } },
     -- Auto-invite: a horn, calling people in.
     { key = "autoinvite", label = "Auto-invite",
       icon = { "Interface\\Icons\\INV_Misc_Horn_01", "Interface\\Icons\\Ability_Warrior_BattleShout" },
       pages = { "autoinvite", "autoinviteSettings" } },
-    -- The Guild Alliance; its Setup page only for players who can edit the Guild Info.
-    { key = "network", label = "Alliance", icon = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
-      pages = { "network", "officers" } },
     -- Pinned to the bottom of the side bar, last one lowest.
     { key = "options", label = "Options", icon = "Interface\\Icons\\INV_Misc_Gear_01",
       pages = { "options" }, bottom = true },
