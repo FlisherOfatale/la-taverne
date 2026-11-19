@@ -60,6 +60,7 @@ function Invites:UseSet(i)
     if not Sets()[i] then return end
     Settings().set = i
     if self.onChange then self.onChange() end
+    if self.SendRunning and self:IsActive() then self.SendRunning(true) end -- the others see my new words
 end
 
 local function Changed()
@@ -275,11 +276,70 @@ function Invites:MinutesLeft()
     return math.max(0, math.ceil((activeUntil - GetTime()) / 60))
 end
 
+-- Who else is inviting: each runner says so on the hidden addon channel (never in the guild
+-- chat people read) when starting, every few minutes while on, when changing keywords and when
+-- stopping. The queue page shows "2 others are inviting" (names and keywords in its tooltip).
+local RUNNER_BEAT = 120   -- seconds between two "still inviting"
+local RUNNER_GONE = 330   -- not heard from for this long: no longer inviting (closed the game)
+local runners = {}        -- [nameKey] = { name, words, tag, seen }
+
+local function SendRunning(on)
+    local words = {}
+    if on then
+        for i, word in ipairs(Invites:GetSet().words) do
+            if i > 8 then break end
+            words[i] = word:sub(1, 20)
+        end
+    end
+    local payload = { on = on or nil, w = on and words or nil }
+    ns.Comm:Send("INVITING", payload)
+    if ns.Alliance:IsActive() then ns.Comm:SendAlly("INVITING", payload) end
+end
+
+local function OnRunning(sender, p, isSelf, scope)
+    if isSelf or type(p) ~= "table" then return end
+    local key = ns.NameKey(sender)
+    if not p.on then
+        if runners[key] then runners[key] = nil Changed() end
+        return
+    end
+    local words = {}
+    for i, word in ipairs(type(p.w) == "table" and p.w or {}) do
+        if i > 8 then break end
+        if type(word) == "string" and word ~= "" then words[#words + 1] = word:sub(1, 20) end
+    end
+    runners[key] = { name = sender, words = words, seen = GetTime(),
+        tag = scope == "ally" and ns.Alliance:GetTag(p.g) or nil }
+    Changed()
+end
+ns.Comm:On("INVITING", function(sender, p, isSelf) OnRunning(sender, p, isSelf, "guild") end)
+ns.Comm:OnAlly("INVITING", function(sender, p, isSelf) OnRunning(sender, p, isSelf, "ally") end)
+
+-- The others inviting right now: { name, words, tag, shared = the words they share with my set }.
+function Invites:GetRunners()
+    local out, mine = {}, {}
+    for _, word in ipairs(self:GetSet().words) do mine[Normalize(word)] = true end
+    for key, r in pairs(runners) do
+        if GetTime() - r.seen > RUNNER_GONE then
+            runners[key] = nil
+        else
+            local shared = {}
+            for _, word in ipairs(r.words) do
+                if mine[Normalize(word)] then shared[#shared + 1] = word end
+            end
+            out[#out + 1] = { name = r.name, words = r.words, tag = r.tag, shared = shared }
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
 function Invites:Start()
     active = true
     activeUntil = GetTime() + math.max(1, tonumber(Settings().autoOff) or 30) * 60
     self.blocked = nil
     ns.Print(L["Auto-invite started: guild members who type a keyword get an invite."])
+    SendRunning(true)
     Changed()
 end
 
@@ -290,6 +350,7 @@ function Invites:Stop(reason)
         if queue[i].status == "queued" then table.remove(queue, i) end
     end
     ns.Print(reason or L["Auto-invite stopped."])
+    SendRunning(false)
     Changed()
 end
 
@@ -299,7 +360,16 @@ end
 
 ns.commands.autoinvite = function() Invites:Toggle() end
 
+Invites.SendRunning = SendRunning
+
 function Invites:OnLogin()
+    -- Still inviting (so the others don't drop me), and forget runners who went quiet.
+    C_Timer.NewTicker(RUNNER_BEAT, function()
+        if active then SendRunning(true) end
+        local before = 0
+        for _ in pairs(runners) do before = before + 1 end
+        if #Invites:GetRunners() ~= before then Changed() end
+    end)
     C_Timer.NewTicker(0.3, function()
         -- Invites nobody answered (also after a stop: they'd wait forever otherwise)
         for i = #queue, 1, -1 do
@@ -364,9 +434,35 @@ function ns.BuildInvitesPanel()
     settings:SetPoint("RIGHT", toggle, "LEFT", -8, 0)
     settings:SetScript("OnClick", function() ns.UI:ShowPage("autoinviteSettings") end)
 
+    -- Right of the state line: the others inviting right now ("2 others are inviting"), who and
+    -- with which keywords in its tooltip. Orange when one of them uses one of my keywords.
+    local others = K.NewLabel(p, "", "GameFontHighlight")
+    others:SetPoint("TOPRIGHT", -8, -40)
+    local othersHit = CreateFrame("Frame", nil, p)
+    othersHit:SetAllPoints(others)
+    othersHit:EnableMouse(true)
+    othersHit:SetScript("OnEnter", function(self)
+        local list = Invites:GetRunners()
+        if #list == 0 then return end
+        local lines, overlap = { L["Inviting right now"] }, false
+        for _, r in ipairs(list) do
+            local words = #r.words > 0 and table.concat(r.words, ", ") or "?"
+            lines[#lines + 1] = r.name .. (r.tag and (" |cff8fb8e8[" .. r.tag .. "]|r") or "") .. "  |cff808080" .. words .. "|r"
+            if #r.shared > 0 then
+                overlap = true
+                lines[#lines + 1] = "|cffff9900   " .. format(L["also uses %s"], table.concat(r.shared, ", ")) .. "|r"
+            end
+        end
+        if overlap then
+            lines[#lines + 1] = L["Same keyword: whoever types it gets several invites and joins the first one accepted. Fine for a free-for-all; for separate groups, use different sets."]
+        end
+        K.ShowTooltip(self, lines)
+    end)
+    othersHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     local state = K.NewLabel(p, "", "GameFontHighlight")
     state:SetPoint("TOPLEFT", 8, -40)
-    state:SetPoint("RIGHT", p, "RIGHT", -8, 0)
+    state:SetPoint("RIGHT", others, "LEFT", -12, 0)
     state:SetJustifyH("LEFT")
     state:SetWordWrap(false)
 
@@ -520,6 +616,10 @@ function ns.BuildInvitesPanel()
         end
         auto:SetChecked(s.auto)
         if setChoice.GenerateMenu then setChoice:GenerateMenu() end
+        local runners, overlap = Invites:GetRunners(), false
+        for _, r in ipairs(runners) do overlap = overlap or #r.shared > 0 end
+        local count = #runners == 1 and L["1 other is inviting"] or format(L["%d others are inviting"], #runners)
+        others:SetText(#runners == 0 and "" or ((overlap and "|cffff9900" or "|cffd0d0d0") .. count .. "|r"))
         guild:SetChecked(s.guild ~= false)
         whispers:SetChecked(s.whispers)
         allied:SetShown(ns.Alliance:IsActive())
@@ -650,6 +750,7 @@ function ns.BuildInvitesSettingsPanel()
         words.edit:ClearFocus()
         dirty = false
         savedAt = GetTime()
+        if active and editing == Settings().set then SendRunning(true) end -- the others see my new words
         Changed()
         C_Timer.After(3.1, function() if p:IsShown() then p:Refresh() end end)
         p:Refresh()
