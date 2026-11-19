@@ -179,4 +179,59 @@ function Minimap:OnLogin()
     icon:Register(ADDON, launcher, ns.db.minimap)
     local button = icon.GetMinimapButton and icon:GetMinimapButton(ADDON)
     if button then Decorate(button) end
+    Minimap:SetInDrawer(ns.db.inDrawer ~= false)
+    Minimap:RegisterSettings()
+end
+
+-- The game's add-on drawer (the button by the minimap that lists add-ons), when the game has one.
+function Minimap:HasDrawer()
+    local icon = LibStub("LibDBIcon-1.0")
+    return icon.IsButtonCompartmentAvailable and icon:IsButtonCompartmentAvailable() or false
+end
+
+function Minimap:SetInDrawer(on)
+    ns.db.inDrawer = on and true or false
+    if not self:HasDrawer() then return end
+    local icon = LibStub("LibDBIcon-1.0")
+    if on then
+        icon:AddButtonToCompartment(ADDON)
+        local object = icon.objects and icon.objects[ADDON]
+        if object and object.compartmentData then
+            object.compartmentData.text = "La Taverne" -- the folder name otherwise
+            if AddonCompartmentFrame and AddonCompartmentFrame.UpdateDisplay then AddonCompartmentFrame:UpdateDisplay() end
+        end
+    else
+        icon:RemoveButtonFromCompartment(ADDON)
+    end
+end
+
+-- A page in the game's options (Options, AddOns): the name, the version, and a button to the
+-- options in the La Taverne window.
+function Minimap:RegisterSettings()
+    local panel = CreateFrame("Frame")
+    panel.name = "La Taverne"
+    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("La Taverne")
+    local version = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    version:SetPoint("LEFT", title, "RIGHT", 8, -1)
+    version:SetText(ns.version or "")
+    local notes = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    notes:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    notes:SetText(L["Guild dungeon group finder. Its options are in the La Taverne window."])
+    local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    open:SetSize(220, 24)
+    open:SetPoint("TOPLEFT", notes, "BOTTOMLEFT", 0, -16)
+    open:SetText(L["Open La Taverne options"])
+    open:SetScript("OnClick", function()
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then HideUIPanel(InterfaceOptionsFrame) end
+        OpenPage("options")
+    end)
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(panel, "La Taverne")
+        Settings.RegisterAddOnCategory(category)
+    elseif InterfaceOptions_AddCategory then
+        InterfaceOptions_AddCategory(panel)
+    end
 end

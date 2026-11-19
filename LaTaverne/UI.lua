@@ -3858,6 +3858,16 @@ local function BuildOptionsPanel()
         if ns.db.minimap.hide then icon:Hide(ADDON) else icon:Show(ADDON) end
     end)
     minimap:SetPoint("TOPLEFT", 12, -94)
+    -- The game's add-on drawer by the minimap (only when the game has one).
+    local drawer = NewCheckbox(p, L["Show in the add-on drawer"], function(self)
+        ns.Minimap:SetInDrawer(self:GetChecked())
+    end)
+    drawer:SetPoint("TOPLEFT", 276, -94)
+    drawer:SetScript("OnEnter", function(self)
+        ShowTooltip(self, { L["Show in the add-on drawer"],
+            L["The game's button by the minimap that lists your add-ons."] })
+    end)
+    drawer:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Group finder -------------------------------------------------------------
     NewLabel(p, L["Group finder"], "GameFontNormal"):SetPoint("TOPLEFT", 8, -136)
@@ -3954,6 +3964,8 @@ local function BuildOptionsPanel()
         if alerts.GenerateMenu then alerts:GenerateMenu() end
         alertSound:SetChecked(ns.db.alertSound == true)
         minimap:SetChecked(not ns.db.minimap.hide)
+        drawer:SetShown(ns.Minimap:HasDrawer())
+        drawer:SetChecked(ns.db.inDrawer ~= false)
         for _, cb in ipairs(langChecks) do cb:SetChecked((ns.db.dungeonLanguages or {})[cb.key] == true) end
 
         local active = ns.Alliance:IsActive()
