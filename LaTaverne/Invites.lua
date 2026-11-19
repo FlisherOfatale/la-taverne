@@ -450,10 +450,22 @@ function ns.BuildInvitesPanel()
     settings:SetPoint("RIGHT", toggle, "LEFT", -8, 0)
     settings:SetScript("OnClick", function() ns.UI:ShowPage("autoinviteSettings") end)
 
+    -- The options: a grid of two rows under the title. A gold label column (Keywords, Listen
+    -- to), then three columns: the keyword list takes two, Invite right away the third, right
+    -- above Whispers. A thin line under it, then the queue.
+    local PAD_X, LABEL_W, COL_W = 8, 96, 165
+    local ROW1_Y, ROW_H = -54, 34
+    local ROW2_Y = ROW1_Y - ROW_H
+    local function ColX(i) return PAD_X + LABEL_W + (i - 1) * COL_W end
+    local function Place(widget, x, y)
+        widget:ClearAllPoints()
+        widget:SetPoint("LEFT", p, "TOPLEFT", x, y) -- LEFT: centered on the row
+    end
+
     -- Right of the "Listen to" row: the others inviting right now ("2 others are inviting"), who
     -- and with which keywords in its tooltip. Orange when one of them uses one of my keywords.
     local others = K.NewLabel(p, "", "GameFontHighlight")
-    others:SetPoint("TOPRIGHT", -8, -78)
+    others:SetPoint("RIGHT", p, "TOPRIGHT", -8, ROW2_Y)
     local othersHit = CreateFrame("Frame", nil, p)
     othersHit:SetAllPoints(others)
     othersHit:EnableMouse(true)
@@ -481,34 +493,34 @@ function ns.BuildInvitesPanel()
         ns.db.invites.auto = self:GetChecked() and true or false
         Changed()
     end)
-    auto:SetPoint("TOPLEFT", 4, -38)
+    Place(auto, ColX(3) - 4, ROW1_Y)
     auto:SetScript("OnEnter", function(self)
         K.ShowTooltip(self, { L["Invite right away"], L["Ticked: the queue sends the invites on its own. Unticked: they wait for you to click Invite."] })
     end)
     auto:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    local setLabel = K.NewLabel(p, L["Keywords"])
-    setLabel:SetPoint("TOPLEFT", 300, -44)
-    local setChoice = K.NewChoice(p, 200, function()
+    local setLabel = K.NewLabel(p, L["Keywords"], "GameFontNormal")
+    Place(setLabel, PAD_X, ROW1_Y)
+    local setChoice = K.NewChoice(p, COL_W * 2 - 16, function()
             local out = {}
             for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
             return out
         end, function() return Settings().set end, function(i) Invites:UseSet(i) end,
         { L["Keywords"], L["The set of keywords you answer to. Each leader can use their own (+1 for one group, +2 for another), or all the same one. Edit them in Settings."] })
-    setChoice:SetPoint("LEFT", setLabel, "RIGHT", 10, 0)
+    Place(setChoice, ColX(1), ROW1_Y)
 
     -- Row 2: where to listen. Guild chat, the allied guilds (only with an alliance), whispers.
-    local listenLabel = K.NewLabel(p, L["Listen to"])
-    listenLabel:SetPoint("TOPLEFT", 8, -78)
+    local listenLabel = K.NewLabel(p, L["Listen to"], "GameFontNormal")
+    Place(listenLabel, PAD_X, ROW2_Y)
     local guild = K.NewCheckbox(p, L["Guild chat"], function(self)
         ns.db.invites.guild = self:GetChecked() and true or false
         Changed()
     end)
-    guild:SetPoint("LEFT", listenLabel, "RIGHT", 10, 0)
+    Place(guild, ColX(1) - 4, ROW2_Y)
     local allied = K.NewCheckbox(p, L["Allied guilds"], function(self)
         ns.db.invites.allied = self:GetChecked() and true or false
         Changed()
     end)
-    allied:SetPoint("LEFT", guild.Text or guild, "RIGHT", 24, 0)
+    Place(allied, ColX(2) - 4, ROW2_Y)
     local whispers = K.NewCheckbox(p, L["Whispers"], function(self)
         ns.db.invites.whispers = self:GetChecked() and true or false
         Changed()
@@ -519,8 +531,17 @@ function ns.BuildInvitesPanel()
     end)
     allied:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Whispers in the third column, under Invite right away (also without an alliance).
+    Place(whispers, ColX(3) - 4, ROW2_Y)
+
+    local divider = p:CreateTexture(nil, "ARTWORK")
+    divider:SetColorTexture(0.42, 0.35, 0.23, 0.6)
+    divider:SetHeight(1)
+    divider:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_X, ROW2_Y - 24)
+    divider:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_X, ROW2_Y - 24)
+
     local blocked = K.NewLabel(p, "", "GameFontRedSmall")
-    blocked:SetPoint("TOPLEFT", 8, -104)
+    blocked:SetPoint("TOPLEFT", 8, ROW2_Y - 30)
     blocked:SetPoint("RIGHT", p, "RIGHT", -8, 0)
     blocked:SetJustifyH("LEFT")
 
@@ -544,10 +565,10 @@ function ns.BuildInvitesPanel()
         end
     end
     local left = CreateFrame("Frame", nil, p)
-    left:SetPoint("TOPLEFT", 0, -122)
+    left:SetPoint("TOPLEFT", 0, ROW2_Y - 46)
     left:SetPoint("BOTTOM", p, "BOTTOM", 0, 0)
     local right = CreateFrame("Frame", nil, p)
-    right:SetPoint("TOPRIGHT", 0, -122)
+    right:SetPoint("TOPRIGHT", 0, ROW2_Y - 46)
     right:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT", 16, 0)
     p:SetScript("OnSizeChanged", function(self, w) if w and w > 0 then left:SetWidth(w * SPLIT) end end)
     left:SetWidth(440)
@@ -646,10 +667,6 @@ function ns.BuildInvitesPanel()
         whispers:SetChecked(s.whispers)
         allied:SetShown(ns.Alliance:IsActive())
         allied:SetChecked(s.allied == true)
-        -- Whispers last: after the allied guilds, or after guild chat without an alliance.
-        local before = allied:IsShown() and allied or guild
-        whispers:ClearAllPoints()
-        whispers:SetPoint("LEFT", before.Text or before, "RIGHT", 24, 0)
         -- Listening to nothing: say so (it's on, but nobody can get in).
         local deaf = s.guild == false and not s.whispers and not (s.allied and ns.Alliance:IsActive())
         local why = Invites.blocked or (deaf and L["Not listening anywhere: tick guild chat, whispers or allied guilds."]) or ""
