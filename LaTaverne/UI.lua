@@ -1,11 +1,11 @@
 -- Main window, built from Blizzard's own templates so it looks like the default UI.
--- Side tabs (sections) on the right edge, bottom tabs for the pages of a section:
+-- Side tabs (sections) on the right edge; a section's other pages open from a button on its page:
 -- - Groups: open guild groups (invitations on top) and My group (post / manage / member view),
 --           one page for the player: My group while in a group of the finder, the list otherwise
 -- - Availability: my availability, the dungeons asked for, who's available
--- - Alliance: the Guild Alliance as members see it; Setup (only for players who can edit the
---             Guild Info)
--- - Auto-invite: Queue and Settings (Invites.lua)
+-- - Alliance: the Guild Alliance as members see it; Setup (a button, only for players who can
+--             edit the Guild Info)
+-- - Auto-invite: the queue, and its Settings (a button) (Invites.lua)
 -- - Options: keyboard shortcut, minimap button, new group alerts, shared guild chat, errors
 -- - Test mode: test mode only (DebugUI.lua)
 -- Every page starts with the same header: title on the left (explanations in a ⓘ tooltip),
@@ -3186,8 +3186,11 @@ local function BuildOfficerPanel()
     end
 
     NewPageTitle(p, L["Guild Alliance setup"], { L["Guild Alliance setup"],
-        L["Only players who can edit the Guild Info see this tab."],
+        L["Only players who can edit the Guild Info see this page."],
         L["Set up the guilds once, then send the setup to an officer of each allied guild (Export, then Import on their side)."] })
+    local back = NewButton(p, L["Back"], 100, 24)
+    back:SetPoint("TOPRIGHT", -2, -4)
+    back:SetScript("OnClick", function() UI:ShowPage("network") end)
 
 
 
@@ -3641,9 +3644,11 @@ local function BuildNetworkPanel()
         L["Guilds linked together: their groups, available players and guild chat are shared, as if it were one guild."],
         L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."],
         L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] })
-    -- Top right: the channel.
+    -- Top right: Setup (players who can edit the Guild Info), then the channel left of it.
+    local setupPage = NewButton(p, L["Setup"], 130, 24)
+    setupPage:SetPoint("TOPRIGHT", -2, -4)
+    setupPage:SetScript("OnClick", function() UI:ShowPage("officers") end)
     local status = NewLabel(p, "", "GameFontHighlight")
-    status:SetPoint("TOPRIGHT", -8, -12)
     local statusHit = CreateFrame("Frame", nil, p)
     statusHit:SetAllPoints(status)
     statusHit:EnableMouse(true)
@@ -3670,6 +3675,10 @@ local function BuildNetworkPanel()
 
     function p:Refresh()
         local active = ns.Alliance:IsActive()
+        local officer = ns.Guild:IsOfficer() and active
+        setupPage:SetShown(officer)
+        status:ClearAllPoints()
+        if officer then status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0) else status:SetPoint("TOPRIGHT", -8, -12) end
         list:SetShown(active)
         status:SetShown(active)
         empty:SetShown(not active)
@@ -4095,9 +4104,10 @@ ns.UIKit = {
 }
 
 -- Window --------------------------------------------------------------------------------
--- Navigation in two levels:
+-- Navigation:
 -- - side tabs (right edge, like the spellbook / group finder): the sections;
--- - bottom tabs: the pages of the current section, shown only when it has more than one.
+-- - inside a section, its other pages open from a button on the page (Settings, Setup,
+--   Create a group), with Back to return.
 -- Sections and pages a player can't use are hidden, not greyed out.
 
 local SECTIONS = {
@@ -4111,7 +4121,7 @@ local SECTIONS = {
           "Interface\\LFGFrame\\UI-LFG-PORTRAIT",
           "Interface\\Icons\\INV_Misc_GroupNeedMore",
       },
-      -- Browse and My group are one page for the player (see LayoutBottomTabs): no bottom tabs.
+      -- Browse and My group are one page for the player: My group while in a group of the finder.
       pages = { "browse", "mygroup" } },
     -- Availability: my availability and who's available. A pocket watch: it lasts a set time.
     { key = "availability", label = "Availability",
@@ -4137,11 +4147,6 @@ local SECTIONS = {
       pages = { "debug" }, tool = true },
 }
 
-local PAGE_LABELS = {
-    browse = "Groups", mygroup = "My group", players = "Availability",
-    network = "Alliance", officers = "Setup",
-    autoinvite = "Queue", autoinviteSettings = "Settings",
-}
 
 local PAGE_BUILDERS -- filled in CreateMainFrame (some builders live in files loaded after this one)
 
@@ -4336,47 +4341,6 @@ local function LayoutSideTabs()
     end
 end
 
--- Bottom tabs: only the current section's pages, only when there's more than one.
-local function LayoutBottomTabs()
-    local section = sectionOf[currentPage]
-    local visible = VisiblePages(section)
-    -- Only when there's more than one tab to show (Browse and My group are one).
-    local tabs = 0
-    for _, page in ipairs(visible) do if page ~= "mygroup" then tabs = tabs + 1 end end
-    local showRow = tabs > 1
-    local shownSet = {}
-    if showRow then for _, page in ipairs(visible) do shownSet[page] = true end end
-
-    -- Browse and My group share one tab (the Browse one), always called Groups; it opens My
-    -- group while in a group of the finder.
-    local inPair = currentPage == "browse" or currentPage == "mygroup"
-
-    local previous, selected
-    for i, tab in ipairs(frame.Tabs) do
-        local page = tab.page
-        local shown = shownSet[page] == true and page ~= "mygroup"
-        tab:SetShown(shown)
-        if shown then
-            local badge = PageBadge(page) or 0
-            local text = L[PAGE_LABELS[page] or page]
-            if page == "browse" then badge = badge + (PageBadge("mygroup") or 0) end
-            if badge > 0 then text = text .. " (" .. badge .. ")" end
-            tab:SetText(text)
-            if PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0) end
-            tab:ClearAllPoints()
-            if previous then
-                tab:SetPoint("LEFT", previous, "RIGHT", 4, 0)
-            else
-                tab:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 12, 2)
-            end
-            previous = tab
-        end
-        -- (the hidden My group tab is never the selected one: the shared tab is)
-        if (page == currentPage and page ~= "mygroup") or (page == "browse" and inPair) then selected = i end
-    end
-    if PanelTemplates_SetTab and selected then PanelTemplates_SetTab(frame, selected) end
-end
-
 local function CreateMainFrame()
     frame = CreateFrame("Frame", "LaTaverneFrame", UIParent, "ButtonFrameTemplate")
     frame:SetSize(780, 580)
@@ -4384,9 +4348,8 @@ local function CreateMainFrame()
     frame:SetScale(ns.db.scale or 1) -- window size, from Options
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
-    -- Keep the side tabs on screen too.
-    -- Keep the side tabs, bottom tabs and test tools (above the title bar) on screen too.
-    if frame.SetClampRectInsets then frame:SetClampRectInsets(0, SIDE_SIZE + 6, TOOL_SIZE + 2, -34) end
+    -- Keep the side tabs and test tools (above the title bar) on screen too.
+    if frame.SetClampRectInsets then frame:SetClampRectInsets(0, SIDE_SIZE + 6, TOOL_SIZE + 2, 0) end
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -4451,27 +4414,13 @@ local function CreateMainFrame()
         debug = ns.BuildDebugPanel,
     }
 
+    -- Pages: one side tab per section; a section's other pages open from a button on its page
+    -- (Settings, Setup, Create a group), with Back to return. No bottom tabs.
     frame.SideTabs = {}
-    frame.Tabs = {}
     for _, section in ipairs(SECTIONS) do
         frame.SideTabs[#frame.SideTabs + 1] = NewSideTab(section)
-        for _, page in ipairs(section.pages) do
-            panels[page] = PAGE_BUILDERS[page]()
-            local i = #frame.Tabs + 1
-            local tab = CreateFrame("Button", "LaTaverneFrameTab" .. i, frame, "PanelTabButtonTemplate")
-            tab:SetID(i)
-            tab.page = page
-            tab:SetText(L[PAGE_LABELS[page] or page])
-            tab:SetScript("OnClick", function()
-                -- The Browse / My group tab opens My group while in a group of the finder.
-                UI:ShowPage(page == "browse" and GroupsHome() or page)
-                if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
-            end)
-            tab:Hide()
-            frame.Tabs[i] = tab
-        end
+        for _, page in ipairs(section.pages) do panels[page] = PAGE_BUILDERS[page]() end
     end
-    if PanelTemplates_SetNumTabs then PanelTemplates_SetNumTabs(frame, #frame.Tabs) end
 
     frame:SetScript("OnShow", function() UI:Refresh() end)
     frame:Hide()
@@ -4502,7 +4451,6 @@ function UI:Refresh()
         return
     end
     LayoutSideTabs()
-    LayoutBottomTabs()
     frame.TestBadge:SetShown(ns.Guild:IsSandbox() and true or false)
     -- Title bar: "La Taverne · Groups", the section I'm in.
     local section = sectionOf[currentPage]

@@ -137,7 +137,7 @@ if GetLocale() == "frFR" then
 
     -- Officers tab
     L["Officers"] = "Officiers"
-    L["Only players who can edit the Guild Info see this tab."] = "Seuls les joueurs qui peuvent modifier les informations de guilde voient cet onglet."
+    L["Only players who can edit the Guild Info see this page."] = "Seuls les joueurs qui peuvent modifier les informations de guilde voient cette page."
     L["Tag"] = "Tag"
     L["your guild"] = "votre guilde"
     L["Add a guild"] = "Ajouter une guilde"

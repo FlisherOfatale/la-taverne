@@ -325,6 +325,10 @@ function ns.BuildInvitesPanel()
     local toggle = K.NewButton(p, "", 140, 24)
     toggle:SetPoint("TOPRIGHT", -2, -4)
     toggle:SetScript("OnClick", function() Invites:Toggle() end)
+    -- The settings page, in place of this one (Back returns).
+    local settings = K.NewButton(p, L["Settings"], 110, 24)
+    settings:SetPoint("RIGHT", toggle, "LEFT", -8, 0)
+    settings:SetScript("OnClick", function() ns.UI:ShowPage("autoinviteSettings") end)
 
     local state = K.NewLabel(p, "", "GameFontHighlight")
     state:SetPoint("TOPLEFT", 8, -40)
@@ -484,6 +488,9 @@ function ns.BuildInvitesSettingsPanel()
     local K = ns.UIKit
     local p = K.NewPanel()
     K.NewPageTitle(p, L["Auto-invite settings"])
+    local back = K.NewButton(p, L["Back"], 100, 24)
+    back:SetPoint("TOPRIGHT", -2, -4)
+    back:SetScript("OnClick", function() ns.UI:ShowPage("autoinvite") end)
     -- Nothing applies while typing: Save applies both fields, Cancel puts the saved ones back.
     local dirty = false
     local function Typed() dirty = true p:Refresh() end
