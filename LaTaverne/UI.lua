@@ -3172,7 +3172,21 @@ end
 -- guilds without typing anything in the Guild Info by hand.
 
 local function BuildOfficerPanel()
-    local p = NewPanel()
+    -- The title and Back stay; the rest scrolls under them (the Guild Alliance steps, then who
+    -- can use auto-invite): one page for everything La Taverne writes in the Guild Info.
+    local outer = NewPanel()
+    local scroll = CreateFrame("ScrollFrame", "LaTaverneSetupScroll", outer, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 0, -32)
+    scroll:SetPoint("BOTTOMRIGHT", -26, 0)
+    local bar = scroll.ScrollBar or _G["LaTaverneSetupScrollScrollBar"]
+    if bar then bar:Hide() end
+    local p = CreateFrame("Frame", nil, scroll)
+    p:SetSize(1, 1)
+    scroll:SetScrollChild(p)
+    scroll:SetScript("OnSizeChanged", function(_, width) p:SetWidth(width) end)
+    scroll:HookScript("OnScrollRangeChanged", function(_, _, yRange)
+        if bar then bar:SetShown((yRange or 0) > 0.5) end
+    end)
     local TAG_X = 350 -- x of the "Tag" column in the guild rows
     local draft
     local dirty = false
@@ -3185,10 +3199,10 @@ local function BuildOfficerPanel()
         return "|cffffd100" .. number .. ".|r " .. text
     end
 
-    NewPageTitle(p, L["Guild Alliance setup"], { L["Guild Alliance setup"],
+    NewPageTitle(outer, L["Setup"], { L["Setup"],
         L["Only players who can edit the Guild Info see this page."],
         L["Set up the guilds once, then send the setup to an officer of each allied guild (Export, then Import on their side)."] })
-    local back = NewButton(p, L["Back"], 100, 24)
+    local back = NewButton(outer, L["Back"], 100, 24)
     back:SetPoint("TOPRIGHT", -2, -4)
     back:SetScript("OnClick", function() UI:ShowPage("network") end)
 
@@ -3196,7 +3210,7 @@ local function BuildOfficerPanel()
 
     -- Import / Export sit on step 1's line: they fill the guild list, and send it to the others.
     local exportButton = NewButton(p, L["Export"], 100)
-    exportButton:SetPoint("TOPRIGHT", -26, -64)
+    exportButton:SetPoint("TOPRIGHT", -26, -32)
     -- Import: a window to paste a setup in (or fill it from GuildUnion).
     local importButton = NewButton(p, L["Import..."], 110)
     importButton:SetPoint("RIGHT", exportButton, "LEFT", -6, 0)
@@ -3213,7 +3227,7 @@ local function BuildOfficerPanel()
 
     -- Step 1: the guilds ---------------------------------------------------------------------
     local step1 = NewLabel(p, "", "GameFontNormal")
-    step1:SetPoint("TOPLEFT", 8, -70)
+    step1:SetPoint("TOPLEFT", 8, -38)
     local status = NewLabel(p, "", "GameFontHighlightSmall")
     status:SetPoint("LEFT", step1, "RIGHT", 16, 0)
     status:SetPoint("RIGHT", importButton, "LEFT", -12, 0)
@@ -3252,19 +3266,19 @@ local function BuildOfficerPanel()
         if not row.tag:HasFocus() then row.tag:SetText(data.tag or "") end
         row.remove:SetShown(not data.mine)
     end)
-    list:SetPoint("TOPLEFT", 20, -90)
+    list:SetPoint("TOPLEFT", 20, -58)
     list:SetPoint("RIGHT", -20, 0)
     list:SetHeight(26 * 3)
 
     -- Add a guild: an empty row under the list, same columns (name, tag, button).
     local addName = NewInput(p, 300, 60)
-    addName:SetPoint("TOPLEFT", 32, -176)
+    addName:SetPoint("TOPLEFT", 32, -144)
     SetPlaceholder(addName, L["Add a guild..."])
     NewLabel(p, L["Tag"], "GameFontNormalSmall"):SetPoint("LEFT", addName, "LEFT", 20 + TAG_X - 32, 0)
     local addTag = NewInput(p, 70, 6)
     addTag:SetPoint("LEFT", addName, "LEFT", 20 + TAG_X + 35 - 32, 0)
     local addButton = NewButton(p, L["Add"], 90)
-    addButton:SetPoint("TOPRIGHT", -26, -176)
+    addButton:SetPoint("TOPRIGHT", -26, -144)
     local addHint = NewInfoIcon(p, { L["Add a guild..."],
         L["Exact guild name, as the game writes it. Tag: up to 6 letters, shown in chat."] })
     addHint:SetPoint("RIGHT", addButton, "LEFT", -8, 0)
@@ -3305,9 +3319,9 @@ local function BuildOfficerPanel()
 
     -- Step 2: the shared key -----------------------------------------------------------------
     local step2 = NewLabel(p, "", "GameFontNormal")
-    step2:SetPoint("TOPLEFT", 8, -226)
+    step2:SetPoint("TOPLEFT", 8, -194)
     local keyText = NewLabel(p, "", "GameFontHighlight")
-    keyText:SetPoint("TOPLEFT", 26, -250)
+    keyText:SetPoint("TOPLEFT", 26, -218)
     local keyButton = NewButton(p, "", 170)
     keyButton:SetPoint("LEFT", keyText, "RIGHT", 24, 0)
     keyButton:SetScript("OnClick", function()
@@ -3320,13 +3334,13 @@ local function BuildOfficerPanel()
 
     -- Step 3: save, with a preview of La Taverne's lines -------------------------------------
     local step3 = NewLabel(p, "", "GameFontNormal")
-    step3:SetPoint("TOPLEFT", 8, -292)
+    step3:SetPoint("TOPLEFT", 8, -260)
     local previewLabel = NewLabel(p, "", "GameFontDisableSmall")
-    previewLabel:SetPoint("TOPLEFT", 26, -312)
+    previewLabel:SetPoint("TOPLEFT", 26, -280)
     previewLabel:SetPoint("RIGHT", -8, 0)
     previewLabel:SetJustifyH("LEFT")
     local preview = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    preview:SetPoint("TOPLEFT", 24, -328)
+    preview:SetPoint("TOPLEFT", 24, -296)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
     if preview.SetBackdrop then
@@ -3345,19 +3359,29 @@ local function BuildOfficerPanel()
     previewText:SetJustifyV("TOP")
 
     local saveButton = NewButton(p, L["Save"], 160, 24)
-    saveButton:SetPoint("TOPLEFT", 24, -414)
+    saveButton:SetPoint("TOPLEFT", 24, -382)
     local cancelButton = NewButton(p, L["Cancel"], 160, 24)
     cancelButton:SetPoint("LEFT", saveButton, "RIGHT", 8, 0)
     local countText = NewLabel(p, "", "GameFontDisableSmall")
     countText:SetPoint("LEFT", cancelButton, "RIGHT", 12, 0)
     -- Under Save: unsaved changes or an imported setup, then the result of the last action
     local banner = NewLabel(p, "", "GameFontHighlightSmall")
-    banner:SetPoint("TOPLEFT", 26, -446)
+    banner:SetPoint("TOPLEFT", 26, -414)
     banner:SetPoint("RIGHT", -8, 0)
     banner:SetJustifyH("LEFT")
     message:SetPoint("TOPLEFT", banner, "BOTTOMLEFT", 0, -4)
     message:SetPoint("RIGHT", -8, 0)
     message:SetJustifyH("LEFT")
+
+    -- Who can use auto-invite: under the Guild Alliance steps, with a line between.
+    local RULE_Y = -450
+    local ruleLine = p:CreateTexture(nil, "ARTWORK")
+    ruleLine:SetColorTexture(1, 0.82, 0, 0.25)
+    ruleLine:SetHeight(1)
+    ruleLine:SetPoint("TOPLEFT", 8, RULE_Y + 14)
+    ruleLine:SetPoint("RIGHT", -8, 0)
+    local rule = ns.NewAutoInviteRule(p)
+    rule:SetPoint("TOPLEFT", 8, RULE_Y)
 
     local function Problem()
         local others = 0
@@ -3516,8 +3540,11 @@ local function BuildOfficerPanel()
         end
         SetListData(list, draft.guilds)
         self:RefreshDraft()
+        rule:Refresh()
+        self:SetHeight(-RULE_Y + rule:GetHeight() + 12)
     end
-    return p
+    outer.Refresh = function() p:Refresh() end
+    return outer
 end
 
 -- Alliance tab ------------------------------------------------------------------------------
@@ -3675,7 +3702,7 @@ local function BuildNetworkPanel()
 
     function p:Refresh()
         local active = ns.Alliance:IsActive()
-        local officer = ns.Guild:IsOfficer() and active
+        local officer = ns.Guild:IsOfficer() and ns.Alliance:IsLoaded()
         setupPage:SetShown(officer)
         status:ClearAllPoints()
         if officer then status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0) else status:SetPoint("TOPRIGHT", -8, -12) end
