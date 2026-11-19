@@ -3075,17 +3075,6 @@ end
 -- Shown only to players who can edit the Guild Info (everyone in sandbox). Sets up the allied
 -- guilds without typing anything in the Guild Info by hand.
 
-StaticPopupDialogs["LATAVERNE_SAVE_GUILD_INFO"] = {
-    text = "%s",
-    button1 = YES,
-    button2 = CANCEL,
-    OnAccept = function(_, data) if data then data() end end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
 local function BuildOfficerPanel()
     local p = NewPanel()
     local TAG_X = 350 -- x of the "Tag" column in the guild rows
@@ -3281,28 +3270,29 @@ local function BuildOfficerPanel()
         return nil
     end
 
-    local function DoSave()
-        local ok, err = ns.Alliance:Save(draft.guilds, draft.key)
-        if ok then
-            dirty, imported = false, false
-            Say(ns.Guild:IsSandbox() and L["Saved to the test guild's Guild Info."] or L["Saved to the Guild Info."])
-            C_Timer.After(2.2, function() if p:IsShown() then p:Refresh() end end)
-        else
-            Say(err, true)
-        end
-        p:Refresh()
-    end
-
     saveButton:SetScript("OnClick", function()
         local problem = Problem()
         if problem then Say(problem, true) return end
-        if ns.Guild:IsSandbox() then
-            DoSave()
-            return
+        local ok, err, paste = ns.Alliance:Save(draft.guilds, draft.key)
+        if not ok then
+            Say(err, true)
+        elseif paste then
+            -- Real guild: the game won't let addons write the Guild Info, the officer pastes it.
+            -- The page follows on its own once the new lines are in the Guild Info.
+            dirty, imported = false, false
+            Say(L["Paste the text into the Guild Info: La Taverne reads it on its own a few seconds later."])
+            ns.TextDialog({
+                title = L["Paste into the Guild Info"],
+                hint = L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."],
+                text = paste,
+                selectAll = true,
+            })
+        else
+            dirty, imported = false, false
+            Say(L["Saved to the test guild's Guild Info."])
+            C_Timer.After(2.2, function() if p:IsShown() then p:Refresh() end end)
         end
-        local dialog = StaticPopup_Show("LATAVERNE_SAVE_GUILD_INFO",
-            L["Change the Guild Info? Every guild member sees it. Only La Taverne's lines (LT:) are replaced, the rest stays."])
-        if dialog then dialog.data = DoSave end
+        p:Refresh()
     end)
     cancelButton:SetScript("OnClick", function()
         draft = ns.Alliance:GetDraft()

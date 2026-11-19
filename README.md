@@ -45,7 +45,7 @@
 
 Linking guilds is done once by an officer of each guild, someone who can edit the Guild Info:
 
-1. **Alliance** tab > **Setup** page: add the allied guilds and a short tag for each, create the shared key, then **Save**. La Taverne writes a few short lines starting with `LT:` in the Guild Info and leaves the rest of the text alone.
+1. **Alliance** tab > **Setup** page: add the allied guilds and a short tag for each, create the shared key, then **Save**. The game doesn't let addons change the Guild Info, so La Taverne shows the new Guild Info text to copy and paste: your current text with a few short lines starting with `LT:` added, the rest left alone.
 2. **Export**, and send the text to an officer of each allied guild. They paste it with **Import**, then **Save**.
 3. Every member's addon reads the Guild Info and connects on its own.
 
@@ -113,7 +113,7 @@ MIT
 
 Le lien entre les guildes se fait une fois, par un officier de chaque guilde qui peut modifier les infos de guilde :
 
-1. Onglet **Alliance** > page **Configuration** : ajoutez les guildes alliées avec un tag court pour chacune, créez la clé partagée, puis **Enregistrer**. La Taverne écrit quelques lignes courtes commençant par `LT:` dans les infos de guilde et laisse le reste du texte tel quel.
+1. Onglet **Alliance** > page **Configuration** : ajoutez les guildes alliées avec un tag court pour chacune, créez la clé partagée, puis **Enregistrer**. Le jeu ne permet pas aux addons de modifier les infos de guilde : La Taverne affiche donc le nouveau texte à copier-coller, c'est-à-dire votre texte actuel avec quelques lignes courtes commençant par `LT:` en plus, le reste tel quel.
 2. **Exporter**, et envoyez le texte à un officier de chaque guilde alliée. Il le colle avec **Importer**, puis **Enregistrer**.
 3. L'addon de chaque membre lit les infos de guilde et se connecte tout seul.
 

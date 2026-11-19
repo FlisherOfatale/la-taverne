@@ -139,8 +139,9 @@ if GetLocale() == "frFR" then
     L["Undo changes"] = "Annuler les modifications"
     L["Make a key first (New key)."] = "Créez d'abord une clé (Nouvelle clé)."
     L["Saved to the fake Guild Info (test mode)."] = "Enregistré dans les fausses infos de guilde (mode test)."
-    L["Saved to the Guild Info."] = "Enregistré dans les informations de guilde."
-    L["Change the Guild Info? Every guild member sees it. Only La Taverne's lines (LT:) are replaced, the rest stays."] = "Modifier les informations de guilde ? Tous les membres les voient. Seules les lignes de La Taverne (LT:) sont remplacées, le reste ne change pas."
+    L["Paste the text into the Guild Info: La Taverne reads it on its own a few seconds later."] = "Collez le texte dans les informations de guilde : La Taverne le lit d'elle-même quelques secondes après."
+    L["Paste into the Guild Info"] = "À coller dans les informations de guilde"
+    L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."] = "Le jeu ne permet pas aux addons de modifier les informations de guilde. Appuyez sur Ctrl+C pour copier ce texte : ce sont vos informations de guilde avec les lignes de La Taverne (LT:) à jour, le reste sans changement. Puis dans la fenêtre de guilde, ouvrez les informations de guilde, sélectionnez tout (Ctrl+A), collez (Ctrl+V) et validez."
     L["Setup lines"] = "Lignes de configuration"
     L["Copy these lines (Ctrl+A, Ctrl+C) into the Guild Info of each allied guild. To use lines from another guild: paste them here, click Load pasted lines, then Save."] = "Copiez ces lignes (Ctrl+A, Ctrl+C) dans les infos de chaque guilde alliée. Pour utiliser les lignes d'une autre guilde : collez-les ici, cliquez sur Charger les lignes collées, puis Enregistrez."
     L["Load pasted lines"] = "Charger les lignes collées"
@@ -153,7 +154,6 @@ if GetLocale() == "frFR" then
     L["Not set up"] = "Non configurée"
     L["You can't edit the Guild Info."] = "Vous ne pouvez pas modifier les informations de guilde."
     L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."] = "Le jeu bloque les informations de guilde pour le moment (combat ou boss). Réessayez dans un instant."
-    L["The game doesn't let addons change the Guild Info here."] = "Le jeu ne permet pas aux addons de modifier les informations de guilde ici."
     L["The Guild Info would be too long (%d / %d)."] = "Les informations de guilde seraient trop longues (%d / %d)."
 
     -- Debug tab and test guild window (test mode)

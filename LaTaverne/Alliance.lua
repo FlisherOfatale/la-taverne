@@ -129,7 +129,9 @@ function Alliance.ValidTag(tag)
     return type(tag) == "string" and #strtrim(tag) >= 1 and #strtrim(tag) <= 6 and not tag:find("[:;\n|%s]")
 end
 
--- Write the setup into the Guild Info (the fake one in sandbox). Returns ok, error text.
+-- Save the setup. Test mode writes the fake Guild Info. In a real guild the game forbids addons
+-- to change the Guild Info (SetGuildInfoText is protected), so this returns the whole new Guild
+-- Info text for the officer to paste: ok, error text, text to paste.
 function Alliance:Save(guilds, key)
     local lines = Alliance.BuildLines(guilds, key)
     if ns.Guild:IsSandbox() then
@@ -140,10 +142,7 @@ function Alliance:Save(guilds, key)
     if not (CanEditGuildInfo and CanEditGuildInfo()) then
         return false, ns.L["You can't edit the Guild Info."]
     end
-    if not SetGuildInfoText then
-        return false, ns.L["The game doesn't let addons change the Guild Info here."]
-    end
-    -- A blocked read comes back empty: writing then would wipe the rest of the Guild Info.
+    -- A blocked read comes back empty: the text to paste would lose the rest of the Guild Info.
     if ns.Guild:Restricted() then
         return false, ns.L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."]
     end
@@ -151,10 +150,7 @@ function Alliance:Save(guilds, key)
     if #text > Alliance.INFO_MAX then
         return false, ns.L["The Guild Info would be too long (%d / %d)."]:format(#text, Alliance.INFO_MAX)
     end
-    SetGuildInfoText(text)
-    if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
-    C_Timer.After(2, function() Alliance:Refresh() end)
-    return true
+    return true, nil, text
 end
 
 -- Current setup as an editable copy: { guilds = { {name, tag, mine} }, key }.
