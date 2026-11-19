@@ -643,6 +643,7 @@ end
 -- The Invitations page was shown: the invitations on it are seen.
 function Groups:MarkInvitationsSeen()
     for _, l in ipairs(self:GetInvitations()) do seenInvitations[l.id] = true end
+    if ns.Minimap.Update then ns.Minimap.Update() end -- stops glowing
 end
 
 -- My group page was shown: the join requests on it are seen (the minimap button stops glowing).
@@ -651,6 +652,7 @@ function Groups:MarkRequestsSeen()
     for key, p in pairs(mine and mine.pending or {}) do
         if p.status == "request" then seenRequests[key] = true end
     end
+    if ns.Minimap.Update then ns.Minimap.Update() end
 end
 
 -- Invitations I haven't answered and haven't seen yet.

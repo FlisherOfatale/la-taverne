@@ -163,7 +163,14 @@ local function Decorate(button)
         end
         dot:SetShown(SomethingOn() and true or false)
     end
-    C_Timer.NewTicker(1, Update)
+    -- Updated when something changes (my group, requests, invitations, availability,
+    -- auto-invite, or the page that shows them opening), plus a slow check in case something
+    -- changes without saying so (a group's state with time).
+    Minimap.Update = Update
+    ns.Groups:OnChange(Update)
+    ns.Players:OnChange(Update)
+    ns.Invites:OnChange(Update)
+    C_Timer.NewTicker(10, Update)
     Update()
 end
 
