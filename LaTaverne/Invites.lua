@@ -799,19 +799,14 @@ function ns.BuildInvitesSettingsPanel()
     return p
 end
 
--- Who may use auto-invite, for the Configuration page (players who can edit the Guild Info):
--- an LT:ai line in the Guild Info. The game doesn't let addons write it, so it's pasted like
--- the Guild Alliance setup. A frame of its own (box:Refresh(), box:GetHeight()).
-function ns.NewAutoInviteRule(parent)
+-- Who may use auto-invite, a step of the Configuration page (players who can edit the Guild
+-- Info): everyone, some ranks, or nobody. The page saves it with the rest (an LT:ai line).
+-- box:GetRule() the choice shown, box:Reset() back to the Guild Info, box:Refresh();
+-- onChange() when the player changes it. Its height follows the rank list.
+function ns.NewAutoInviteRule(parent, onChange)
     local K = ns.UIKit
     local box = CreateFrame("Frame", nil, parent)
-    box:SetSize(600, 200)
-    local header = K.NewLabel(box, L["Who can use auto-invite"], "GameFontNormal")
-    header:SetPoint("TOPLEFT", 0, 0)
-    local info = K.NewInfoIcon(box, { L["Who can use auto-invite"],
-        L["Saved in the Guild Info, for the whole guild. Players who aren't allowed don't see the Auto-invite tab."],
-        L["Players who can edit the Guild Info can always use it."] })
-    info:SetPoint("LEFT", header, "RIGHT", 6, 0)
+    box:SetSize(600, 40)
 
     local draft -- { mode = "all" | "ranks" | "off", ranks = { [rankIndex] = true } }, nil: the saved one
     local function Saved()
@@ -824,9 +819,12 @@ function ns.NewAutoInviteRule(parent)
         draft = draft or Saved()
         return draft
     end
-    local function Rule(d)
+
+    function box:GetRule()
+        local d = Draft()
         return d.mode == "off" and "off" or (d.mode == "ranks" and d.ranks) or nil
     end
+    function box:Reset() draft = nil end
 
     local mode = K.NewChoice(box, 220, {
             { text = L["Everyone"], value = "all" },
@@ -834,9 +832,9 @@ function ns.NewAutoInviteRule(parent)
             { text = L["Nobody"], value = "off" },
         }, function() return Draft().mode end, function(m)
             Draft().mode = m
-            box:Refresh()
+            onChange()
         end)
-    mode:SetPoint("TOPLEFT", 18, -24)
+    mode:SetPoint("TOPLEFT", 10, 0)
 
     -- One checkbox per guild rank (the game's names, guild master first), in two columns.
     local RANK_ROW, RANK_COL = 26, 240
@@ -844,36 +842,12 @@ function ns.NewAutoInviteRule(parent)
     for i = 1, 10 do
         local cb = K.NewCheckbox(box, "", function(self)
             Draft().ranks[i - 1] = self:GetChecked() and true or nil
-            box:Refresh()
+            onChange()
         end)
-        cb:SetPoint("TOPLEFT", 14 + ((i - 1) % 2) * RANK_COL, -56 - math.floor((i - 1) / 2) * RANK_ROW)
+        cb:SetPoint("TOPLEFT", 6 + ((i - 1) % 2) * RANK_COL, -30 - math.floor((i - 1) / 2) * RANK_ROW)
         cb:Hide()
         rankChecks[i] = cb
     end
-
-    local line = K.NewLabel(box, "", "GameFontDisableSmall")
-    line:SetJustifyH("LEFT")
-    local save = K.NewButton(box, L["Save to the Guild Info"], 220, 24)
-    local message = K.NewLabel(box, "", "GameFontHighlightSmall")
-    message:SetJustifyH("LEFT")
-    save:SetScript("OnClick", function()
-        local ok, err, paste = ns.Alliance:SaveAutoInvite(Rule(Draft()))
-        if not ok then
-            message:SetText("|cffff4040" .. (err or "") .. "|r")
-        elseif paste then
-            message:SetText("|cff40ff40" .. L["Paste the text into the Guild Info: La Taverne reads it on its own a few seconds later."] .. "|r")
-            ns.TextDialog({
-                title = L["Paste into the Guild Info"],
-                hint = L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."],
-                text = paste,
-                selectAll = true,
-            })
-        else
-            message:SetText("|cff40ff40" .. L["Saved to the test guild's Guild Info."] .. "|r")
-        end
-        draft = nil
-        box:Refresh()
-    end)
 
     function box:Refresh()
         if mode.GenerateMenu then mode:GenerateMenu() end
@@ -888,20 +862,7 @@ function ns.NewAutoInviteRule(parent)
                 cb:SetChecked(d.ranks[i - 1] == true)
             end
         end
-        -- Under the ranks (or the list when there are none): the line it writes, then Save.
-        local y = -56 - math.ceil(count / 2) * RANK_ROW - (count > 0 and 6 or 0)
-        local text = ns.Alliance.AutoInviteLine(Rule(d))
-        line:ClearAllPoints()
-        line:SetPoint("TOPLEFT", 18, y)
-        line:SetText(text and (L["Guild Info line:"] .. " |cffffffff" .. text .. "|r") or L["No line in the Guild Info: everyone can use it."])
-        save:ClearAllPoints()
-        save:SetPoint("TOPLEFT", 16, y - 20)
-        -- Only when it differs from what the Guild Info says now.
-        save:SetEnabled(text ~= ns.Alliance.AutoInviteLine(ns.Alliance:GetAutoInvite()))
-        message:ClearAllPoints()
-        message:SetPoint("TOPLEFT", save, "BOTTOMLEFT", 2, -6)
-        message:SetPoint("RIGHT", box, "RIGHT", 0, 0)
-        box:SetHeight(-(y - 20) + 24 + 26)
+        self:SetHeight(28 + math.ceil(count / 2) * RANK_ROW)
     end
     return box
 end

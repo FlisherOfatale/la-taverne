@@ -3317,11 +3317,25 @@ local function BuildOfficerPanel()
         return table.concat(ns.Alliance.BuildLines(guilds, draft.key), "\n")
     end
 
-    -- Step 2: the shared key -----------------------------------------------------------------
+    -- Step 2: who can use auto-invite (any guild, alliance or not) --------------------------
+    local stepRule = NewLabel(p, "", "GameFontNormal")
+    stepRule:SetPoint("TOPLEFT", 8, -194)
+    local ruleInfo = NewInfoIcon(p, { L["Who can use auto-invite"],
+        L["Saved in the Guild Info, for the whole guild. Players who aren't allowed don't see the Auto-invite tab."],
+        L["Players who can edit the Guild Info can always use it."] })
+    ruleInfo:SetPoint("LEFT", stepRule, "RIGHT", 6, 0)
+    local rule = ns.NewAutoInviteRule(p, function() Changed() end)
+    rule:SetPoint("TOPLEFT", 8, -216)
+    -- The steps under it move with its height (the rank list): they hang from this anchor.
+    local lower = CreateFrame("Frame", nil, p)
+    lower:SetSize(1, 1)
+    lower:SetPoint("TOPLEFT", 0, -260)
+
+    -- Step 3: the shared key (small, last before saving: the one officers come back for) -----
     local step2 = NewLabel(p, "", "GameFontNormal")
-    step2:SetPoint("TOPLEFT", 8, -194)
+    step2:SetPoint("TOPLEFT", lower, "TOPLEFT", 8, 0)
     local keyText = NewLabel(p, "", "GameFontHighlight")
-    keyText:SetPoint("TOPLEFT", 26, -218)
+    keyText:SetPoint("TOPLEFT", lower, "TOPLEFT", 26, -24)
     local keyButton = NewButton(p, "", 170)
     keyButton:SetPoint("LEFT", keyText, "RIGHT", 24, 0)
     keyButton:SetScript("OnClick", function()
@@ -3332,15 +3346,15 @@ local function BuildOfficerPanel()
     local keyHint = NewInfoIcon(p, {})
     keyHint:SetPoint("LEFT", step2, "RIGHT", 6, 0)
 
-    -- Step 3: save, with a preview of La Taverne's lines -------------------------------------
+    -- Step 4: save, with a preview of La Taverne's lines -------------------------------------
     local step3 = NewLabel(p, "", "GameFontNormal")
-    step3:SetPoint("TOPLEFT", 8, -260)
+    step3:SetPoint("TOPLEFT", lower, "TOPLEFT", 8, -66)
     local previewLabel = NewLabel(p, "", "GameFontDisableSmall")
-    previewLabel:SetPoint("TOPLEFT", 26, -280)
+    previewLabel:SetPoint("TOPLEFT", lower, "TOPLEFT", 26, -86)
     previewLabel:SetPoint("RIGHT", -8, 0)
     previewLabel:SetJustifyH("LEFT")
     local preview = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    preview:SetPoint("TOPLEFT", 24, -296)
+    preview:SetPoint("TOPLEFT", lower, "TOPLEFT", 24, -102)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
     if preview.SetBackdrop then
@@ -3359,29 +3373,19 @@ local function BuildOfficerPanel()
     previewText:SetJustifyV("TOP")
 
     local saveButton = NewButton(p, L["Save"], 160, 24)
-    saveButton:SetPoint("TOPLEFT", 24, -382)
+    saveButton:SetPoint("TOPLEFT", preview, "BOTTOMLEFT", 0, -10)
     local cancelButton = NewButton(p, L["Cancel"], 160, 24)
     cancelButton:SetPoint("LEFT", saveButton, "RIGHT", 8, 0)
     local countText = NewLabel(p, "", "GameFontDisableSmall")
     countText:SetPoint("LEFT", cancelButton, "RIGHT", 12, 0)
     -- Under Save: unsaved changes or an imported setup, then the result of the last action
     local banner = NewLabel(p, "", "GameFontHighlightSmall")
-    banner:SetPoint("TOPLEFT", 26, -414)
+    banner:SetPoint("TOPLEFT", saveButton, "BOTTOMLEFT", 2, -8)
     banner:SetPoint("RIGHT", -8, 0)
     banner:SetJustifyH("LEFT")
     message:SetPoint("TOPLEFT", banner, "BOTTOMLEFT", 0, -4)
     message:SetPoint("RIGHT", -8, 0)
     message:SetJustifyH("LEFT")
-
-    -- Who can use auto-invite: under the Guild Alliance steps, with a line between.
-    local RULE_Y = -450
-    local ruleLine = p:CreateTexture(nil, "ARTWORK")
-    ruleLine:SetColorTexture(1, 0.82, 0, 0.25)
-    ruleLine:SetHeight(1)
-    ruleLine:SetPoint("TOPLEFT", 8, RULE_Y + 14)
-    ruleLine:SetPoint("RIGHT", -8, 0)
-    local rule = ns.NewAutoInviteRule(p)
-    rule:SetPoint("TOPLEFT", 8, RULE_Y)
 
     local function Problem()
         local others = 0
@@ -3389,14 +3393,14 @@ local function BuildOfficerPanel()
             if not ns.Alliance.ValidTag(entry.tag) then return L["The tag must be 1 to 6 letters, no spaces."] .. " (" .. entry.name .. ")" end
             if not entry.mine then others = others + 1 end
         end
-        if others > 0 and not draft.key then return L["Create the key first (step 2)."] end
+        if others > 0 and not draft.key then return L["Create the key first (step 3)."] end
         return nil
     end
 
     saveButton:SetScript("OnClick", function()
         local problem = Problem()
         if problem then Say(problem, true) return end
-        local ok, err, paste = ns.Alliance:Save(draft.guilds, draft.key)
+        local ok, err, paste = ns.Alliance:Save(draft.guilds, draft.key, rule:GetRule())
         if not ok then
             Say(err, true)
         elseif paste then
@@ -3419,6 +3423,7 @@ local function BuildOfficerPanel()
     end)
     cancelButton:SetScript("OnClick", function()
         draft = ns.Alliance:GetDraft()
+        rule:Reset()
         dirty, imported = false, false
         Say(nil)
         p:Refresh()
@@ -3482,10 +3487,15 @@ local function BuildOfficerPanel()
         for _, entry in ipairs(draft.guilds) do
             if not entry.mine then others = others + 1 end
         end
-        local saved = not dirty and ns.Alliance:IsActive() and ns.Alliance:GetKey() == draft.key
+        local ruleSaved = ns.Alliance.AutoInviteLine(rule:GetRule()) == ns.Alliance.AutoInviteLine(ns.Alliance:GetAutoInvite())
+        local saved = not dirty and (ns.Alliance:IsActive() and ns.Alliance:GetKey() == draft.key or others == 0) and ruleSaved
         step1:SetText(StepTitle(1, L["Guilds of the Guild Alliance"], others > 0))
-        step2:SetText(StepTitle(2, L["Shared key"], draft.key ~= nil))
-        step3:SetText(StepTitle(3, L["Save to your Guild Info"], saved))
+        stepRule:SetText(StepTitle(2, L["Who can use auto-invite"], ruleSaved))
+        step2:SetText(StepTitle(3, L["Shared key"], draft.key ~= nil))
+        step3:SetText(StepTitle(4, L["Save to your Guild Info"], saved))
+        -- The rank list sets the height of step 2; the rest follows it.
+        rule:Refresh()
+        lower:SetPoint("TOPLEFT", 0, -216 - rule:GetHeight() - 18)
 
         if imported then
             banner:SetText("|cffff9900" .. L["Imported setup shown below. It is not applied yet: click Save to apply it, or Cancel."] .. "|r")
@@ -3506,8 +3516,10 @@ local function BuildOfficerPanel()
             keyHint.lines = { L["Shared key"], L["Every guild of the Guild Alliance uses the same key. La Taverne makes one for you."] }
         end
 
-        local lines = ns.Alliance.BuildLines(draft.guilds, draft.key)
+        -- Every line La Taverne writes, the auto-invite one included; the box fits them.
+        local lines = ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule())
         previewText:SetText(#lines > 0 and table.concat(lines, "\n") or ("|cff808080" .. L["nothing"] .. "|r"))
+        preview:SetHeight(math.max(36, #lines * 14 + 16))
         if dirty then
             previewLabel:SetText(L["Preview of La Taverne's lines in the Guild Info. The rest of the Guild Info stays as it is."])
         else
@@ -3523,10 +3535,15 @@ local function BuildOfficerPanel()
         saveButton:SetEnabled(dirty)
         cancelButton:SetEnabled(dirty)
         exportButton:SetEnabled(saved)
+        -- The whole height, for the scroll: the steps down to the two lines under Save.
+        self:SetHeight(216 + rule:GetHeight() + 18 + 102 + preview:GetHeight() + 10 + 24 + 8 + 44)
     end
 
     function p:Refresh()
-        if not draft or not dirty then draft = ns.Alliance:GetDraft() end
+        if not draft or not dirty then
+            draft = ns.Alliance:GetDraft()
+            rule:Reset()
+        end
 
 
         local names = {}
@@ -3540,8 +3557,6 @@ local function BuildOfficerPanel()
         end
         SetListData(list, draft.guilds)
         self:RefreshDraft()
-        rule:Refresh()
-        self:SetHeight(-RULE_Y + rule:GetHeight() + 12)
     end
     outer.Refresh = function() p:Refresh() end
     return outer

@@ -107,7 +107,7 @@ function Alliance.NewKey()
     return key
 end
 
--- Setup lines for a list of { name, tag } and a key.
+-- Setup lines for a list of { name, tag } and a key (what Export sends to the allied guilds).
 function Alliance.BuildLines(guilds, key)
     local lines = {}
     for _, entry in ipairs(guilds) do
@@ -117,17 +117,34 @@ function Alliance.BuildLines(guilds, key)
     return lines
 end
 
--- The Guild Info text with our lines replaced by new ones; everything else is kept.
--- oneLine: the test Guild Info, whose lines may be written on one line with ";" between them
--- (/taverne dev info), like Parse reads it. Not the real one: its own text may hold a ";".
--- pattern: which lines are replaced (default: the alliance's LT:g and LT:k lines).
-function Alliance.ReplaceLines(text, lines, oneLine, pattern)
+-- All of La Taverne's lines for my Guild Info: the alliance's (only with an allied guild or a
+-- key: a guild alone needs none), then who may use auto-invite (rule: see GetAutoInvite).
+function Alliance.InfoLines(guilds, key, rule)
+    local others = 0
+    for _, entry in ipairs(guilds) do
+        if not ns.Guild:IsMyGuild(entry.name) then others = others + 1 end
+    end
+    local lines = (others > 0 or key) and Alliance.BuildLines(guilds, key) or {}
+    local ai = Alliance.AutoInviteLine(rule)
+    if ai then lines[#lines + 1] = ai end
+    return lines
+end
+
+-- The Guild Info text with our lines (LT:g, LT:k, LT:ai) replaced by new ones; everything else
+-- is kept. oneLine: the test Guild Info, whose lines may be written on one line with ";"
+-- between them (/taverne dev info), like Parse reads it. Not the real one: its own text may
+-- hold a ";".
+local function Ours(line)
+    line = strtrim(line)
+    return line:match("^[Ll][Tt]:[GgKk]:") ~= nil or line:match("^[Ll][Tt]:[Aa][Ii]:") ~= nil
+end
+
+function Alliance.ReplaceLines(text, lines, oneLine)
     local kept = {}
     text = text or ""
     if oneLine then text = text:gsub(";", "\n") end
-    pattern = pattern or "^[Ll][Tt]:[GgKk]:"
     for line in (text .. "\n"):gmatch("(.-)\r?\n") do
-        if not strtrim(line):match(pattern) then kept[#kept + 1] = line end
+        if not Ours(line) then kept[#kept + 1] = line end
     end
     while #kept > 0 and strtrim(kept[#kept]) == "" do kept[#kept] = nil end
     if #lines > 0 then
@@ -158,11 +175,12 @@ function Alliance.ValidTag(tag)
     return type(tag) == "string" and #strtrim(tag) >= 1 and #strtrim(tag) <= 6 and not tag:find("[:;\n|%s]")
 end
 
--- Save the setup. Test mode writes the fake Guild Info. In a real guild the game forbids addons
--- to change the Guild Info (SetGuildInfoText is protected), so this returns the whole new Guild
--- Info text for the officer to paste: ok, error text, text to paste.
-function Alliance:Save(guilds, key)
-    local lines = Alliance.BuildLines(guilds, key)
+-- Save the setup: the alliance (guilds, key) and who may use auto-invite (rule). Test mode
+-- writes the fake Guild Info. In a real guild the game forbids addons to change the Guild Info
+-- (SetGuildInfoText is protected), so this returns the whole new Guild Info text for the
+-- officer to paste: ok, error text, text to paste.
+function Alliance:Save(guilds, key, rule)
+    local lines = Alliance.InfoLines(guilds, key, rule)
     if ns.Guild:IsSandbox() then
         ns.db.dev.infoText = Alliance.ReplaceLines(ns.db.dev.infoText or "", lines, true)
         self:Refresh()
@@ -185,30 +203,6 @@ end
 -- Who may use auto-invite: nil (everyone), "off", or { [rankIndex] = true }.
 function Alliance:GetAutoInvite()
     return config.autoInvite
-end
-
--- Write who may use auto-invite (rule as above). Like Save: test mode writes the fake Guild
--- Info; a real guild gets the whole new text to paste (ok, error, text).
-function Alliance:SaveAutoInvite(rule)
-    local line = Alliance.AutoInviteLine(rule)
-    local lines = line and { line } or {}
-    local pattern = "^[Ll][Tt]:[Aa][Ii]:"
-    if ns.Guild:IsSandbox() then
-        ns.db.dev.infoText = Alliance.ReplaceLines(ns.db.dev.infoText or "", lines, true, pattern)
-        self:Refresh()
-        return true
-    end
-    if not (CanEditGuildInfo and CanEditGuildInfo()) then
-        return false, ns.L["You can't edit the Guild Info."]
-    end
-    if ns.Guild:Restricted() then
-        return false, ns.L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."]
-    end
-    local text = Alliance.ReplaceLines(GetGuildInfoText and GetGuildInfoText() or "", lines, false, pattern)
-    if #text > Alliance.INFO_MAX then
-        return false, ns.L["The Guild Info would be too long (%d / %d)."]:format(#text, Alliance.INFO_MAX)
-    end
-    return true, nil, text
 end
 
 -- Current setup as an editable copy: { guilds = { {name, tag, mine} }, key }.
