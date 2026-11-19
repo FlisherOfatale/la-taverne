@@ -27,7 +27,6 @@ if GetLocale() == "frFR" then
     L["Test guild: %s"] = "Guilde de test : %s"
     L["No open groups right now. Create one in the \"My group\" tab!"] = "Aucun groupe ouvert pour le moment. Créez-en un dans l'onglet « Mon groupe » !"
     L["Your group"] = "Votre groupe"
-    L["Manage"] = "Gérer"
     L["Request sent"] = "Demande envoyée"
     L["Request received"] = "Demande reçue"
     L["Request waiting: leader offline"] = "Demande en attente : chef hors ligne"

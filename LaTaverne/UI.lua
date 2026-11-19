@@ -1370,16 +1370,24 @@ local function InitGroupRow(row, l, invite)
     end
     FillListingRow(row, l)
     row.status:SetText("")
+    row.status:ClearAllPoints()
+    row.status:SetPoint("BOTTOMRIGHT", row.button, "TOPRIGHT", 0, 3)
     row.button:Show()
     row.button:Enable()
     row.button.tooltip = nil
     row.button:SetScript("OnClick", nil)
     row.decline:Hide()
 
+    -- My group, or the one I'm in: just said, in the button's place (the green My group button
+    -- at the top right of the list goes there).
+    local function JustSay(text)
+        row.button:Hide()
+        row.status:ClearAllPoints()
+        row.status:SetPoint("RIGHT", row.button, "RIGHT", 0, 0)
+        row.status:SetText(text)
+    end
     if ns.Groups:IsMine(l) then
-        row.status:SetText(L["Your group"])
-        row.button:SetText(L["Manage"])
-        row.button:SetScript("OnClick", function() UI:ShowPage("mygroup") end)
+        JustSay("|cff20ff20" .. L["Your group"] .. "|r")
         return
     end
 
@@ -1407,9 +1415,7 @@ local function InitGroupRow(row, l, invite)
     end
 
     if ns.Groups:IsInvolved(l) then
-        row.status:SetText("|cff20ff20" .. L["You're in this group"] .. "|r")
-        row.button:SetText(L["Manage"])
-        row.button:SetScript("OnClick", function() UI:ShowPage("mygroup") end)
+        JustSay("|cff20ff20" .. L["You're in this group"] .. "|r")
         return
     end
 
