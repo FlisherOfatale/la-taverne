@@ -3790,7 +3790,7 @@ end
 -- Options: one column of sections (General, Minimap, Alerts, Shared guild chat), labels on the
 -- left and their control at CONTROL_X; the error report and the version on the bottom line.
 local CONTROL_X = 280
-local OPTION_ROW, OPTION_GAP = 28, 38 -- between two rows; between a section's last row and the next header
+local OPTION_ROW, OPTION_GAP = 30, 56 -- between two rows; between a section's last row and the next header (room to breathe: the page scrolls)
 
 -- A dropdown of the game's style: choices = { { text, value } }, get() and set(value).
 local function NewChoice(parent, width, choices, get, set, tooltip)
@@ -3849,7 +3849,7 @@ local function BuildOptionsPanel()
     local function Section(text)
         local header = NewSectionHeader(c, text)
         header:SetPoint("TOPLEFT", 8, y)
-        y = y - 28
+        y = y - 32
         return header
     end
     local function Row(label)
