@@ -1,7 +1,8 @@
 -- Main window, built from Blizzard's own templates so it looks like the default UI.
 -- Side tabs (sections) on the right edge, bottom tabs for the pages of a section:
--- - Groups: Browse (open guild groups, invitations on top), My group (post / manage / member
---           view), Players (my availability, who's available)
+-- - Groups: Browse (open guild groups, invitations on top) and My group (post / manage / member
+--           view) share one bottom tab: My group while in a group of the finder, Browse
+--           otherwise; Players (my availability, who's available)
 -- - Alliance: the Guild Alliance as members see it; Setup (only for players who can edit the
 --             Guild Info)
 -- - Auto-invite: Queue and Settings (Invites.lua)
@@ -1831,6 +1832,17 @@ local function AvailabilityTooltip(owner)
     ShowTooltip(owner, lines)
 end
 
+-- In a group of the finder (mine, or someone else's I joined)? Then Groups opens on My group,
+-- and Browse is a look around, with a way back.
+local function InFinderGroup()
+    return (ns.Groups:GetMine() or ns.Groups:GetJoined()) and true or false
+end
+
+-- The page the Groups tab opens: My group while in one, Browse otherwise.
+local function GroupsHome()
+    return InFinderGroup() and "mygroup" or "browse"
+end
+
 local function BuildGroupsPanel()
     local p = NewPanel()
     p.header = NewPageTitle(p, "")
@@ -1847,6 +1859,11 @@ local function BuildGroupsPanel()
     p.avail:SetScript("OnClick", function() OpenAvailability() end)
     p.avail:SetScript("OnEnter", function(self) AvailabilityTooltip(self) end)
     p.avail:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- In a group of the finder: back to it, bottom left, where My group's "See the other
+    -- groups" button is (the list then stops above it).
+    p.back = NewButton(p, "\194\171 " .. L["Back to my group"], 180)
+    p.back:SetPoint("BOTTOMLEFT", 2, 2)
+    p.back:SetScript("OnClick", function() UI:ShowPage("mygroup") end)
 
     -- What I offer, like the game's group finder: every role I can play (the leader picks one
     -- when accepting), and whether I'm a new player. Saved per character.
@@ -2027,6 +2044,8 @@ local function BuildGroupsPanel()
         self.avail:SetShown(free and true or false)
         self.avail:SetText(AvailabilityText())
         self.avail:SetEnabled(ns.Players:IsActive() or not IsInGroup())
+        self.back:SetShown(not free)
+        self.box:SetPoint("BOTTOMRIGHT", -20, free and 0 or 30)
         self.empty:SetShown(#list == 0)
         self.emptyHint:SetShown(#list == 0 and free and true or false)
         SetListData(self.box, list)
@@ -2053,6 +2072,9 @@ local function BuildCreateForm(parent)
     local reset = NewButton(f, L["Reset"], 110, 20)
     reset:SetPoint("LEFT", formTitle, "RIGHT", 14, 0)
     reset:SetScript("OnClick", function() f:Reset() end)
+    local back = NewButton(f, L["Back"], 110)
+    back:SetPoint("TOPRIGHT", -2, -4)
+    back:SetScript("OnClick", function() UI:ShowPage("browse") end)
 
     -- Dungeon
     NewLabel(f, L["Dungeon"]):SetPoint("TOPLEFT", 8, -50)
@@ -2613,7 +2635,7 @@ local function BuildManageView(parent)
         self.requestsHeader:SetPoint("TOPLEFT", 8, after - 14)
         self.box:ClearAllPoints()
         self.box:SetPoint("TOPLEFT", 0, after - 34)
-        self.box:SetPoint("BOTTOMRIGHT", -20, 24)
+        self.box:SetPoint("BOTTOMRIGHT", -20, 30) -- clear of "See the other groups" below
     end
     m.empty:SetPoint("TOP", m.box, "TOP", 0, -16)
 
@@ -2745,6 +2767,21 @@ local function BuildMyGroupPanel()
     p.manage = BuildManageView(p)
     p.member = BuildMemberView(p)
 
+    -- Bottom left (away from where Post group was, under the mouse after posting): the other
+    -- groups, and the invitations waiting there. Browse has "Back to my group" at the same spot.
+    p.others = NewButton(p, "", 180)
+    p.others:SetPoint("BOTTOMLEFT", 2, 2)
+    p.others:SetScript("OnClick", function() UI:ShowPage("browse") end)
+    p.others:SetScript("OnEnter", function(self)
+        ShowTooltip(self, { L["See the other groups"],
+            L["Open groups and invitations. Your group stays as it is."] })
+    end)
+    p.others:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- The manage view's bottom message goes right of the link.
+    p.manage.message:ClearAllPoints()
+    p.manage.message:SetPoint("LEFT", p.others, "RIGHT", 16, 0)
+    p.manage.message:SetPoint("RIGHT", p.manage, "RIGHT", -8, 0)
+
     function p:Refresh()
         local mine = ns.Groups:GetMine()
         -- (only look for a joined group when I don't lead one: "false" here would count as shown)
@@ -2752,6 +2789,12 @@ local function BuildMyGroupPanel()
         self.manage:SetShown(mine ~= nil)
         self.member:SetShown(joined ~= nil)
         self.form:SetShown(mine == nil and joined == nil)
+        self.others:SetShown(mine ~= nil or joined ~= nil)
+        local invites = #ns.Groups:GetInvitations()
+        self.others:SetText(invites > 0
+            and ("|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14|t " .. format(L["Invitations waiting (%d): see the groups"], invites) .. " \194\187")
+            or (L["See the other groups"] .. " \194\187"))
+        self.others:SetWidth(math.max(180, self.others:GetFontString():GetStringWidth() + 30))
         if mine then
             self.manage:Refresh(mine)
         elseif joined then
@@ -3845,6 +3888,7 @@ local SECTIONS = {
           "Interface\\LFGFrame\\UI-LFG-PORTRAIT",
           "Interface\\Icons\\INV_Misc_GroupNeedMore",
       },
+      -- Browse and My group share one bottom tab (see LayoutBottomTabs).
       pages = { "browse", "players", "mygroup" } },
     -- Auto-invite: a horn, calling people in.
     { key = "autoinvite", label = "Auto-invite",
@@ -4025,14 +4069,24 @@ local function LayoutBottomTabs()
     local shownSet = {}
     if showRow then for _, page in ipairs(visible) do shownSet[page] = true end end
 
+    -- Browse and My group share one tab (the Browse one): it says which of the two is shown, or
+    -- where it opens (My group while in a group of the finder).
+    local inPair = currentPage == "browse" or currentPage == "mygroup"
+    local pairPage = inPair and currentPage or GroupsHome()
+
     local previous, selected
     for i, tab in ipairs(frame.Tabs) do
         local page = tab.page
-        local shown = shownSet[page] == true
+        local shown = shownSet[page] == true and page ~= "mygroup"
         tab:SetShown(shown)
         if shown then
             local badge = PageBadge(page) or 0
             local text = L[PAGE_LABELS[page] or page]
+            if page == "browse" then
+                badge = badge + (PageBadge("mygroup") or 0)
+                text = (pairPage == "mygroup" and not InFinderGroup()) and L["Create a group"]
+                    or L[PAGE_LABELS[pairPage]]
+            end
             if badge > 0 then text = text .. " (" .. badge .. ")" end
             tab:SetText(text)
             if PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0) end
@@ -4044,7 +4098,8 @@ local function LayoutBottomTabs()
             end
             previous = tab
         end
-        if page == currentPage then selected = i end
+        -- (the hidden My group tab is never the selected one: the shared tab is)
+        if (page == currentPage and page ~= "mygroup") or (page == "browse" and inPair) then selected = i end
     end
     if PanelTemplates_SetTab and selected then PanelTemplates_SetTab(frame, selected) end
 end
@@ -4134,7 +4189,8 @@ local function CreateMainFrame()
             tab.page = page
             tab:SetText(L[PAGE_LABELS[page] or page])
             tab:SetScript("OnClick", function()
-                UI:ShowPage(page)
+                -- The Browse / My group tab opens My group while in a group of the finder.
+                UI:ShowPage(page == "browse" and GroupsHome() or page)
                 if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
             end)
             tab:Hide()
@@ -4154,11 +4210,21 @@ local function Fallback(page)
     return visible[1] or "browse"
 end
 
+local wasInGroup -- in a group of the finder at the last refresh (nil before the first one)
+
 function UI:Refresh()
     if not frame or not frame:IsShown() then return end
     -- Last invitation gone while looking at it, officer rank lost, test mode left...
     if not PageAllowed(currentPage) then
         self:ShowPage(Fallback(currentPage))
+        return
+    end
+    -- Just joined, posted, left or removed a group: Groups goes to My group or Browse.
+    local inGroup = InFinderGroup()
+    local changed = wasInGroup ~= nil and wasInGroup ~= inGroup
+    wasInGroup = inGroup
+    if changed and (currentPage == "browse" or currentPage == "mygroup") and currentPage ~= GroupsHome() then
+        self:ShowPage(GroupsHome())
         return
     end
     LayoutSideTabs()
@@ -4197,6 +4263,8 @@ function UI:ShowSection(key)
     for _, section in ipairs(SECTIONS) do
         if section.key == key then
             local page = lastPage[key]
+            -- Groups: back on My group while in one (not a Browse look around from before).
+            if page == "browse" or page == "mygroup" then page = GroupsHome() end
             if not page or not PageAllowed(page) then page = VisiblePages(section)[1] end
             if page then self:ShowPage(page) end
             return
@@ -4239,7 +4307,10 @@ function UI:Toggle()
     else
         frame:Show()
         -- A new invitation I haven't seen yet: open on Browse, where it's on top (once).
-        self:ShowPage(ns.Groups:HasUnseenInvitation() and "browse" or currentPage)
+        -- Otherwise Groups opens on My group while in one.
+        local page = currentPage
+        if page == "browse" or page == "mygroup" then page = GroupsHome() end
+        self:ShowPage(ns.Groups:HasUnseenInvitation() and "browse" or page)
     end
 end
 

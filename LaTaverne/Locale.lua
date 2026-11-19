@@ -585,6 +585,10 @@ if GetLocale() == "frFR" then
     L["%d dungeons"] = "%d donjons"
     L["Availability"] = "Disponibilité"
     L["Back"] = "Retour"
+    L["Back to my group"] = "Retour à mon groupe"
+    L["See the other groups"] = "Voir les autres groupes"
+    L["Open groups and invitations. Your group stays as it is."] = "Les groupes ouverts et les invitations. Votre groupe reste tel quel."
+    L["Invitations waiting (%d): see the groups"] = "Invitations en attente (%d) : voir les groupes"
     -- Dungeon names in other languages
     L["English"] = "anglais"
     L["French"] = "français"
