@@ -4270,8 +4270,8 @@ local function NewSideTab(section)
     -- Something of mine running there: a green dot, top right (like the minimap button's).
     b.dot = b:CreateTexture(nil, "OVERLAY", nil, 2)
     b.dot:SetTexture("Interface\\FriendsFrame\\StatusIcon-Online")
-    b.dot:SetSize(14, 14)
-    b.dot:SetPoint("TOPRIGHT", 2, 2)
+    b.dot:SetSize(24, 24)
+    b.dot:SetPoint("TOPRIGHT", 8, 8)
     b.dot:Hide()
     b:SetScript("OnClick", function()
         if section.action then section.action() else UI:ShowSection(section.key) end
