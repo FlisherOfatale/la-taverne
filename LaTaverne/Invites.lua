@@ -115,6 +115,11 @@ function Invites:Clear()
     Changed()
 end
 
+function Invites:ClearResults()
+    wipe(recent)
+    Changed()
+end
+
 local function Add(name, source)
     local key = ns.NameKey(name)
     local entry = Find(key)
@@ -498,15 +503,18 @@ function ns.BuildInvitesPanel()
         if #list == 0 then return end
         local lines, overlap = { L["Inviting right now"] }, false
         for _, r in ipairs(list) do
-            local words = #r.words > 0 and table.concat(r.words, ", ") or "?"
-            lines[#lines + 1] = r.name .. (r.tag and (" |cff8fb8e8[" .. r.tag .. "]|r") or "") .. "  |cff808080" .. words .. "|r"
-            if #r.shared > 0 then
-                overlap = true
-                lines[#lines + 1] = "|cffff9900   " .. format(L["also uses %s"], table.concat(r.shared, ", ")) .. "|r"
+            local mine = {}
+            for _, word in ipairs(r.shared) do mine[word] = true end
+            local words = {}
+            for i, word in ipairs(r.words) do
+                words[i] = (mine[word] and "|cffff9900" or "|cff808080") .. word .. "|r"
             end
+            overlap = overlap or #r.shared > 0
+            lines[#lines + 1] = r.name .. (r.tag and (" |cff8fb8e8[" .. r.tag .. "]|r") or "")
+                .. "   " .. (#words > 0 and table.concat(words, ", ") or "?")
         end
         if overlap then
-            lines[#lines + 1] = L["Same keyword: whoever types it gets several invites and joins the first one accepted. Fine for a free-for-all; for separate groups, use different sets."]
+            lines[#lines + 1] = "|cffff9900" .. L["Orange: your keywords too."] .. "|r"
         end
         K.ShowTooltip(self, lines)
     end)
@@ -667,8 +675,11 @@ function ns.BuildInvitesPanel()
             .. L[RESULT_TEXT[r.result] or r.result] .. "|r")
     end)
     recentBox:SetPoint("TOPLEFT", 4, -22)
-    recentBox:SetPoint("BOTTOMRIGHT", -20, 6)
+    recentBox:SetPoint("BOTTOMRIGHT", -20, 40)
     Framed(right, recentBox)
+    local clearResults = K.NewButton(right, L["Clear the results"], 160)
+    clearResults:SetPoint("BOTTOMLEFT", 2, 4)
+    clearResults:SetScript("OnClick", function() Invites:ClearResults() end)
     local nothing = K.NewLabel(right, "|cff808080" .. L["Nothing yet"] .. "|r", "GameFontDisable")
     nothing:SetPoint("TOPLEFT", recentBox, "TOPLEFT", 10, -16)
 
@@ -703,6 +714,7 @@ function ns.BuildInvitesPanel()
         clear:SetEnabled(#queue > 0)
         K.SetListData(recentBox, recent)
         nothing:SetShown(#recent == 0)
+        clearResults:SetEnabled(#recent > 0)
     end
     Invites:OnChange(function() if p:IsShown() then p:Refresh() end end)
     tickers[#tickers + 1] = p
