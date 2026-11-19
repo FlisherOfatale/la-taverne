@@ -3460,6 +3460,7 @@ local function BuildOfficerPanel()
             pending = LinesSig(ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule()))
             Say(nil)
             ns.TextDialog({
+                kind = "guildinfo", -- closed on its own once the Guild Info has the lines
                 title = L["Paste into the Guild Info"],
                 -- Test mode: the same steps, in the test guild window.
                 hint = L["The game doesn't let addons write the Guild Info: you paste it yourself. This text is your whole Guild Info, with La Taverne's lines updated and the rest unchanged."]
@@ -3617,6 +3618,7 @@ local function BuildOfficerPanel()
             if LinesSig(ns.Alliance.InfoLines(now.guilds, ns.Alliance:GetKey(), ns.Alliance:GetAutoInvite())) == pending then
                 pending, dirty = nil, false
                 Say(L["Saved: the Guild Info has the new lines."])
+                ns.CloseTextDialog("guildinfo")
             end
         end
         if not draft or not dirty then
@@ -3640,6 +3642,9 @@ local function BuildOfficerPanel()
         self:RefreshDraft()
     end
     outer.Refresh = function() p:Refresh() end
+    -- Waiting for the pasted lines: check each time the Guild Info is read, even with La
+    -- Taverne's window closed (the guild window is in front while pasting).
+    ns.Alliance:OnChange(function() if pending then p:Refresh() end end)
     return outer
 end
 

@@ -325,9 +325,15 @@ local function BuildTextDialog()
     textDialog = f
 end
 
+-- Close the text window if it's still showing that kind (opts.kind) of text.
+function ns.CloseTextDialog(kind)
+    if textDialog and textDialog:IsShown() and textDialog.kind == kind then textDialog:Hide() end
+end
+
 function ns.TextDialog(opts)
     if not textDialog then BuildTextDialog() end
     local f = textDialog
+    f.kind = opts.kind
     if f.SetTitle then f:SetTitle(opts.title or "La Taverne") end
     f.hint:SetText(opts.hint or "")
     f.edit:SetText(opts.text or "")
