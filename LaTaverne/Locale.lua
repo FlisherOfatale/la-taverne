@@ -544,7 +544,7 @@ if GetLocale() == "frFR" then
     L["Setup"] = "Configuration"
     L["Guild Alliance setup"] = "Configuration de l'alliance"
     L["Set up the guilds once, then send the setup to an officer of each allied guild (Export, then Import on their side)."] = "Configurez les guildes une fois, puis envoyez la configuration à un officier de chaque guilde alliée (Exporter, puis Importer de leur côté)."
-    L["Guilds linked together: their groups, available players and (if you want) guild chat are shared, as if it were one guild."] = "Des guildes liées entre elles : leurs groupes, leurs joueurs disponibles et (si vous voulez) le chat de guilde sont partagés, comme une seule guilde."
+    L["Guilds linked together: their groups, available players and guild chat are shared, as if it were one guild."] = "Des guildes liées entre elles : leurs groupes, leurs joueurs disponibles et le chat de guilde sont partagés, comme une seule guilde."
     L["Shown because GuildUnion is installed: it shares guild chat too. Keep only one of the two sharing, or allied lines show twice."] = "Affiché parce que GuildUnion est installé : il partage aussi le chat de guilde. Ne laissez qu'un seul des deux le partager, sinon les lignes alliées s'affichent deux fois."
     L["Officers set it up on the Setup page."] = "Les officiers la configurent dans la page Configuration."
     L["Nothing goes to your real guild: groups, players and chat stay in the test guild."] = "Rien ne va à votre vraie guilde : groupes, joueurs et chat restent dans la guilde de test."

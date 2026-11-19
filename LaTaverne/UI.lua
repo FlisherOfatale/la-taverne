@@ -3615,7 +3615,7 @@ end
 local function BuildNetworkPanel()
     local p = NewPanel()
     NewPageTitle(p, L["Guild Alliance"], { L["Guild Alliance"],
-        L["Guilds linked together: their groups, available players and (if you want) guild chat are shared, as if it were one guild."],
+        L["Guilds linked together: their groups, available players and guild chat are shared, as if it were one guild."],
         L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."],
         L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] })
     -- Top right: the channel.
