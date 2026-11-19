@@ -2315,11 +2315,11 @@ local function BuildCreateForm(parent)
                 end
             end
         end
-        -- Not an error, just what's left to do: grey, next to the button it unlocks.
+        -- What's left to do (or an error), in red next to the greyed button it unlocks.
         if self.error then
             self.message:SetText("|cffff4040" .. self.error .. "|r")
         else
-            self.message:SetText(err and ("|cff808080" .. err .. "|r") or "")
+            self.message:SetText(err and ("|cffff4040" .. err .. "|r") or "")
         end
         post:SetEnabled(err == nil)
     end
