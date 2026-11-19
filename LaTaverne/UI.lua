@@ -3662,9 +3662,7 @@ local function BuildNetworkPanel()
             or L["Officers set it up on the Setup page."])
         if not active then return end
 
-        local ready = ns.Comm:IsAllyReady()
-        status:SetText(L["Channel:"] .. " " .. (ready and (READY_ICON .. " |cff20ff20" .. L["ready"] .. "|r")
-            or (WAIT_ICON .. " |cffff9900" .. L["connecting"] .. "|r")))
+        status:SetText(L["Channel:"] .. " " .. ns.Comm:AllyStatusText())
 
         -- Players heard from, by guild.
         local byGuild = {}

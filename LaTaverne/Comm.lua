@@ -214,6 +214,15 @@ function Comm:IsAllyReady()
     return channels.ally ~= nil and channels.ally.ready
 end
 
+-- The alliance channel's state, with its icon and color: ready, or connecting. Shown on the
+-- Alliance page and in the minimap tooltip.
+function Comm:AllyStatusText()
+    if self:IsAllyReady() then
+        return "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff20ff20" .. ns.L["ready"] .. "|r"
+    end
+    return "|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14|t |cffff9900" .. ns.L["connecting"] .. "|r"
+end
+
 -- Guild scope -------------------------------------------------------------------------
 
 -- Where guild messages go right now, or nil if we can't send yet.

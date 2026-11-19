@@ -106,10 +106,7 @@ local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
         tooltip:AddLine(format(L["Open groups: %d"], G:CountOpen()), 1, 1, 1)
         -- The allied guilds' channel, when the guild is in an alliance (same as the Alliance page).
         if ns.Alliance:IsActive() then
-            local ready = ns.Comm:IsAllyReady()
-            tooltip:AddLine(L["Alliance channel:"] .. " "
-                .. (ready and ("|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff20ff20" .. L["ready"] .. "|r")
-                or ("|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14|t |cffff9900" .. L["connecting"] .. "|r")), 1, 1, 1)
+            tooltip:AddLine(L["Alliance channel:"] .. " " .. ns.Comm:AllyStatusText(), 1, 1, 1)
         end
         if ns.Guild:IsSandbox() then
             tooltip:AddLine(format(L["Test guild: %s"], ns.Guild:GetName() or "?"), 1, 0.6, 0)
