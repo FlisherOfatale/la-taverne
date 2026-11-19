@@ -432,7 +432,7 @@ function ns.BuildInvitesPanel()
     end)
     recentBox:SetPoint("TOPLEFT", 0, -20)
     recentBox:SetPoint("BOTTOMRIGHT", -20, 4)
-    local nothing = K.NewLabel(right, "|cff808080" .. L["nothing yet"] .. "|r", "GameFontDisable")
+    local nothing = K.NewLabel(right, "|cff808080" .. L["Nothing yet"] .. "|r", "GameFontDisable")
     nothing:SetPoint("TOPLEFT", recentBox, "TOPLEFT", 10, -16)
 
     function p:Refresh()

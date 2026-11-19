@@ -321,7 +321,7 @@ if GetLocale() == "frFR" then
     L["offline or not found"] = "hors ligne ou introuvable"
     L["no answer"] = "pas de réponse"
     L["removed"] = "retiré"
-    L["nothing yet"] = "rien pour l'instant"
+    L["Nothing yet"] = "Rien pour l'instant"
 
     L["Auto-invite settings"] = "Réglages de l'invitation automatique"
     L["waiting for the last answers"] = "en attente des dernières réponses"
