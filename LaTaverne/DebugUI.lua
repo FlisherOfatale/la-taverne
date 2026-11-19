@@ -446,9 +446,19 @@ function ns.BuildDebugPanel()
         b:SetScript("OnClick", def[2])
     end
 
+    -- Fake people inviting (auto-invite page: "2 others are inviting" and its tooltip).
+    local fakeRunners = K.NewButton(p, "", W, 24)
+    fakeRunners:SetPoint("TOPLEFT", 8, -294)
+    local fakeHint = K.NewLabel(p, L["Two made-up players inviting, one on +1 and inv, one on +2 (auto-invite page)."], "GameFontDisableSmall")
+    fakeHint:SetPoint("LEFT", fakeRunners, "RIGHT", 10, 0)
+    fakeRunners:SetScript("OnClick", function()
+        ns.Invites:FakeRunners(not ns.Invites:HasFakeRunners())
+        p:Refresh()
+    end)
+
     -- Chat watch: on/off
     local watch = K.NewButton(p, "", W, 24)
-    watch:SetPoint("TOPLEFT", 8, -294)
+    watch:SetPoint("TOPLEFT", 8, -324)
     local watchHint = K.NewLabel(p, L["Logs whether chat messages can be read by addons (never their text)."], "GameFontDisableSmall")
     watchHint:SetPoint("LEFT", watch, "RIGHT", 10, 0)
     watch:SetScript("OnClick", function()
@@ -458,9 +468,9 @@ function ns.BuildDebugPanel()
 
     -- Player checks
     -- Player checks: name on the first line, the two checks on the second.
-    K.NewLabel(p, L["Player checks"], "GameFontNormal"):SetPoint("TOPLEFT", 8, -338)
+    K.NewLabel(p, L["Player checks"], "GameFontNormal"):SetPoint("TOPLEFT", 8, -366)
     local playerBox = K.NewInput(p, 230, 60)
-    playerBox:SetPoint("TOPLEFT", 14, -358)
+    playerBox:SetPoint("TOPLEFT", 14, -386)
     local playerHint = K.NewLabel(p, L["Firstname Lastname"], "GameFontDisable")
     playerHint:SetPoint("LEFT", playerBox, "LEFT", 1, 0)
     local function UpdateHint() playerHint:SetShown(playerBox:GetText() == "" and not playerBox:HasFocus()) end
@@ -473,7 +483,7 @@ function ns.BuildDebugPanel()
         if UnitIsPlayer("target") then playerBox:SetText(ns.FullName("target")) end
     end)
     local invite = K.NewButton(p, L["Send a group invite"], W)
-    invite:SetPoint("TOPLEFT", 8, -390)
+    invite:SetPoint("TOPLEFT", 8, -418)
     invite:SetScript("OnClick", function() ns.commands.invite(strtrim(playerBox:GetText())) end)
     local lookup = K.NewButton(p, L["Find in the real roster"], W)
     lookup:SetPoint("LEFT", invite, "RIGHT", 8, 0)
@@ -511,6 +521,7 @@ function ns.BuildDebugPanel()
         guildText:SetText(L["Test guild: %s"]:format(ns.db.dev.guildName or "?"))
         gameChat:SetChecked(ns.db.dev.gameChat)
         watch:SetText(ns.IsChatWatching() and L["Stop the chat watch"] or L["Start the chat watch"])
+        fakeRunners:SetText(ns.Invites:HasFakeRunners() and L["Remove the fake inviters"] or L["Fake others inviting"])
     end
     return p
 end

@@ -315,6 +315,30 @@ end
 ns.Comm:On("INVITING", function(sender, p, isSelf) OnRunning(sender, p, isSelf, "guild") end)
 ns.Comm:OnAlly("INVITING", function(sender, p, isSelf) OnRunning(sender, p, isSelf, "ally") end)
 
+-- Test mode: pretend two others are inviting, to see the queue page: one on "+1" and "inv"
+-- (the usual set's words: the orange "also uses"), one on "+2" from an allied guild.
+function Invites:FakeRunners(on)
+    for key, r in pairs(runners) do
+        if r.fake then runners[key] = nil end
+    end
+    if on then
+        local tag = "ALLY"
+        for _, g in ipairs(ns.Alliance:GetGuilds()) do
+            if not ns.Guild:IsMyGuild(g.name) then tag = g.tag break end
+        end
+        runners["fake:1"] = { name = "Gaspard Lenoir", words = { "+1", "inv" }, seen = math.huge, fake = true }
+        runners["fake:2"] = { name = "Ysolde Marchal", words = { "+2" }, tag = tag, seen = math.huge, fake = true }
+    end
+    Changed()
+end
+
+function Invites:HasFakeRunners()
+    for _, r in pairs(runners) do
+        if r.fake then return true end
+    end
+    return false
+end
+
 -- The others inviting right now: { name, words, tag, shared = the words they share with my set }.
 function Invites:GetRunners()
     local out, mine = {}, {}
