@@ -527,6 +527,22 @@ function ns.BuildInvitesPanel()
     -- Two columns, both the full height: the queue on the left (its buttons under it), the last
     -- results on the right.
     local SPLIT = 0.6 -- share of the width for the queue
+    -- A dark box with a border around a list (and its scroll bar): two clear columns, even empty.
+    local function Framed(column, list)
+        local frame = CreateFrame("Frame", nil, column, "BackdropTemplate")
+        frame:SetPoint("TOPLEFT", list, "TOPLEFT", -4, 4)
+        frame:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", 18, -4)
+        frame:SetFrameLevel(column:GetFrameLevel())
+        if frame.SetBackdrop then
+            frame:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
+            })
+            frame:SetBackdropColor(0, 0, 0, 0.35)
+            frame:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+        end
+    end
     local left = CreateFrame("Frame", nil, p)
     left:SetPoint("TOPLEFT", 0, -122)
     left:SetPoint("BOTTOM", p, "BOTTOM", 0, 0)
@@ -569,8 +585,9 @@ function ns.BuildInvitesPanel()
         row.info:SetText(status .. "  \194\183  " .. source .. "  \194\183  " .. K.Ago(entry.time))
         row.invite:SetShown(entry.status == "queued")
     end)
-    box:SetPoint("TOPLEFT", 0, -20)
-    box:SetPoint("BOTTOMRIGHT", -20, 36)
+    box:SetPoint("TOPLEFT", 4, -22)
+    box:SetPoint("BOTTOMRIGHT", -20, 40)
+    Framed(left, box)
     local empty = K.NewLabel(left, "", "GameFontDisable")
     empty:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -16)
     empty:SetPoint("RIGHT", box, "RIGHT", -10, 0)
@@ -604,8 +621,9 @@ function ns.BuildInvitesPanel()
         row.result:SetText("|cff808080" .. date("%H:%M", r.time) .. "|r  |cff" .. (RESULT_COLOR[r.result] or "ffffff")
             .. L[RESULT_TEXT[r.result] or r.result] .. "|r")
     end)
-    recentBox:SetPoint("TOPLEFT", 0, -20)
-    recentBox:SetPoint("BOTTOMRIGHT", -20, 4)
+    recentBox:SetPoint("TOPLEFT", 4, -22)
+    recentBox:SetPoint("BOTTOMRIGHT", -20, 6)
+    Framed(right, recentBox)
     local nothing = K.NewLabel(right, "|cff808080" .. L["Nothing yet"] .. "|r", "GameFontDisable")
     nothing:SetPoint("TOPLEFT", recentBox, "TOPLEFT", 10, -16)
 
