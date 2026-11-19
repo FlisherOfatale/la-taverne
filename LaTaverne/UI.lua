@@ -2125,6 +2125,18 @@ local function BuildCreateForm(parent)
     PlaceAfterLabel(f.discordChannel, f.discord, 14)
     SetPlaceholder(f.discordChannel, L["Channel name"])
 
+    -- Reset only shows when there's something to clear: a dungeon, players added, roles given
+    -- to party members, a changed mix, a note, an option. (My own role alone doesn't count:
+    -- it follows the roles bar by itself.)
+    local function UpdateReset()
+        local dirty = f.dungeon or next(f.extra) or next(f.partyRoles) or f.mixChanged
+            or f.newbies:GetChecked() or f.discord:GetChecked()
+            or strtrim(note:GetText() or "") ~= "" or strtrim(f.discordChannel:GetText() or "") ~= ""
+        reset:SetShown(dirty and true or false)
+    end
+    note:HookScript("OnTextChanged", UpdateReset)
+    f.discordChannel:HookScript("OnTextChanged", UpdateReset)
+
     -- Group members: me, my party (role to choose), players to invite (remove button).
     -- Adding a player sits on the header row, right above the list it fills.
     f.membersHeader = NewLabel(f, L["Group members"], "GameFontNormal")
@@ -2286,6 +2298,9 @@ local function BuildCreateForm(parent)
         end
         self.mix = FitMix(self.mix, taken)
         self.mixRow:SetMix(self.mix, size, MissingFor(self.mix, taken))
+        local default = ns.Groups.DEFAULT_COMPOSITION[size] or ns.Groups.DEFAULT_COMPOSITION[5]
+        self.mixChanged = not SameMix(self.mix, FitMix(default, taken))
+        UpdateReset()
 
         -- Validation
         local err
