@@ -727,13 +727,10 @@ local function AlertNewGroup(l)
     local P = ns.Players
     if mode == "none" and P and P:IsActive() then mode = "fit" end
     if mode == "none" or (mode == "fit" and not (Groups:FitsMe(l) and (not P or P:WantsDungeon(l.dungeon)))) then return end
+    if ns.Quiet() then return end -- in a dungeon, a raid or combat (Options)
     ns.Print(format(L["New group: %s by %s"], DungeonWithRange(l.dungeon), l.leader .. (l.tag and (" [" .. l.tag .. "]") or ""))
         .. " " .. GroupLink(l))
-    if ns.db.alertSound and SOUNDKIT and SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION then
-        PlaySound(SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION)
-    elseif ns.db.alertSound and SOUNDKIT and SOUNDKIT.READY_CHECK then
-        PlaySound(SOUNDKIT.READY_CHECK)
-    end
+    ns.Sound("group")
 end
 
 -- Guild chat line, on demand (My group, "Post in guild chat"): short, e.g.
@@ -1329,7 +1326,7 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
     if newInvite then
         ns.Print(format(L["%s invites you to %s."], sender, DungeonWithRange(l.dungeon)) .. " " .. GroupLink(l)
             .. ((not Groups:GetMine() and ns.InParty()) and (" |cffff9900" .. L["Leave your party first."] .. "|r") or ""))
-        if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
+        ns.Sound("notice")
     end
     Changed()
 end)
@@ -1386,7 +1383,7 @@ OnBoth("APPLY", function(sender, p, isSelf, scope)
     local labels = {}
     for _, role in ipairs(list) do labels[#labels + 1] = ns.RoleLabel(role) end
     ns.Print(format(L["%s wants to join as %s."], sender .. (tag and (" [" .. tag .. "]") or ""), table.concat(labels, " / ")))
-    if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
+    ns.Sound("request")
     Changed()
 end)
 
@@ -1452,7 +1449,7 @@ OnBoth("INVITE_REPLY", function(sender, p, isSelf)
         -- The leader already chose this player: send the party invite right away.
         InvitePlayer(l, sender)
         ns.Print(format(L["%s accepted your invitation as %s."], sender, ns.RoleLabel(p.role)))
-        if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
+        ns.Sound("request")
     else
         l.pending[key] = nil
         ns.Print(format(L["%s declined your invitation."], sender))

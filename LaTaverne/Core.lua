@@ -3,8 +3,42 @@ local ADDON, ns = ...
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 ns.version = (GetMeta and GetMeta(ADDON, "Version")) or "?"
 
+-- The chat window chosen in Options (its number), when it still exists; nil: the main one.
+function ns.ChatWindow()
+    local i = ns.db and ns.db.chatWindow
+    if not i or not GetChatWindowInfo then return nil end
+    local name, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(i)
+    local f = _G["ChatFrame" .. i]
+    if f and f.AddMessage and name and name ~= "" and (shown or docked) then return f end
+    return nil
+end
+
 function ns.Print(...)
-    print("|cffd4a017La Taverne|r:", ...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    local text = "|cffd4a017La Taverne|r: " .. table.concat(parts, " ")
+    local f = ns.ChatWindow()
+    if f then f:AddMessage(text) else print(text) end
+end
+
+-- Quiet in dungeons, raids and combat (Options): no new group alerts, no sounds.
+function ns.Quiet()
+    if not (ns.db and ns.db.quiet) then return false end
+    if (InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) then return true end
+    local inside, kind = IsInInstance()
+    return (inside and (kind == "party" or kind == "raid")) and true or false
+end
+
+-- La Taverne's sounds. kind: "group" (a new group alert, if its sound is on), "request" (my
+-- group: someone asks to join or accepts, if that sound is on), "notice" (invited, my
+-- availability ends). None while quiet.
+function ns.Sound(kind)
+    if ns.Quiet() or not SOUNDKIT then return end
+    if kind == "group" and not ns.db.alertSound then return end
+    if kind == "request" and ns.db.requestSound == false then return end
+    local id = kind == "group" and (SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION or SOUNDKIT.READY_CHECK)
+        or SOUNDKIT.READY_CHECK
+    if id then PlaySound(id) end
 end
 
 -- Names ----------------------------------------------------------------------

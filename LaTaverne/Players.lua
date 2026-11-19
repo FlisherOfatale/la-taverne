@@ -571,7 +571,7 @@ local function Tick()
         elseif left <= WARN_BEFORE and not state.warned then
             state.warned = true
             ShowPopup()
-            if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
+            ns.Sound("notice")
         end
     end
 end
