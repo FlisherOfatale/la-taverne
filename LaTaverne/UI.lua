@@ -288,6 +288,10 @@ local function NewScrollList(parent, rowHeight, initializer)
     end
     view:SetElementInitializer("Frame", initializer)
     ScrollUtil.InitScrollBoxListWithScrollBar(box, bar, view)
+    -- The scroll bar only shows when the list is longer than its box.
+    if ScrollUtil.AddManagedScrollBarVisibilityBehavior then
+        ScrollUtil.AddManagedScrollBarVisibilityBehavior(box, bar)
+    end
     return box
 end
 
@@ -596,6 +600,23 @@ local function NewInfoIcon(parent, lines)
 end
 
 -- Page title, the same on every page: large, top left. info: tooltip lines for a ⓘ after it.
+-- A section of a page: a gold header, smaller than the page title, with a thin line under it
+-- across the page (header.line, shown and hidden with ShowSection).
+local SECTION_FONT = _G.GameFontNormalMed2 and "GameFontNormalMed2" or "GameFontNormal"
+local function NewSectionHeader(parent, text)
+    local header = NewLabel(parent, text, SECTION_FONT)
+    header.line = parent:CreateTexture(nil, "ARTWORK")
+    header.line:SetColorTexture(1, 0.82, 0, 0.25)
+    header.line:SetHeight(1)
+    header.line:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
+    header.line:SetPoint("RIGHT", parent, "RIGHT", -8, 0)
+    return header
+end
+local function ShowSection(header, on)
+    header:SetShown(on and true or false)
+    header.line:SetShown(on and true or false)
+end
+
 local function NewPageTitle(parent, text, info)
     local title = NewLabel(parent, text, "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 8, -8)
@@ -2849,8 +2870,14 @@ local function InitPlayerRow(row, e)
 
         row.toggle = CreateFrame("Button", nil, row)
         row.toggle:SetAllPoints()
-        row.toggle.text = NewLabel(row.toggle, "", "GameFontNormalLarge") -- a header, like "Available players"
-        row.toggle.text:SetPoint("LEFT", 8, 0)
+        -- A section header like "Available players", that folds the list under it.
+        row.toggle.text = NewLabel(row.toggle, "", SECTION_FONT)
+        row.toggle.text:SetPoint("LEFT", 8, 2)
+        row.toggle.line = row.toggle:CreateTexture(nil, "ARTWORK")
+        row.toggle.line:SetColorTexture(1, 0.82, 0, 0.25)
+        row.toggle.line:SetHeight(1)
+        row.toggle.line:SetPoint("TOPLEFT", row.toggle.text, "BOTTOMLEFT", 0, -4)
+        row.toggle.line:SetPoint("RIGHT", row.toggle, "RIGHT", 0, 0)
         row.toggle:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
 
         row.message = NewLabel(row, "", "GameFontDisable")
@@ -2862,8 +2889,8 @@ local function InitPlayerRow(row, e)
     row.message:SetShown(e.kind == "message")
     if e.kind == "toggle" then
         -- The game's own +/- icons (the font has no arrow characters).
-        row.toggle.text:SetText((e.open and "|TInterface\\Buttons\\UI-MinusButton-Up:18:18|t "
-            or "|TInterface\\Buttons\\UI-PlusButton-Up:18:18|t ")
+        row.toggle.text:SetText((e.open and "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
+            or "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t ")
             .. format(L["Other members online (%d)"], e.count))
         row.toggle:SetScript("OnClick", e.onClick)
         return
@@ -2969,29 +2996,32 @@ local function BuildPlayersPanel()
     p.change:SetPoint("RIGHT", p.stop, "LEFT", -6, 0)
     p.change:SetScript("OnClick", function() OpenAvailability() end)
 
+    -- While available: a "My availability" section (status line, note). In a group: the status
+    -- line alone. Otherwise nothing: the page starts with the lists.
+    p.mineHeader = NewSectionHeader(p, L["My availability"])
+    p.mineHeader:SetPoint("TOPLEFT", 8, -40)
     p.status = NewLabel(p, "", "GameFontHighlight")
-    p.status:SetPoint("TOPLEFT", 8, -40)
     p.status:SetPoint("RIGHT", p, "RIGHT", -8, 0)
     p.status:SetJustifyH("LEFT")
     p.status:SetWordWrap(false)
 
     -- Note: only while available (that's when others see it).
     p.noteLabel = NewLabel(p, L["Note"])
-    p.noteLabel:SetPoint("TOPLEFT", 8, -66)
+    p.noteLabel:SetPoint("TOPLEFT", 8, -98)
     p.note = NewInput(p, 360, 80)
-    p.note:SetPoint("TOPLEFT", 80, -62)
+    p.note:SetPoint("TOPLEFT", 80, -94)
     SetPlaceholder(p.note, L["Note (optional), e.g. quests in BFD"])
     p.note:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     p.note:HookScript("OnEditFocusLost", function() ns.Players:SetNote(p.note:GetText()) end)
 
     -- Wanted dungeons: what available players asked for. Hidden when nobody asked.
-    p.demandHeader = NewLabel(p, L["Wanted dungeons"], "GameFontNormal")
+    p.demandHeader = NewSectionHeader(p, L["Wanted dungeons"])
     p.anyLine = NewLabel(p, "", "GameFontDisableSmall")
     p.anyLine:SetPoint("LEFT", p.demandHeader, "RIGHT", 12, 0)
     p.demand = NewScrollList(p, 24, InitDemandRow)
 
     -- Players: available first, then the others (folded).
-    p.listHeader = NewLabel(p, "", "GameFontNormalLarge")
+    p.listHeader = NewSectionHeader(p, L["Available players"])
     p.fitOnly = NewCheckbox(p, L["Only those who fit my group"], function(self)
         ns.db.playersFitOnly = self:GetChecked() and true or false
         p:Refresh()
@@ -3001,16 +3031,20 @@ local function BuildPlayersPanel()
     p.showOthers = false
 
     function p:Layout(available, demandRows, showDemand)
-        -- Available: status line and note. Otherwise the status line only when it says
-        -- something (in a group); not available, it's empty and takes no room.
-        local y = available and -94 or ((self.status:GetText() or "") ~= "" and -68 or -40)
-        self.demandHeader:SetShown(showDemand)
+        -- Available: my section (header, status line, note). Otherwise the status line only
+        -- when it says something (in a group); not available, it's empty and takes no room.
+        ShowSection(self.mineHeader, available)
+        self.status:ClearAllPoints()
+        self.status:SetPoint("TOPLEFT", 8, available and -68 or -40)
+        self.status:SetPoint("RIGHT", self, "RIGHT", -8, 0)
+        local y = available and -132 or ((self.status:GetText() or "") ~= "" and -72 or -40)
+        ShowSection(self.demandHeader, showDemand)
         self.anyLine:SetShown(showDemand)
         self.demand:SetShown(showDemand and demandRows > 0)
         if showDemand then
             self.demandHeader:ClearAllPoints()
             self.demandHeader:SetPoint("TOPLEFT", 8, y)
-            y = y - 20
+            y = y - 26
             if demandRows > 0 then
                 self.demand:ClearAllPoints()
                 self.demand:SetPoint("TOPLEFT", 0, y)
@@ -3018,12 +3052,12 @@ local function BuildPlayersPanel()
                 self.demand:SetHeight(24 * demandRows)
                 y = y - 24 * demandRows
             end
-            y = y - 14
+            y = y - 18
         end
         self.listHeader:ClearAllPoints()
         self.listHeader:SetPoint("TOPLEFT", 8, y)
         self.list:ClearAllPoints()
-        self.list:SetPoint("TOPLEFT", 0, y - 26)
+        self.list:SetPoint("TOPLEFT", 0, y - 30)
         self.list:SetPoint("BOTTOMRIGHT", -20, 0)
     end
 
@@ -3076,7 +3110,7 @@ local function BuildPlayersPanel()
                 others[#others + 1] = e
             end
         end
-        self.listHeader:SetText(format(L["Available players (%d)"], #shown))
+        self.listHeader:SetText(#shown > 0 and format(L["Available players (%d)"], #shown) or L["Available players"])
         local list = {}
         for _, e in ipairs(shown) do list[#list + 1] = e end
         if #shown == 0 then

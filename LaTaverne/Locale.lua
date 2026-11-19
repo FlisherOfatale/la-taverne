@@ -575,6 +575,8 @@ if GetLocale() == "frFR" then
     L["All dungeons"] = "Tous les donjons"
     L["%d dungeons"] = "%d donjons"
     L["Availability"] = "Disponibilités"
+    L["My availability"] = "Ma disponibilité"
+    L["Available players"] = "Joueurs disponibles"
     L["Back"] = "Retour"
     L["See the other groups"] = "Voir les autres groupes"
     L["Open groups and invitations. Your group stays as it is."] = "Les groupes ouverts et les invitations. Votre groupe reste tel quel."
