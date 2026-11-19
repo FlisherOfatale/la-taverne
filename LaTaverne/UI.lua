@@ -1692,7 +1692,7 @@ local function BuildAvailabilityForm(parent, onDone)
     f.note = NewInput(inner, 380, 80)
     f.note:SetPoint("TOPLEFT", LEFT + 4, TOP - 310)
     SetPlaceholder(f.note, L["Note (optional), e.g. quests in BFD"])
-    f.note:SetScript("OnTextChanged", function(self, user) if user then draft.note = self:GetText() f:Refresh() end end)
+    f.note:HookScript("OnTextChanged", function(self, user) if user then draft.note = self:GetText() f:Refresh() end end)
 
     -- What leaders will see: my row as the Players page shows it (hover it for everything).
     NewLabel(inner, L["Leaders will see:"], "GameFontNormal"):SetPoint("TOPLEFT", 8, TOP - 350)
@@ -1843,10 +1843,10 @@ local function BuildGroupsPanel()
     p.create = NewButton(p, L["Create a group"], 160)
     p.create:SetPoint("TOPRIGHT", -2, -4)
     p.create:SetScript("OnClick", function() UI:ShowPage("mygroup") end)
-    -- In a group of the finder: back to it, bottom left, where My group's "See the other
-    -- groups" button is (the list then stops above it).
-    p.back = NewButton(p, "\194\171 " .. L["Back to my group"], 180)
-    p.back:SetPoint("BOTTOMLEFT", 2, 2)
+    -- In a group of the finder: back to it, top right (where "Create a group" is otherwise),
+    -- green like the minimap menu's entry.
+    p.back = NewButton(p, "|cff20ff20" .. L["My group"] .. "|r", 160)
+    p.back:SetPoint("TOPRIGHT", -2, -4)
     p.back:SetScript("OnClick", function() UI:ShowPage("mygroup") end)
 
     -- What I offer, like the game's group finder: every role I can play (the leader picks one
@@ -2026,7 +2026,6 @@ local function BuildGroupsPanel()
         local free = not ns.Groups:GetMine() and not ns.Groups:GetJoined()
         self.create:SetShown(free and true or false)
         self.back:SetShown(not free)
-        self.box:SetPoint("BOTTOMRIGHT", -20, free and 0 or 30)
         self.empty:SetShown(#list == 0)
         self.emptyHint:SetShown(#list == 0 and free and true or false)
         SetListData(self.box, list)
@@ -2384,19 +2383,21 @@ local function MemberRows(entries)
     return math.max(1, math.min(#entries, VISIBLE_MEMBERS))
 end
 
-local CHAT_ICON = "|TInterface\\ChatFrame\\UI-ChatIcon-Chat-Up:16:16|t "
 
 local function BuildManageView(parent)
     local m = CreateFrame("Frame", nil, parent)
     m:SetAllPoints()
 
-    -- Header: the group on the left, its two actions on the right.
+    -- Header: the group on the left, "See the other groups" (My group panel) and Remove group
+    -- on the right.
     local delist = NewButton(m, L["Remove group"], 150)
     delist:SetPoint("TOPRIGHT", -2, -4)
     delist:SetScript("OnClick", function() ns.Groups:Delist() end)
-    -- One short line in guild chat, on demand (at most once a minute).
-    m.guildPost = NewButton(m, CHAT_ICON .. L["Announce in chat"], 190)
-    m.guildPost:SetPoint("RIGHT", delist, "LEFT", -6, 0)
+    m.delist = delist
+    -- One short line in guild chat, on demand (at most once a minute): bottom left (away from
+    -- where Post group was, under the mouse right after posting).
+    m.guildPost = NewButton(m, L["Announce in chat"], 180)
+    m.guildPost:SetPoint("BOTTOMLEFT", 2, 2)
     m.guildPost:SetMotionScriptsWhileDisabled(true)
     m.guildPost:SetScript("OnClick", function() ns.Groups:PostInGuild() end)
     m.guildPost:SetScript("OnEnter", function(self)
@@ -2415,7 +2416,7 @@ local function BuildManageView(parent)
     m.title = NewLabel(m, nil, "GameFontNormalLarge")
     m.titleHit = NewDungeonHover(m, m.title)
     m.title:SetPoint("TOPLEFT", 8, -8)
-    m.title:SetPoint("RIGHT", m.guildPost, "LEFT", -10, 0)
+    m.title:SetPoint("RIGHT", delist, "LEFT", -10, 0) -- then left of "See the other groups"
     m.title:SetJustifyH("LEFT")
     m.title:SetWordWrap(false)
 
@@ -2482,7 +2483,7 @@ local function BuildManageView(parent)
 
     -- Bottom line: errors (red, a few seconds), or "Group posted" right after posting (green).
     m.message = NewLabel(m, nil, "GameFontHighlightSmall")
-    m.message:SetPoint("BOTTOMLEFT", 8, 6)
+    m.message:SetPoint("LEFT", m.guildPost, "RIGHT", 16, 0)
     m.message:SetPoint("RIGHT", m, "RIGHT", -8, 0)
     m.message:SetJustifyH("LEFT")
     local function ShowError(text)
@@ -2616,7 +2617,7 @@ local function BuildManageView(parent)
         self.requestsHeader:SetPoint("TOPLEFT", 8, after - 14)
         self.box:ClearAllPoints()
         self.box:SetPoint("TOPLEFT", 0, after - 34)
-        self.box:SetPoint("BOTTOMRIGHT", -20, 30) -- clear of "See the other groups" below
+        self.box:SetPoint("BOTTOMRIGHT", -20, 30) -- clear of "Announce in chat" below
     end
     m.empty:SetPoint("TOP", m.box, "TOP", 0, -16)
 
@@ -2748,20 +2749,17 @@ local function BuildMyGroupPanel()
     p.manage = BuildManageView(p)
     p.member = BuildMemberView(p)
 
-    -- Bottom left (away from where Post group was, under the mouse after posting): the other
-    -- groups, and the invitations waiting there. Browse has "Back to my group" at the same spot.
+    -- In the header, top right: the other groups, and the invitations waiting there (leader:
+    -- left of Remove group; member: in the corner). Browse has "My group" in that corner.
     p.others = NewButton(p, "", 180)
-    p.others:SetPoint("BOTTOMLEFT", 2, 2)
     p.others:SetScript("OnClick", function() UI:ShowPage("browse") end)
     p.others:SetScript("OnEnter", function(self)
         ShowTooltip(self, { L["See the other groups"],
             L["Open groups and invitations. Your group stays as it is."] })
     end)
     p.others:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    -- The manage view's bottom message goes right of the link.
-    p.manage.message:ClearAllPoints()
-    p.manage.message:SetPoint("LEFT", p.others, "RIGHT", 16, 0)
-    p.manage.message:SetPoint("RIGHT", p.manage, "RIGHT", -8, 0)
+    p.manage.title:SetPoint("RIGHT", p.others, "LEFT", -10, 0)
+    p.member.title:SetPoint("RIGHT", p.others, "LEFT", -10, 0)
 
     function p:Refresh()
         local mine = ns.Groups:GetMine()
@@ -2771,11 +2769,17 @@ local function BuildMyGroupPanel()
         self.member:SetShown(joined ~= nil)
         self.form:SetShown(mine == nil and joined == nil)
         self.others:SetShown(mine ~= nil or joined ~= nil)
+        self.others:ClearAllPoints()
+        if mine then
+            self.others:SetPoint("RIGHT", self.manage.delist, "LEFT", -6, 0)
+        else
+            self.others:SetPoint("TOPRIGHT", -2, -4)
+        end
         local invites = #ns.Groups:GetInvitations()
         self.others:SetText(invites > 0
-            and ("|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14|t " .. format(L["Invitations waiting (%d): see the groups"], invites) .. " \194\187")
-            or (L["See the other groups"] .. " \194\187"))
-        self.others:SetWidth(math.max(180, self.others:GetFontString():GetStringWidth() + 30))
+            and ("|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14|t " .. format(L["Invitations waiting (%d): see the groups"], invites))
+            or L["See the other groups"])
+        self.others:SetWidth(math.max(170, self.others:GetFontString():GetStringWidth() + 30))
         if mine then
             self.manage:Refresh(mine)
         elseif joined then
@@ -2985,7 +2989,7 @@ local function BuildPlayersPanel()
     p.note:SetPoint("TOPLEFT", 80, -62)
     SetPlaceholder(p.note, L["Note (optional), e.g. quests in BFD"])
     p.note:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-    p.note:SetScript("OnEditFocusLost", function() ns.Players:SetNote(p.note:GetText()) end)
+    p.note:HookScript("OnEditFocusLost", function() ns.Players:SetNote(p.note:GetText()) end)
 
     -- Wanted dungeons: what available players asked for. Hidden when nobody asked.
     p.demandHeader = NewLabel(p, L["Wanted dungeons"], "GameFontNormal")
@@ -4054,10 +4058,9 @@ local function LayoutBottomTabs()
     local shownSet = {}
     if showRow then for _, page in ipairs(visible) do shownSet[page] = true end end
 
-    -- Browse and My group share one tab (the Browse one): it says which of the two is shown, or
-    -- where it opens (My group while in a group of the finder).
+    -- Browse and My group share one tab (the Browse one), always called Groups; it opens My
+    -- group while in a group of the finder.
     local inPair = currentPage == "browse" or currentPage == "mygroup"
-    local pairPage = inPair and currentPage or GroupsHome()
 
     local previous, selected
     for i, tab in ipairs(frame.Tabs) do
@@ -4067,11 +4070,7 @@ local function LayoutBottomTabs()
         if shown then
             local badge = PageBadge(page) or 0
             local text = L[PAGE_LABELS[page] or page]
-            if page == "browse" then
-                badge = badge + (PageBadge("mygroup") or 0)
-                text = (pairPage == "mygroup" and not InFinderGroup()) and L["Create a group"]
-                    or L[PAGE_LABELS[pairPage]]
-            end
+            if page == "browse" then badge = badge + (PageBadge("mygroup") or 0) end
             if badge > 0 then text = text .. " (" .. badge .. ")" end
             tab:SetText(text)
             if PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0) end

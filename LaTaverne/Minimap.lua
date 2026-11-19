@@ -57,7 +57,10 @@ local function QuickMenu(owner)
         if ns.Invites:IsActive() then
             root:CreateButton(On(L["Auto-invite"]), function() ns.UI:ShowAutoInvite() end)
         else
-            root:CreateButton(L["Start auto-invite"], function() ns.Invites:Toggle() end)
+            root:CreateButton(L["Start auto-invite"], function()
+                ns.Invites:Toggle()
+                ns.UI:ShowAutoInvite()
+            end)
         end
         root:CreateButton(L["Options"], function() ns.UI:ShowSection("options") ns.UI:Open() end)
     end)
