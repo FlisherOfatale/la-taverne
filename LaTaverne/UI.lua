@@ -4160,6 +4160,7 @@ end
 local function PageAllowed(page)
     if page == "officers" then return ns.Guild:IsOfficer() and true or false end
     if page == "debug" then return ns.Guild:IsSandbox() and true or false end
+    if page == "autoinvite" or page == "autoinviteSettings" then return ns.Invites:IsAllowed() end
     return true
 end
 

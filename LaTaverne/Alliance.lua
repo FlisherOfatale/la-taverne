@@ -5,6 +5,8 @@
 --   LT:k:key                      shared secret, letters and digits
 --   LT:t:key                      test mode only: the test guild's own hidden channel (each test
 --                                 guild picks its key, so testers elsewhere never share a channel)
+--   LT:ai:0,1,3   or   LT:ai:off  who may use auto-invite: these ranks (0 = guild master), or
+--                                 nobody. No line: everyone. Each guild's own, alliance or not.
 -- Lines can also be separated by ";" (handy for /taverne dev info, which is a single line).
 --
 -- The key gives the hidden alliance channel (name made from the key, password = key). Only
@@ -44,6 +46,29 @@ local function Hash(text)
     return out
 end
 
+-- "off" -> "off"; "0,1,3" -> { [0] = true, [1] = true, [3] = true }; anything else: nil (everyone).
+function Alliance.ParseAutoInvite(rule)
+    rule = strtrim(rule or ""):lower()
+    if rule == "off" then return "off" end
+    local ranks, any = {}, false
+    for n in rule:gmatch("%d+") do
+        ranks[tonumber(n)] = true
+        any = true
+    end
+    return any and ranks or nil
+end
+
+-- The LT:ai line for a rule (nil: no line, everyone).
+function Alliance.AutoInviteLine(rule)
+    if rule == "off" then return "LT:ai:off" end
+    if type(rule) ~= "table" then return nil end
+    local list = {}
+    for rank in pairs(rule) do list[#list + 1] = rank end
+    table.sort(list)
+    if #list == 0 then return "LT:ai:off" end
+    return "LT:ai:" .. table.concat(list, ",")
+end
+
 function Alliance.Parse(text)
     local result = { guilds = {}, key = nil, testKey = nil, count = 0 }
     if type(text) ~= "string" then return result end
@@ -61,6 +86,8 @@ function Alliance.Parse(text)
             if key and #key >= 4 then result.key = key end
             local testKey = line:match("^[Ll][Tt]:[Tt]:(%w+)$")
             if testKey and #testKey >= 4 then result.testKey = testKey end
+            local rule = line:match("^[Ll][Tt]:[Aa][Ii]:(.+)$")
+            if rule then result.autoInvite = Alliance.ParseAutoInvite(rule) end
         end
     end
     return result
@@ -93,12 +120,14 @@ end
 -- The Guild Info text with our lines replaced by new ones; everything else is kept.
 -- oneLine: the test Guild Info, whose lines may be written on one line with ";" between them
 -- (/taverne dev info), like Parse reads it. Not the real one: its own text may hold a ";".
-function Alliance.ReplaceLines(text, lines, oneLine)
+-- pattern: which lines are replaced (default: the alliance's LT:g and LT:k lines).
+function Alliance.ReplaceLines(text, lines, oneLine, pattern)
     local kept = {}
     text = text or ""
     if oneLine then text = text:gsub(";", "\n") end
+    pattern = pattern or "^[Ll][Tt]:[GgKk]:"
     for line in (text .. "\n"):gmatch("(.-)\r?\n") do
-        if not strtrim(line):match("^[Ll][Tt]:[GgKk]:") then kept[#kept + 1] = line end
+        if not strtrim(line):match(pattern) then kept[#kept + 1] = line end
     end
     while #kept > 0 and strtrim(kept[#kept]) == "" do kept[#kept] = nil end
     if #lines > 0 then
@@ -147,6 +176,35 @@ function Alliance:Save(guilds, key)
         return false, ns.L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."]
     end
     local text = Alliance.ReplaceLines(GetGuildInfoText and GetGuildInfoText() or "", lines)
+    if #text > Alliance.INFO_MAX then
+        return false, ns.L["The Guild Info would be too long (%d / %d)."]:format(#text, Alliance.INFO_MAX)
+    end
+    return true, nil, text
+end
+
+-- Who may use auto-invite: nil (everyone), "off", or { [rankIndex] = true }.
+function Alliance:GetAutoInvite()
+    return config.autoInvite
+end
+
+-- Write who may use auto-invite (rule as above). Like Save: test mode writes the fake Guild
+-- Info; a real guild gets the whole new text to paste (ok, error, text).
+function Alliance:SaveAutoInvite(rule)
+    local line = Alliance.AutoInviteLine(rule)
+    local lines = line and { line } or {}
+    local pattern = "^[Ll][Tt]:[Aa][Ii]:"
+    if ns.Guild:IsSandbox() then
+        ns.db.dev.infoText = Alliance.ReplaceLines(ns.db.dev.infoText or "", lines, true, pattern)
+        self:Refresh()
+        return true
+    end
+    if not (CanEditGuildInfo and CanEditGuildInfo()) then
+        return false, ns.L["You can't edit the Guild Info."]
+    end
+    if ns.Guild:Restricted() then
+        return false, ns.L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."]
+    end
+    local text = Alliance.ReplaceLines(GetGuildInfoText and GetGuildInfoText() or "", lines, false, pattern)
     if #text > Alliance.INFO_MAX then
         return false, ns.L["The Guild Info would be too long (%d / %d)."]:format(#text, Alliance.INFO_MAX)
     end
@@ -226,6 +284,8 @@ function Alliance.WithNewTestKey(text)
     return table.concat(kept, "\n")
 end
 
+local autoInviteSig = "nil"
+
 -- Re-read the Guild Info and follow any change (called at login and on guild updates).
 function Alliance:Refresh()
     if not ns.Comm:IsLoggedIn() then return end
@@ -237,7 +297,8 @@ function Alliance:Refresh()
             infoPending = false
             config = Alliance.Parse(text)
             if not ns.Guild:IsSandbox() then
-                SavedSetup().alliance = { guild = ns.Guild:GetName(), guilds = config.guilds, key = config.key }
+                SavedSetup().alliance = { guild = ns.Guild:GetName(), guilds = config.guilds, key = config.key,
+                    autoInvite = config.autoInvite }
             end
         else
             -- Blocked for now: keep the current setup (and channel) instead of turning it off.
@@ -245,8 +306,15 @@ function Alliance:Refresh()
             -- Nothing read yet since login: use the setup saved last time, if it's the same guild.
             local saved = SavedSetup().alliance
             if configSig ~= "" or not saved or not saved.guild or saved.guild ~= ns.Guild:GetName() then return end
-            config = { guilds = saved.guilds or {}, key = saved.key }
+            config = { guilds = saved.guilds or {}, key = saved.key, autoInvite = saved.autoInvite }
         end
+    end
+
+    -- Who may use auto-invite changed: tell the window and auto-invite (not the channel's business).
+    local aiSig = tostring(Alliance.AutoInviteLine(config.autoInvite))
+    if aiSig ~= autoInviteSig then
+        autoInviteSig = aiSig
+        Alliance:Changed()
     end
 
     -- Test mode: follow the test guild's channel (joins, switches or leaves it).

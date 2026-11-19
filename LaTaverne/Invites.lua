@@ -334,7 +334,23 @@ function Invites:GetRunners()
     return out
 end
 
+-- Who may use auto-invite: the officers decide in the Guild Info (LT:ai line: some ranks, or
+-- nobody; no line: everyone). Players who can edit the Guild Info always may (they set it).
+-- Test mode: the rule applies to everyone, with my real rank, so it can be tried.
+function Invites:IsAllowed()
+    if not ns.Guild:IsSandbox() and CanEditGuildInfo and CanEditGuildInfo() then return true end
+    local rule = ns.Alliance:GetAutoInvite()
+    if rule == nil then return true end
+    if rule == "off" then return false end
+    local _, _, rank = GetGuildInfo("player")
+    return rank ~= nil and rule[rank] == true
+end
+
 function Invites:Start()
+    if not self:IsAllowed() then
+        ns.Print(L["Your officers have turned auto-invite off for your rank."])
+        return
+    end
     active = true
     activeUntil = GetTime() + math.max(1, tonumber(Settings().autoOff) or 30) * 60
     self.blocked = nil
@@ -363,6 +379,12 @@ ns.commands.autoinvite = function() Invites:Toggle() end
 Invites.SendRunning = SendRunning
 
 function Invites:OnLogin()
+    -- The officers took it away while it runs: stop.
+    ns.Alliance:OnChange(function()
+        if active and not Invites:IsAllowed() then
+            Invites:Stop(L["Auto-invite stopped: your officers have turned it off for your rank."])
+        end
+    end)
     -- Still inviting (so the others don't drop me), and forget runners who went quiet.
     C_Timer.NewTicker(RUNNER_BEAT, function()
         if active then SendRunning(true) end
@@ -706,6 +728,72 @@ function ns.BuildInvitesSettingsPanel()
     words:SetPoint("TOPLEFT", 12, -196)
     words.edit:SetScript("OnTextChanged", function(_, user) if user then Typed() end end)
 
+    -- Right column, players who can edit the Guild Info only: who may use auto-invite in the
+    -- guild (an LT:ai line in the Guild Info; the game doesn't let addons write it, so it's
+    -- pasted like the Guild Alliance setup). Its own button, apart from Save below.
+    local RULE_X = 340
+    local ruleHeader = K.NewLabel(p, L["Who can use auto-invite"], "GameFontNormal")
+    ruleHeader:SetPoint("TOPLEFT", RULE_X, -48)
+    local ruleInfo = K.NewInfoIcon(p, { L["Who can use auto-invite"],
+        L["Saved in the Guild Info, for the whole guild. Players who aren't allowed don't see the Auto-invite tab."],
+        L["Players who can edit the Guild Info can always use it."] })
+    ruleInfo:SetPoint("LEFT", ruleHeader, "RIGHT", 6, 0)
+    local ruleDraft -- { mode = "all" | "ranks" | "off", ranks = { [rankIndex] = true } }, nil: the saved one
+    local function SavedRule()
+        local rule = ns.Alliance:GetAutoInvite()
+        if rule == "off" then return { mode = "off", ranks = {} } end
+        if type(rule) == "table" then return { mode = "ranks", ranks = CopyTable(rule) } end
+        return { mode = "all", ranks = {} }
+    end
+    local function Draft()
+        ruleDraft = ruleDraft or SavedRule()
+        return ruleDraft
+    end
+    local ruleMode = K.NewChoice(p, 200, {
+            { text = L["Everyone"], value = "all" },
+            { text = L["Only some ranks"], value = "ranks" },
+            { text = L["Nobody"], value = "off" },
+        }, function() return Draft().mode end, function(mode)
+            Draft().mode = mode
+            p:Refresh()
+        end)
+    ruleMode:SetPoint("TOPLEFT", RULE_X + 4, -70)
+    -- One checkbox per guild rank (the game's names, guild master first).
+    local rankChecks = {}
+    for i = 1, 10 do
+        local cb = K.NewCheckbox(p, "", function(self)
+            Draft().ranks[i - 1] = self:GetChecked() and true or nil
+            p:Refresh()
+        end)
+        cb:SetPoint("TOPLEFT", RULE_X, -100 - (i - 1) * 24)
+        cb:Hide()
+        rankChecks[i] = cb
+    end
+    local ruleLine = K.NewLabel(p, "", "GameFontDisableSmall")
+    local ruleSave = K.NewButton(p, L["Save to the Guild Info"], 200, 24)
+    local ruleMessage = K.NewLabel(p, "", "GameFontHighlightSmall")
+    ruleMessage:SetJustifyH("LEFT")
+    ruleSave:SetScript("OnClick", function()
+        local d = Draft()
+        local rule = d.mode == "off" and "off" or (d.mode == "ranks" and d.ranks) or nil
+        local ok, err, paste = ns.Alliance:SaveAutoInvite(rule)
+        if not ok then
+            ruleMessage:SetText("|cffff4040" .. (err or "") .. "|r")
+        elseif paste then
+            ruleMessage:SetText("|cff40ff40" .. L["Paste the text into the Guild Info: La Taverne reads it on its own a few seconds later."] .. "|r")
+            ns.TextDialog({
+                title = L["Paste into the Guild Info"],
+                hint = L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."],
+                text = paste,
+                selectAll = true,
+            })
+        else
+            ruleMessage:SetText("|cff40ff40" .. L["Saved to the test guild's Guild Info."] .. "|r")
+        end
+        ruleDraft = nil
+        p:Refresh()
+    end)
+
     -- Bottom bar: unsaved changes (or "saved") on the left, Cancel and Save on the right.
     local save = K.NewButton(p, L["Save"], 140, 26)
     save:SetPoint("BOTTOMRIGHT", -2, 6)
@@ -749,7 +837,44 @@ function ns.BuildInvitesSettingsPanel()
         p:Refresh()
     end)
 
+    function p:RefreshRule()
+        local officer = CanEditGuildInfo and CanEditGuildInfo() or ns.Guild:IsSandbox()
+        for _, w in ipairs({ ruleHeader, ruleInfo, ruleMode, ruleLine, ruleSave, ruleMessage }) do w:SetShown(officer) end
+        if not officer then
+            for _, cb in ipairs(rankChecks) do cb:Hide() end
+            return
+        end
+        if ruleMode.GenerateMenu then ruleMode:GenerateMenu() end
+        local d = Draft()
+        local count = d.mode == "ranks" and (GuildControlGetNumRanks and GuildControlGetNumRanks() or 0) or 0
+        local last = ruleMode
+        for i, cb in ipairs(rankChecks) do
+            local shown = i <= count
+            cb:SetShown(shown)
+            if shown then
+                local name = GuildControlGetRankName and GuildControlGetRankName(i) or ""
+                if cb.Text then cb.Text:SetText(name ~= "" and name or format(L["Rank %d"], i - 1)) end
+                cb:SetChecked(d.ranks[i - 1] == true)
+                last = cb
+            end
+        end
+        -- The line it writes, under the ranks, then the button.
+        local rule = d.mode == "off" and "off" or (d.mode == "ranks" and d.ranks) or nil
+        local line = ns.Alliance.AutoInviteLine(rule)
+        ruleLine:ClearAllPoints()
+        ruleLine:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -6)
+        ruleLine:SetText(line and (L["Guild Info line:"] .. " |cffffffff" .. line .. "|r") or L["No line in the Guild Info: everyone can use it."])
+        ruleSave:ClearAllPoints()
+        ruleSave:SetPoint("TOPLEFT", ruleLine, "BOTTOMLEFT", -2, -8)
+        ruleMessage:ClearAllPoints()
+        ruleMessage:SetPoint("TOPLEFT", ruleSave, "BOTTOMLEFT", 2, -6)
+        ruleMessage:SetPoint("RIGHT", p, "RIGHT", -8, 0)
+        -- Only when it differs from what the Guild Info says now.
+        ruleSave:SetEnabled(line ~= ns.Alliance.AutoInviteLine(ns.Alliance:GetAutoInvite()))
+    end
+
     function p:Refresh()
+        self:RefreshRule()
         local s = ns.db.invites
         local sets = Sets()
         if not sets[editing] then editing = s.set or 1 end

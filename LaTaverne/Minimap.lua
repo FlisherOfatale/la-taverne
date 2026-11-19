@@ -53,8 +53,11 @@ local function QuickMenu(owner)
             root:CreateButton(L["Availability"], function() OpenPage("players") end)
         end
         Divider(root)
-        -- Auto-invite: start it, or (running) its page, where the Stop button is.
-        if ns.Invites:IsActive() then
+        -- Auto-invite: start it, or (running) its page, where the Stop button is. Not at all
+        -- when the officers turned it off for my rank.
+        if not ns.Invites:IsAllowed() then
+            -- nothing
+        elseif ns.Invites:IsActive() then
             root:CreateButton(On(L["Auto-invite"]), function() ns.UI:ShowAutoInvite() end)
         else
             root:CreateButton(L["Start auto-invite"], function()
