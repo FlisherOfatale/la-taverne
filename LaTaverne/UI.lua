@@ -2076,18 +2076,21 @@ local function BuildCreateForm(parent)
     })
     dropdown:SetPoint("TOPLEFT", COL, -44)
 
-    -- My role: big role icons with a checkbox. In sync with the roles bar of the group list:
-    -- the form starts on a role ticked there, and picking one here ticks it there too (it
+    -- My role: big role icons with a checkbox. Starts with none: I pick it myself (clicking it
+    -- again unpicks it). Picking one ticks it in the roles bar of the group list too (it
     -- replaces the role ticked there when there's only one, it's added when there are several).
     NewLabel(f, L["My role"]):SetPoint("TOPLEFT", 8, -98)
     f.roleButtons = {}
     for i, role in ipairs(ns.Groups.ROLES) do
         local button = NewRoleButton(f, role, 44, function()
-            if f.myRole == role then return end -- a group needs my role: pick another one instead
+            f.error = nil
+            if f.myRole == role then -- unpick (the group still needs one before posting)
+                f.myRole = nil
+                f:Refresh()
+                return
+            end
             local ticked = ns.Groups.RoleList(ns.Groups:GetMyRoles())
             f.myRole = role
-            f.roleCleared = nil
-            f.error = nil
             if #ticked == 1 and ticked[1] ~= role then ns.Groups:SetMyRole(ticked[1], false) end
             ns.Groups:SetMyRole(role, true)
             f:Refresh()
@@ -2125,11 +2128,10 @@ local function BuildCreateForm(parent)
     PlaceAfterLabel(f.discordChannel, f.discord, 14)
     SetPlaceholder(f.discordChannel, L["Channel name"])
 
-    -- Reset only shows when there's something to clear: a dungeon, players added, roles given
-    -- to party members, a changed mix, a note, an option. (My own role alone doesn't count:
-    -- it follows the roles bar by itself.)
+    -- Reset only shows when there's something to clear: a dungeon, my role, players added,
+    -- roles given to party members, a changed mix, a note, an option.
     local function UpdateReset()
-        local dirty = f.dungeon or next(f.extra) or next(f.partyRoles) or f.mixChanged
+        local dirty = f.dungeon or f.myRole or next(f.extra) or next(f.partyRoles) or f.mixChanged
             or f.newbies:GetChecked() or f.discord:GetChecked()
             or strtrim(note:GetText() or "") ~= "" or strtrim(f.discordChannel:GetText() or "") ~= ""
         reset:SetShown(dirty and true or false)
@@ -2266,17 +2268,6 @@ local function BuildCreateForm(parent)
         dropdown:Update()
         local myClass = MyClass()
         if self.myRole and not ns.CanTakeRole(myClass, self.myRole) then self.myRole = nil end
-        -- Follow the roles bar: keep my role while it's ticked there, else take the first ticked
-        -- (not right after Reset: then I pick it again myself).
-        local ticked = ns.Groups:GetMyRoles()
-        if self.roleCleared then
-            self.myRole = nil
-        elseif not (self.myRole and ticked[self.myRole]) then
-            self.myRole = nil
-            for _, role in ipairs(ns.Groups.ROLES) do
-                if ticked[role] and ns.CanTakeRole(myClass, role) then self.myRole = role break end
-            end
-        end
         for role, button in pairs(self.roleButtons) do
             button:SetAllowed(ns.CanTakeRole(myClass, role), ns.IsUnusualRole(myClass, role))
             button:SetChecked(self.myRole == role)
@@ -2333,7 +2324,6 @@ local function BuildCreateForm(parent)
     function f:Reset()
         self.dungeon = nil
         self.myRole = nil
-        self.roleCleared = true
         self.error = nil
         wipe(self.extra)
         wipe(self.partyRoles)
