@@ -773,7 +773,10 @@ function ns.BuildInvitesSettingsPanel()
         table.remove(sets, editing)
         -- The set in use moves with the list (or goes back to the first).
         local s = Settings()
-        if s.set == editing then s.set = 1 elseif s.set > editing then s.set = s.set - 1 end
+        local wasInUse = s.set == editing
+        if wasInUse then s.set = 1 elseif s.set > editing then s.set = s.set - 1 end
+        -- Inviting with the deleted set: the others see the words I answer to now.
+        if wasInUse and active then SendRunning(true) end
         editing = math.min(editing, #sets)
         dirty = false
         Changed()
