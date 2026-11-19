@@ -1385,6 +1385,12 @@ local function InitGroupRow(row, l, invite)
         row.status:ClearAllPoints()
         row.status:SetPoint("RIGHT", row.button, "RIGHT", 0, 0)
         row.status:SetText(text)
+        -- Wider than the button ("Vous êtes dans ce groupe"): the spots move left to make room.
+        local width = math.ceil(row.status:GetStringWidth())
+        if width > row.button:GetWidth() then
+            row.rightMargin = width + 16 + 8
+            FillListingRow(row, l)
+        end
     end
     if ns.Groups:IsMine(l) then
         JustSay("|cff20ff20" .. L["Your group"] .. "|r")

@@ -375,6 +375,8 @@ local function ForgetSilent(asked, onlineThen)
             changed = true
         elseif member.online and onlineThen[key] and (item.seen or 0) < asked then
             item.missed = (item.missed or 0) + 1
+            ns.Comm:LogNote(format("who's there: no answer from %s (%d in a row)", item.name, item.missed),
+                item.missed >= 2 and "guildmate forgotten" or nil)
             if item.missed >= 2 then
                 memory[key] = nil
                 changed = true

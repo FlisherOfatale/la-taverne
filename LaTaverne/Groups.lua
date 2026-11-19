@@ -1344,9 +1344,15 @@ OnBoth("DELIST", function(sender, p)
     Changed()
 end)
 
+-- Several questions close together (login and channel ready): one answer.
+local syncAnswerPending = false
 OnBoth("SYNC_REQ", function(_, _, isSelf)
-    if isSelf or not Groups:GetMine() then return end
-    C_Timer.After(math.random() * 3, function() Groups:Broadcast() end)
+    if isSelf or not Groups:GetMine() or syncAnswerPending then return end
+    syncAnswerPending = true
+    C_Timer.After(math.random() * 3, function()
+        syncAnswerPending = false
+        Groups:Broadcast()
+    end)
 end)
 
 OnBoth("APPLY", function(sender, p, isSelf, scope)
@@ -1480,12 +1486,19 @@ end)
 -- guild changes after login (debug channel ready, test guild member added), so nobody waits
 -- for the next heartbeat. Several calls close together count as one.
 local resyncPending = false
+local lastGuildSync = 0
+-- "I just logged in" to the guild, unless it went out a moment ago (login, then a channel ready).
+local function AskGuildSync()
+    if GetTime() - lastGuildSync < 5 then return end
+    lastGuildSync = GetTime()
+    ns.Comm:Send("SYNC_REQ", {})
+end
 function Groups:Resync()
     if resyncPending then return end
     resyncPending = true
     C_Timer.After(2, function()
         resyncPending = false
-        ns.Comm:Send("SYNC_REQ", {})
+        AskGuildSync()
         if ns.Alliance:IsActive() then ns.Comm:SendAlly("SYNC_REQ", {}) end
         if Groups:GetMine() then Groups:Broadcast() end
     end)
@@ -1501,7 +1514,7 @@ function Groups:OnLogin()
 
     -- Messages sent before the channel is ready are queued by ns.Comm.
     C_Timer.After(10, function()
-        ns.Comm:Send("SYNC_REQ", {})
+        AskGuildSync()
         local mine = Groups:GetMine()
         if mine and (not mine.pending or (not mine.started and GetServerTime() - mine.created > MAX_AGE)) then
             -- Expired (a group in progress lasts as long as the party), or saved by an older

@@ -112,6 +112,8 @@ local function Settle(entry, state, by, source)
             ns.Print(L["%s says they're in [%s], but [%s] says no: their messages are ignored."]:format(entry.name, tag, tag))
         end
         if waiting then Vouch.stats.dropped = Vouch.stats.dropped + #waiting end
+        ns.Comm:LogNote(format("%s is not in [%s] (%s): %d held messages dropped", entry.name, tostring(entry.guild),
+            tostring(source), waiting and #waiting or 0), "denied sender")
     else
         if entry.seen then Remember(entry) end -- now checked
         if waiting then
@@ -134,6 +136,7 @@ local function Ask(entry)
             entry.waiting = nil
             return
         end
+        ns.Comm:LogNote(format("nobody from [%s] answered about %s: let through, not checked", tostring(entry.guild), entry.name))
         Settle(entry, "unverified", nil, "timeout")
     end)
 end

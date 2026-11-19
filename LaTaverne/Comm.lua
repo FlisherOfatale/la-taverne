@@ -31,6 +31,118 @@ local loggedIn = false
 
 Comm.stats = { sent = 0, received = 0, rejected = 0 }
 
+-- Message log --------------------------------------------------------------------------
+-- Debug tab or /taverne msglog: every hidden message in and out while it's on, and what
+-- happened to it. Never what it says: only the payload's field names. The unusual ones are
+-- marked "!!" and counted at the top, to spot a bug in a two-PC test. Kept in memory only (the
+-- last LOG_MAX lines), cleared on /reload. Costs nothing while off.
+-- Test mode: the test guild's channel and the alliance channel (what La Taverne listens to).
+-- The real guild's messages are ignored then: only counted.
+local LOG_MAX = 300
+local RATE_MAX = 30 -- messages in a minute from one sender: unusual
+local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, realIgnored = 0 }
+
+function Comm:IsLogging() return msgLog.on end
+
+local function FieldNames(payload)
+    if type(payload) ~= "table" then return "" end
+    local keys = {}
+    for k in pairs(payload) do
+        if k ~= "ver" and k ~= "g" and k ~= "n" then keys[#keys + 1] = tostring(k) end
+    end
+    table.sort(keys)
+    return "{" .. table.concat(keys, ",") .. "}"
+end
+
+local function AddLine(text, unusual)
+    local line = date("%H:%M:%S") .. (unusual and " !! " or "    ") .. text
+    local lines = msgLog.lines
+    lines[#lines + 1] = line
+    if #lines > LOG_MAX then table.remove(lines, 1) end
+    if unusual then
+        local u = msgLog.unusual[unusual]
+        if not u then
+            u = { count = 0 }
+            msgLog.unusual[unusual] = u
+            msgLog.order[#msgLog.order + 1] = unusual
+        end
+        u.count = u.count + 1
+        u.last = line
+    end
+end
+
+-- A free line (a question nobody answered...). unusual: a short kind, counted at the top.
+function Comm:LogNote(text, unusual)
+    if msgLog.on then AddLine("-- " .. text, unusual) end
+end
+
+-- One message. dir: "in" or "out"; scope: "guild" or "ally"; what: what happened to it.
+local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
+    if not msgLog.on then return end
+    if scope == "guild" and ns.Guild:IsSandbox() then scope = "test" end
+    local from = ""
+    if dir == "in" then
+        local tag = scope == "ally" and type(payload) == "table" and ns.Alliance:GetTag(payload.g)
+        from = "  " .. tostring(sender) .. (tag and (" [" .. tag .. "]") or "")
+        -- One sender sending a lot.
+        local key = tostring(sender)
+        local r = msgLog.rate[key]
+        local now = GetTime()
+        if not r or now - r.start > 60 then
+            r = { start = now, count = 0 }
+            msgLog.rate[key] = r
+        end
+        r.count = r.count + 1
+        if r.count == RATE_MAX + 1 then
+            AddLine(format("%s sent more than %d messages in a minute", key, RATE_MAX), "busy sender")
+        end
+    end
+    AddLine(format("%-3s %-5s %-12s%s  %db  %s  %s", dir, scope, tostring(msgType), from, size or 0,
+        what, FieldNames(payload)), unusual and (unusual .. " (" .. tostring(msgType) .. ")") or nil)
+end
+Comm.Trace = Trace
+
+function Comm:SetLogging(on)
+    if on and not msgLog.on then
+        wipe(msgLog.lines)
+        wipe(msgLog.unusual)
+        wipe(msgLog.order)
+        wipe(msgLog.rate)
+        msgLog.realIgnored = 0
+        msgLog.since = date("%H:%M:%S")
+    end
+    msgLog.on = on and true or false
+end
+
+function Comm:ClearLog()
+    local on = msgLog.on
+    msgLog.on = false
+    self:SetLogging(on)
+end
+
+-- The log as text: what's unusual first, then the lines, oldest first.
+function Comm:LogText()
+    local out = { format("La Taverne %s, message log %s%s, %s", ns.version,
+        msgLog.on and "on" or "off", msgLog.since and (" since " .. msgLog.since) or "",
+        ns.Guild:IsSandbox() and "test mode (test guild + alliance)" or "real guild + alliance") }
+    if ns.Guild:IsSandbox() and msgLog.realIgnored > 0 then
+        out[#out + 1] = format("Real guild: %d messages ignored (test mode)", msgLog.realIgnored)
+    end
+    out[#out + 1] = format("Queues: guild %d, alliance %d", #queues.guild, #queues.ally)
+    if #msgLog.order == 0 then
+        out[#out + 1] = "Unusual: none"
+    else
+        out[#out + 1] = "Unusual:"
+        for _, kind in ipairs(msgLog.order) do
+            local u = msgLog.unusual[kind]
+            out[#out + 1] = format("  %d x %s   last: %s", u.count, kind, u.last)
+        end
+    end
+    out[#out + 1] = format("--- last %d lines (newest at the bottom) ---", LOG_MAX)
+    for _, line in ipairs(msgLog.lines) do out[#out + 1] = line end
+    return table.concat(out, "\n")
+end
+
 -- Versions: every message carries the sender's La Taverne version (payload.ver), so a player on
 -- an old version hears that a newer one is in use (once per session), and the Players page can
 -- show who's behind.
@@ -67,13 +179,31 @@ function Comm:OnScope(scope, msgType, fn)
     table.insert(handlers[scope][msgType], fn)
 end
 
-local function Dispatch(scope, msgType, sender, payload, protocol)
+local function Dispatch(scope, msgType, sender, payload, protocol, size)
     local list = handlers[scope] and handlers[scope][msgType]
-    if not list then return end
     local isSelf = ns.IsMe(sender)
+    if msgLog.on and not isSelf then
+        local bad = type(payload.ver) ~= "string"
+            or (scope == "ally" and (type(payload.g) ~= "string" or type(payload.n) ~= "number"))
+        if not list then
+            local v = type(payload.ver) == "string" and payload.ver or "?"
+            Trace("in", scope, msgType, sender, size, "no handler (sender has " .. v .. ")", payload, "unknown type")
+        else
+            Trace("in", scope, msgType, sender, size, "delivered", payload, bad and "bad field" or nil)
+        end
+    end
+    if not list then return end
     if not isSelf and type(payload) == "table" then NoteVersion(sender, payload.ver) end
     for _, fn in ipairs(list) do
-        fn(sender, payload, isSelf, protocol)
+        if msgLog.on then
+            -- One crashing handler: logged, still reported, and the next ones still run.
+            xpcall(function() fn(sender, payload, isSelf, protocol) end, function(err)
+                Comm:LogNote(format("%s handler crashed: %s", msgType, tostring(err)), "handler error (" .. msgType .. ")")
+                geterrorhandler()(err)
+            end)
+        else
+            fn(sender, payload, isSelf, protocol)
+        end
     end
 end
 
@@ -255,9 +385,16 @@ function Comm:Send(msgType, payload, priority)
     payload = payload or {}
     payload.ver = ns.version
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
-    if SendGuildText(text, priority) then return true end
+    if SendGuildText(text, priority) then
+        Trace("out", "guild", msgType, nil, #text, "sent", payload)
+        return true
+    end
     if #queues.guild < MAX_QUEUE then
-        queues.guild[#queues.guild + 1] = { text = text, priority = priority }
+        queues.guild[#queues.guild + 1] = { text = text, priority = priority, msgType = msgType }
+        Trace("out", "guild", msgType, nil, #text, "queued (" .. #queues.guild .. " waiting)", payload,
+            #queues.guild == 10 and "queue growing" or nil)
+    else
+        Trace("out", "guild", msgType, nil, #text, "dropped: queue full", payload, "queue full")
     end
     return false
 end
@@ -265,7 +402,10 @@ end
 local function OnGuildReceive(prefix, text, distribution, sender)
     -- Only accept the route that matches the current mode.
     if ns.Guild:IsSandbox() then
-        if distribution ~= "CHANNEL" then return end
+        if distribution ~= "CHANNEL" then
+            if msgLog.on and distribution == "GUILD" then msgLog.realIgnored = msgLog.realIgnored + 1 end
+            return
+        end
     elseif distribution ~= "GUILD" then
         return
     end
@@ -273,10 +413,12 @@ local function OnGuildReceive(prefix, text, distribution, sender)
     local ok, protocol, msgType, payload = AceSerializer:Deserialize(text)
     if not ok or type(msgType) ~= "string" or type(payload) ~= "table" then
         Comm.stats.rejected = Comm.stats.rejected + 1
+        Trace("in", "guild", ok and msgType or "?", sender, #text, "rejected: unreadable", nil, "unreadable")
         return
     end
     if not ns.Guild:IsMember(sender) then
         Comm.stats.rejected = Comm.stats.rejected + 1
+        Trace("in", "guild", msgType, sender, #text, "rejected: not in the guild", payload, "sender not in the guild")
         if ns.Guild:IsSandbox() then
             ns.Log("ignored", msgType, "from", "[" .. tostring(sender) .. "]", "(not in the test guild - /taverne dev add " .. tostring(sender) .. ")")
         end
@@ -286,7 +428,7 @@ local function OnGuildReceive(prefix, text, distribution, sender)
     ns.Guild:NoteSeen(sender)
     if ns.Players then ns.Players:NoteAddon(sender) end -- they run La Taverne
 
-    Dispatch("guild", msgType, sender, payload, protocol)
+    Dispatch("guild", msgType, sender, payload, protocol, #text)
 end
 
 -- Allied scope ------------------------------------------------------------------------
@@ -342,9 +484,16 @@ function Comm:SendAlly(msgType, payload, priority)
     allySerial = allySerial + 1
     payload.n = math.random(1, 1000000) * 1000 + allySerial % 1000
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
-    if SendAllyText(text, priority) then return true end
+    if SendAllyText(text, priority) then
+        Trace("out", "ally", msgType, nil, #text, "sent", payload)
+        return true
+    end
     if #queues.ally < MAX_QUEUE then
-        queues.ally[#queues.ally + 1] = { text = text, priority = priority }
+        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType }
+        Trace("out", "ally", msgType, nil, #text, "queued (" .. #queues.ally .. " waiting)", payload,
+            #queues.ally == 10 and "queue growing" or nil)
+    else
+        Trace("out", "ally", msgType, nil, #text, "dropped: queue full", payload, "queue full")
     end
     return false
 end
@@ -354,11 +503,13 @@ FlushQueue = function()
         local item = queues.guild[1]
         if not SendGuildText(item.text, item.priority) then break end
         table.remove(queues.guild, 1)
+        Trace("out", "guild", item.msgType, nil, #item.text, "sent from the queue")
     end
     while #queues.ally > 0 do
         local item = queues.ally[1]
         if not SendAllyText(item.text, item.priority) then break end
         table.remove(queues.ally, 1)
+        Trace("out", "ally", item.msgType, nil, #item.text, "sent from the queue")
     end
 end
 
@@ -402,24 +553,46 @@ local function OnAllyMessage(text, sender)
     local ok, protocol, msgType, payload = AceSerializer:Deserialize(text)
     if not ok or type(msgType) ~= "string" or type(payload) ~= "table" then
         Comm.stats.rejected = Comm.stats.rejected + 1
+        Trace("in", "ally", ok and msgType or "?", sender, #text, "rejected: unreadable", nil, "unreadable")
         return
     end
     -- The sender's guild must be one of ours, and a member of our own guild can't pose as another one.
     local guild = payload.g
-    if not ns.Alliance:IsAllied(guild) or (ns.Guild:IsMember(sender) and not ns.Guild:IsMyGuild(guild)) then
+    -- My guild's copy (allied guilds get it here, I got it on the guild channel): not logged.
+    if ns.Guild:IsMyGuild(guild) then
         Comm.stats.rejected = Comm.stats.rejected + 1
         return
     end
-    if AlreadySeen(sender, payload.n) then return end
+    if not ns.Alliance:IsAllied(guild) then
+        Comm.stats.rejected = Comm.stats.rejected + 1
+        Trace("in", "ally", msgType, sender, #text, "rejected: guild not allied (" .. tostring(guild) .. ")", payload, "guild not allied")
+        return
+    end
+    if ns.Guild:IsMember(sender) and not ns.Guild:IsMyGuild(guild) then
+        Comm.stats.rejected = Comm.stats.rejected + 1
+        Trace("in", "ally", msgType, sender, #text, "rejected: my guild's member says another guild", payload, "guild member posing")
+        return
+    end
+    if AlreadySeen(sender, payload.n) then
+        if not ns.IsMe(sender) then Trace("in", "ally", msgType, sender, #text, "copy, already seen (key change)", payload) end
+        return
+    end
     if ns.MockGuild then ns.MockGuild:NoteAlly(sender, guild) end
     Comm.stats.received = Comm.stats.received + 1
     -- Vouching: is the sender really in that guild? Held until we know, dropped if not.
     if ns.Vouch and not ns.Vouch.EXEMPT[msgType] then
-        ns.Vouch:Gate(sender, guild, function() Dispatch("ally", msgType, sender, payload, protocol) end,
+        local passed = ns.Vouch:Gate(sender, guild, function() Dispatch("ally", msgType, sender, payload, protocol, #text) end,
             ns.Vouch.PASSIVE[msgType])
+        if not ns.IsMe(sender) then
+            if passed == nil then
+                Trace("in", "ally", msgType, sender, #text, "held: checking their guild", payload)
+            elseif passed == false then
+                Trace("in", "ally", msgType, sender, #text, "dropped: their guild says no", payload, "denied sender")
+            end
+        end
         return
     end
-    Dispatch("ally", msgType, sender, payload, protocol)
+    Dispatch("ally", msgType, sender, payload, protocol, #text)
 
 end
 
@@ -430,6 +603,8 @@ ns.On("CHAT_MSG_ADDON", function(prefix, message, distribution, sender, target, 
     Comm.lastAllyCheck = { target = target, localID = localID, channelName = channelName, ok = fromOurs }
     if not fromOurs then
         Comm.stats.rejected = Comm.stats.rejected + 1
+        Trace("in", "ally", "?", sender, type(message) == "string" and #message or 0,
+            "rejected: not from our channel (" .. tostring(channelName or target) .. ")", nil, "wrong channel")
         return
     end
     if type(message) ~= "string" or #message < 1 or type(sender) ~= "string" then return end
@@ -448,6 +623,8 @@ ns.On("CHAT_MSG_ADDON", function(prefix, message, distribution, sender, target, 
         local p = partial[slot]
         if not p or GetTime() - p.time > 30 then
             partial[slot] = nil
+            Trace("in", "ally", "?", sender, #body, p and "part too late: message lost" or "part without its start: message lost",
+                nil, "broken parts")
             return
         end
         p.text = p.text .. body
@@ -497,4 +674,16 @@ function Comm:OnLogin()
         loggedIn = true
         ns.Alliance:Refresh() -- joins the test guild channel and the alliance channel
     end)
+end
+
+-- /taverne msglog [on | off | show]: no argument switches it on or off and shows it.
+ns.commands.msglog = function(arg)
+    arg = strtrim(arg or ""):lower()
+    if arg == "on" or arg == "off" then
+        Comm:SetLogging(arg == "on")
+        ns.Print("message log " .. arg)
+        return
+    end
+    if arg == "" then Comm:SetLogging(not Comm:IsLogging()) end
+    if ns.ShowMessageLog then ns.ShowMessageLog() end
 end

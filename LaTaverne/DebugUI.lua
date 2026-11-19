@@ -383,6 +383,20 @@ function MockGuild:Toggle()
     window:SetShown(not window:IsShown())
 end
 
+-- Message log window (Debug tab, /taverne msglog): Refresh reads it again, Clear starts over.
+function ns.ShowMessageLog()
+    ns.TextDialog({
+        kind = "msglog",
+        title = L["Message log"],
+        hint = ns.Comm:IsLogging() and L["On: new messages show when you click Refresh. Copy with Ctrl+A, Ctrl+C."]
+            or L["Off: start it on the Debug tab (or /taverne msglog on). Copy with Ctrl+A, Ctrl+C."],
+        text = ns.Comm:LogText(),
+        button = L["Refresh"],
+        onButton = function() ns.ShowMessageLog() return false end,
+        extra = { text = L["Clear"], fill = function() ns.Comm:ClearLog() return ns.Comm:LogText() end },
+    })
+end
+
 -- Debug tab ----------------------------------------------------------------------------------
 
 StaticPopupDialogs["LATAVERNE_LEAVE_TEST_MODE"] = {
@@ -456,15 +470,29 @@ function ns.BuildDebugPanel()
         p:Refresh()
     end)
 
-    -- Chat watch: on/off
+    -- Chat watch on/off, then the message log on/off and its window. Explained in tooltips.
     local watch = K.NewButton(p, "", W, 24)
     watch:SetPoint("TOPLEFT", 8, -324)
-    local watchHint = K.NewLabel(p, L["Logs whether chat messages can be read by addons (never their text)."], "GameFontDisableSmall")
-    watchHint:SetPoint("LEFT", watch, "RIGHT", 10, 0)
+    K.WithTooltip(watch, { L["Chat watch"], L["Logs whether chat messages can be read by addons (never their text)."] })
     watch:SetScript("OnClick", function()
         ns.commands.chatwatch()
         p:Refresh()
     end)
+    local msgLog = K.NewButton(p, "", W, 24)
+    msgLog:SetPoint("LEFT", watch, "RIGHT", 8, 0)
+    local MSGLOG_TIP = { L["Message log"],
+        L["Logs every hidden La Taverne message, sent and received, and what happened to it (delivered, held, rejected...). Never what it says."],
+        L["Unusual ones are marked !! and counted at the top: copy it into your bug report."],
+        L["Test mode: the test guild and the alliance. Your real guild's messages are only counted."] }
+    K.WithTooltip(msgLog, MSGLOG_TIP)
+    msgLog:SetScript("OnClick", function()
+        ns.Comm:SetLogging(not ns.Comm:IsLogging())
+        p:Refresh()
+    end)
+    local showLog = K.NewButton(p, L["Show the message log"], W, 24)
+    showLog:SetPoint("LEFT", msgLog, "RIGHT", 8, 0)
+    K.WithTooltip(showLog, MSGLOG_TIP)
+    showLog:SetScript("OnClick", function() ns.ShowMessageLog() end)
 
     -- Player checks
     -- Player checks: name on the first line, the two checks on the second.
@@ -521,6 +549,7 @@ function ns.BuildDebugPanel()
         guildText:SetText(L["Test guild: %s"]:format(ns.db.dev.guildName or "?"))
         gameChat:SetChecked(ns.db.dev.gameChat)
         watch:SetText(ns.IsChatWatching() and L["Stop the chat watch"] or L["Start the chat watch"])
+        msgLog:SetText(ns.Comm:IsLogging() and L["Stop the message log"] or L["Start the message log"])
         fakeRunners:SetText(ns.Invites:HasFakeRunners() and L["Remove the fake inviters"] or L["Fake others inviting"])
     end
     return p
