@@ -1,6 +1,8 @@
 -- Minimap button (LibDataBroker launcher + LibDBIcon).
--- Left-click opens La Taverne; right-click opens a short menu (available / stop, open groups,
--- my group, auto-invite and its start / stop, Options).
+-- Left-click opens La Taverne; right-click opens a short menu. Idle: Create a group, I'm
+-- available..., then Groups, Availability. In a group of the finder: just My group; available:
+-- Groups and Availability (in green). Then auto-invite (Start, or its page in green while it
+-- runs: the Stop button is there), Options.
 -- The tooltip says where I'm at: my group, my availability, auto-invite.
 -- On the button: a golden pulse with a count when something waits for my answer and I haven't
 -- seen it yet (join requests to my group, invitations), and a small steady green dot while
@@ -12,25 +14,51 @@ local L = ns.L
 -- Things that are on right now show in green, so it's clear they can be stopped.
 local function On(text) return "|cff20ff20" .. text .. "|r" end
 
+local function Divider(root)
+    if root.CreateDivider then root:CreateDivider() end
+end
+
+local function OpenPage(page)
+    ns.UI:Open()
+    ns.UI:ShowPage(page)
+end
+
 local function QuickMenu(owner)
     if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
     MenuUtil.CreateContextMenu(owner, function(_, root)
         root:CreateTitle("La Taverne")
-        local P = ns.Players
-        if P:IsActive() then
-            root:CreateButton(On(L["Stop being available"]), function() P:Stop(L["You're no longer available."]) end)
+        local available = ns.Players:IsActive()
+        local inGroup = ns.Groups:GetMine() or ns.Groups:GetJoined()
+        if inGroup then
+            -- Doing something already: only that.
+            root:CreateButton(On(L["My group"]), function() OpenPage("mygroup") end)
+        elseif available then
+            root:CreateButton(L["Groups"], function() OpenPage("browse") end)
+            root:CreateButton(On(L["Availability"]), function() OpenPage("players") end)
         else
-            root:CreateButton(L["I'm available..."], function() ns.UI.OpenAvailability() end)
+            -- Idle: the two ways to start, then the two lists.
+            root:CreateButton(L["Create a group"], function() OpenPage("mygroup") end)
+            local avail = root:CreateButton(L["I'm available..."], function() ns.UI.OpenAvailability() end)
+            if IsInGroup() and avail.SetEnabled then
+                avail:SetEnabled(false)
+                if avail.SetTooltip then
+                    avail:SetTooltip(function(tooltip)
+                        GameTooltip_SetTitle(tooltip, L["I'm available..."])
+                        GameTooltip_AddErrorLine(tooltip, L["You're in a party: post a group for your party instead."])
+                    end)
+                end
+            end
+            Divider(root)
+            root:CreateButton(L["Groups"], function() OpenPage("browse") end)
+            root:CreateButton(L["Availability"], function() OpenPage("players") end)
         end
-        if root.CreateDivider then root:CreateDivider() end
-        root:CreateButton(L["Open groups"], function() ns.UI:Open() ns.UI:ShowPage("browse") end)
-        -- My group, or the create form when I have none (same page).
-        root:CreateButton(ns.Groups:GetMine() and L["My group"] or L["Create a group"],
-            function() ns.UI:Open() ns.UI:ShowPage("mygroup") end)
-        root:CreateButton(L["Auto-invite"], function() ns.UI:ShowAutoInvite() end)
-        root:CreateButton(ns.Invites:IsActive() and On(L["Stop auto-invite"]) or L["Start auto-invite"],
-            function() ns.Invites:Toggle() end)
-        if root.CreateDivider then root:CreateDivider() end
+        Divider(root)
+        -- Auto-invite: start it, or (running) its page, where the Stop button is.
+        if ns.Invites:IsActive() then
+            root:CreateButton(On(L["Auto-invite"]), function() ns.UI:ShowAutoInvite() end)
+        else
+            root:CreateButton(L["Start auto-invite"], function() ns.Invites:Toggle() end)
+        end
         root:CreateButton(L["Options"], function() ns.UI:ShowSection("options") ns.UI:Open() end)
     end)
 end

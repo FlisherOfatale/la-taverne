@@ -1,6 +1,6 @@
 -- Main window, built from Blizzard's own templates so it looks like the default UI.
 -- Side tabs (sections) on the right edge, bottom tabs for the pages of a section:
--- - Groups: Browse (open guild groups, invitations on top) and My group (post / manage / member
+-- - Looking for group: Groups (open guild groups, invitations on top) and My group (post / manage / member
 --           view) share one bottom tab: My group while in a group of the finder, Browse
 --           otherwise; Players (my availability, who's available)
 -- - Alliance: the Guild Alliance as members see it; Setup (only for players who can edit the
@@ -1801,23 +1801,13 @@ local function BuildAvailabilityForm(parent, onDone)
     return f
 end
 
--- "I'm available..." buttons (Browse, Players, minimap menu): the Availability page.
+-- "I'm available..." buttons (Availability page, minimap menu): the Availability form.
 local function OpenAvailability()
     UI:Open()
     UI:ShowPage("players")
     if panels.players then panels.players:ShowForm(true) end
 end
 UI.OpenAvailability = OpenAvailability
-
--- The availability button's text: "I'm available..." or "Available: 45 min" (green).
-local function AvailabilityText()
-    local P = ns.Players
-    if not P:IsActive() then return L["I'm available..."] end
-    if P:IsPaused() then return "|cffffd100" .. L["Available (paused)"] .. "|r" end
-    local left = P:Remaining()
-    if not left then return "|cff20ff20" .. L["Available"] .. "|r" end
-    return "|cff20ff20" .. format(L["Available: %d min"], math.max(1, math.ceil(left / 60))) .. "|r"
-end
 
 local function AvailabilityTooltip(owner)
     local P = ns.Players
@@ -1849,16 +1839,10 @@ local function BuildGroupsPanel()
     p.hidden = NewLabel(p, nil, "GameFontDisableSmall")
     p.hidden:SetPoint("LEFT", p.header, "RIGHT", 10, 0)
     -- Shortcut to the create form, only when I'm not already in a group of the finder.
+    -- (Groups is for groups; "I'm available" lives on the Availability tab.)
     p.create = NewButton(p, L["Create a group"], 160)
     p.create:SetPoint("TOPRIGHT", -2, -4)
     p.create:SetScript("OnClick", function() UI:ShowPage("mygroup") end)
-    -- I'm available (solo only): left of "Create a group".
-    p.avail = NewButton(p, "", 170)
-    p.avail:SetPoint("TOPRIGHT", -168, -4)
-    p.avail:SetMotionScriptsWhileDisabled(true) -- the tooltip says why it's greyed out
-    p.avail:SetScript("OnClick", function() OpenAvailability() end)
-    p.avail:SetScript("OnEnter", function(self) AvailabilityTooltip(self) end)
-    p.avail:SetScript("OnLeave", function() GameTooltip:Hide() end)
     -- In a group of the finder: back to it, bottom left, where My group's "See the other
     -- groups" button is (the list then stops above it).
     p.back = NewButton(p, "\194\171 " .. L["Back to my group"], 180)
@@ -2041,9 +2025,6 @@ local function BuildGroupsPanel()
         self.hidden:SetText(filtered > 0 and format(L["(%d hidden by the filters)"], filtered) or "")
         local free = not ns.Groups:GetMine() and not ns.Groups:GetJoined()
         self.create:SetShown(free and true or false)
-        self.avail:SetShown(free and true or false)
-        self.avail:SetText(AvailabilityText())
-        self.avail:SetEnabled(ns.Players:IsActive() or not IsInGroup())
         self.back:SetShown(not free)
         self.box:SetPoint("BOTTOMRIGHT", -20, free and 0 or 30)
         self.empty:SetShown(#list == 0)
@@ -3884,7 +3865,7 @@ ns.UIKit = {
 local SECTIONS = {
     -- Icons: the first file the client has (see SetFirstTexture). Groups: the dungeon finder's
     -- eye, like the game's own group finder.
-    { key = "groups", label = "Groups",
+    { key = "groups", label = "Looking for group",
       icon = {
           -- The eye of the queue button (first picture of its animation sheet, 8 x 4 eyes).
           { atlas = "groupfinder-eye-single" },
@@ -3915,7 +3896,7 @@ local SECTIONS = {
 }
 
 local PAGE_LABELS = {
-    browse = "Browse", mygroup = "My group", players = "Availability",
+    browse = "Groups", mygroup = "My group", players = "Availability",
     network = "Alliance", officers = "Setup",
     autoinvite = "Queue", autoinviteSettings = "Settings",
 }

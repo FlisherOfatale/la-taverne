@@ -7,6 +7,7 @@ ns.L = L
 if GetLocale() == "frFR" then
     -- Tabs and roles
     L["Groups"] = "Groupes"
+    L["Looking for group"] = "Recherche de groupe"
     L["My group"] = "Mon groupe"
     L["Invitations"] = "Invitations"
     L["Tank"] = "Tank"
@@ -21,9 +22,7 @@ if GetLocale() == "frFR" then
 
     -- Groups tab
     L["Open groups: %d"] = "Groupes ouverts : %d"
-    L["Open groups"] = "Groupes ouverts"
     L["Start auto-invite"] = "Lancer l'invitation automatique"
-    L["Stop auto-invite"] = "Arrêter l'invitation automatique"
     L["Guild: %s"] = "Guilde : %s"
     L["Test guild: %s"] = "Guilde de test : %s"
     L["No open groups right now. Create one in the \"My group\" tab!"] = "Aucun groupe ouvert pour le moment. Créez-en un dans l'onglet « Mon groupe » !"
@@ -293,7 +292,7 @@ if GetLocale() == "frFR" then
     L["Auto-invite stopped."] = "Invitation automatique arrêtée."
     L["Auto-invite turned itself off (time limit)."] = "L'invitation auto s'est désactivée d'elle-même (durée écoulée)."
     L["Stop"] = "Arrêter"
-    L["Start"] = "Démarrer"
+    L["Start"] = "Lancer"
     L["Auto-invite ON"] = "Invitation auto ACTIVÉE"
     L["queue: %d, invited: %d, %d min left"] = "file : %d, invités : %d, encore %d min"
     L["Guild members who type a keyword alone in guild chat (or allied guild chat) get a group invite. Handy for big events: everyone types +1."] = "Les membres de la guilde qui tapent un mot-clé seul dans le chat de guilde (ou celui des guildes alliées) reçoivent une invitation de groupe. Pratique pour les grands événements : tout le monde tape +1."
@@ -390,9 +389,7 @@ if GetLocale() == "frFR" then
     L["Already in your group or invited."] = "Déjà dans votre groupe ou invité."
     L["Any dungeon at my level"] = "N'importe quel donjon à mon niveau"
     L["Available"] = "Disponible"
-    L["Available (paused)"] = "Disponible (en pause)"
     L["Available for"] = "Disponible pour"
-    L["Available: %d min"] = "Disponible : %d min"
     L["Chosen dungeons"] = "Donjons choisis"
     L["Create this group"] = "Créer ce groupe"
     L["Not at the tavern: whisper them"] = "Pas à la taverne : chuchotez-lui"
@@ -413,7 +410,6 @@ if GetLocale() == "frFR" then
     L["Post a group first: the invitation is for your group."] = "Publiez d'abord un groupe : l'invitation est pour votre groupe."
     L["Sends a La Taverne invitation to your group."] = "Envoie une invitation La Taverne pour votre groupe."
     L["Start being available"] = "Me rendre disponible"
-    L["Stop being available"] = "Ne plus être disponible"
     L["Tell the guild you want a group: leaders see your roles (ticked in the group list) and the dungeons you want, and can invite you."] = "Dites à la guilde que vous cherchez un groupe : les chefs voient vos rôles (cochés dans la liste des groupes) et les donjons voulus, et peuvent vous inviter."
     L["Wanted dungeons"] = "Donjons demandés"
     L["Whisper"] = "Chuchoter"
@@ -583,7 +579,7 @@ if GetLocale() == "frFR" then
     L["Groups that are complete or already running don't show."] = "Les groupes complets ou déjà lancés ne s'affichent pas."
     L["All dungeons"] = "Tous les donjons"
     L["%d dungeons"] = "%d donjons"
-    L["Availability"] = "Disponibilité"
+    L["Availability"] = "Disponibilités"
     L["Back"] = "Retour"
     L["Back to my group"] = "Retour à mon groupe"
     L["See the other groups"] = "Voir les autres groupes"
