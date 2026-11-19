@@ -415,8 +415,6 @@ local function RenderSlots(frames, l)
                 local name = NameText(e.name, e.class, e.tag or e.guest)
                 if e.key == leaderKey then name = name .. " " .. CROWN end
                 f.tooltip = { e.role and RoleText(e.role) or L["Role unknown"], name }
-                local unusual = ns.UnusualRoleText(e.class, e.role)
-                if unusual then f.tooltip[#f.tooltip + 1] = unusual end
                 if person.kind == "accepted" then
                     f.tooltip[#f.tooltip + 1] = L["Accepted, waiting to join"]
                 end
@@ -499,9 +497,6 @@ local function NewRoleButton(parent, role, size, onClick)
         if self.allowed then self.check:LockHighlight() end
         local lines = { RoleText(role) }
         if not self.allowed then lines[2] = "|cffff4040" .. L["Your class can't take this role."] .. "|r" end
-        if self.allowed and self.unusual then
-            lines[2] = "|cffff9900" .. L["Your class doesn't usually take this role: leaders see it on your request."] .. "|r"
-        end
         ShowTooltip(self, lines)
     end)
     b:SetScript("OnLeave", function(self)
@@ -512,16 +507,12 @@ local function NewRoleButton(parent, role, size, onClick)
         if SOUNDKIT then
             PlaySound(self.check:GetChecked() and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
         end
-        if self.unusual and not self.check:GetChecked() then
-            ns.Print(L["Unusual role for your class: leaders will see it on your requests."])
-        end
         onClick(self, ...)
     end)
 
-    -- allowed: the class can take the role; unusual: it can, but doesn't usually (warning).
-    function b:SetAllowed(allowed, unusual)
+    -- allowed: the class can take the role.
+    function b:SetAllowed(allowed)
         self.allowed = allowed
-        self.unusual = unusual and true or nil
         self.icon:SetDesaturated(not allowed)
         self.icon:SetAlpha(allowed and 1 or 0.4)
         self:SetEnabled(allowed)
@@ -1153,9 +1144,7 @@ local function MemberRowInitializer(canEdit, setRole, canManage)
         if pending == "invited" and not m.role then
             row.roleText:SetText("")
         else
-            row.roleText:SetText(m.role and (RoleText(m.role)
-                .. (ns.IsUnusualRole(m.class, m.role) and ("  |cffff9900(" .. L["unusual"] .. ")|r") or ""))
-                or ("|cff808080" .. L["Role unknown"] .. "|r"))
+            row.roleText:SetText(m.role and RoleText(m.role) or ("|cff808080" .. L["Role unknown"] .. "|r"))
         end
         if editable then RefreshDropdown(row.roleDropdown) end
         local manage = pending ~= nil and canManage ~= nil and canManage(m)
@@ -1194,7 +1183,6 @@ local function AcceptMenu(owner, p)
             local n = missing[role] or 0
             local hint = n > 0 and ("  |cff9fdf7f" .. format(L["%d missing"], n) .. "|r")
                 or ("  |cff808080" .. L["already full"] .. "|r")
-            if ns.IsUnusualRole(p.class, role) then hint = hint .. "  |cffff9900(" .. L["unusual"] .. ")|r" end
             root:CreateButton(RoleText(role) .. hint, function() ns.Groups:Accept(p.key, role) end)
         end
     end)
@@ -1273,15 +1261,9 @@ local function InitPendingRow(row, p)
                 b.tooltip = { RoleText(role) }
                 b:SetScript("OnClick", nil)
             end
-            local unusual = ns.UnusualRoleText(p.class, role)
-            if unusual then b.tooltip[#b.tooltip + 1] = unusual end
         end
     end
-    -- An unusual role (a shaman tank) is marked for the leader.
-    local anyUnusual = false
-    for _, role in ipairs(roles) do anyUnusual = anyUnusual or ns.IsUnusualRole(p.class, role) end
-    row.roleLabel:SetText((#roles == 1 and ns.RoleLabel(roles[1]) or "")
-        .. (anyUnusual and ("  |cffff9900(" .. L["unusual"] .. ")|r") or ""))
+    row.roleLabel:SetText(#roles == 1 and ns.RoleLabel(roles[1]) or "")
 
     local key = p.key
     local leader = p.readOnly ~= true
@@ -1753,7 +1735,7 @@ local function BuildAvailabilityForm(parent, onDone)
             self.status:SetText("|cff808080" .. L["You're not available."] .. "|r")
         end
         for role, button in pairs(self.roleButtons) do
-            button:SetAllowed(ns.CanTakeRole(class, role), ns.IsUnusualRole(class, role))
+            button:SetAllowed(ns.CanTakeRole(class, role))
             button:SetChecked(draft.roles[role] == true)
         end
         self.any:SetChecked(draft.any)
@@ -1986,7 +1968,7 @@ local function BuildGroupsPanel()
         local myRoles = ns.Groups:GetMyRoles()
         local class = MyClass()
         for role, button in pairs(self.roleButtons) do
-            button:SetAllowed(ns.CanTakeRole(class, role), ns.IsUnusualRole(class, role))
+            button:SetAllowed(ns.CanTakeRole(class, role))
             button:SetChecked(myRoles[role] == true)
         end
         self.newbie:SetChecked(ns.Groups:IsNewPlayer())
@@ -2269,7 +2251,7 @@ local function BuildCreateForm(parent)
         local myClass = MyClass()
         if self.myRole and not ns.CanTakeRole(myClass, self.myRole) then self.myRole = nil end
         for role, button in pairs(self.roleButtons) do
-            button:SetAllowed(ns.CanTakeRole(myClass, role), ns.IsUnusualRole(myClass, role))
+            button:SetAllowed(ns.CanTakeRole(myClass, role))
             button:SetChecked(self.myRole == role)
         end
 

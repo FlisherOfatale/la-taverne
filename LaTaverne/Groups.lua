@@ -186,7 +186,7 @@ function Groups:GetMyRoles()
         -- First time: a class with a single role offers it right away.
         local possible = {}
         for _, role in ipairs(self.ROLES) do
-            if ns.CanTakeRole(class, role) and not ns.IsUnusualRole(class, role) then possible[#possible + 1] = role end
+            if ns.CanTakeRole(class, role) then possible[#possible + 1] = role end
         end
         db.myRoles = {}
         if #possible == 1 then db.myRoles[possible[1]] = true end

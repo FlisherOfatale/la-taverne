@@ -417,12 +417,8 @@ if GetLocale() == "frFR" then
     L["until %s"] = "jusqu'à %s"
     L["until you log out"] = "jusqu'à la déconnexion"
 
-    -- Unusual roles, role mix, unverified allied leaders (0.15)
+    -- Role mix, unverified allied leaders (0.15)
 
-    L["%s: unusual role"] = "%s : rôle inhabituel"
-    L["unusual"] = "inhabituel"
-    L["Your class doesn't usually take this role: leaders see it on your request."] = "Votre classe ne prend pas ce rôle d'habitude : les chefs de groupe le voient sur votre demande."
-    L["Unusual role for your class: leaders will see it on your requests."] = "Rôle inhabituel pour votre classe : les chefs de groupe le verront sur vos demandes."
     L["Change the role mix"] = "Changer la répartition"
     L["By default: 1 tank, 1 healer, 3 DPS (2, 2, 6 for 10 players). Ticked: choose how many of each, none is fine (for example no healer, 4 DPS). You can change it later in My group."] = "Par défaut : 1 tank, 1 soigneur, 3 DPS (2, 2, 6 à 10 joueurs). Coché : choisissez combien de chaque, zéro est possible (par exemple pas de soigneur, 4 DPS). Vous pourrez la changer dans Mon groupe."
     L["Roles..."] = "Rôles..."
@@ -692,29 +688,10 @@ local CLASS_ROLES = {
     EVOKER = { HEALER = true, DAMAGER = true },
 }
 
--- Roles a class can take without having them: tanking a little at low level. Allowed, with a
--- warning to the player and a mark the leader sees.
-local UNUSUAL_ROLES = {
-    SHAMAN = { TANK = true },
-    HUNTER = { TANK = true },
-    WARLOCK = { TANK = true },
-}
-
-function ns.IsUnusualRole(class, role)
-    local roles = class and UNUSUAL_ROLES[class]
-    return roles ~= nil and roles[role] == true
-end
-
--- Unknown class: allow everything.
+-- Only the roles of the class (no "unusual" shaman / hunter / warlock tank: a group that wants
+-- one asks for no tank in its mix). Unknown class: allow everything.
 function ns.CanTakeRole(class, role)
     local roles = class and CLASS_ROLES[class]
     if not roles then return true end
-    return roles[role] == true or ns.IsUnusualRole(class, role)
-end
-
--- "Shaman: unusual role", orange, or nil when the role is usual for that class.
-function ns.UnusualRoleText(class, role)
-    if not ns.IsUnusualRole(class, role) then return nil end
-    local name = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class]) or class
-    return "|cffff9900" .. format(ns.L["%s: unusual role"], name) .. "|r"
+    return roles[role] == true
 end
