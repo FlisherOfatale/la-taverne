@@ -7,7 +7,6 @@ ns.L = L
 if GetLocale() == "frFR" then
     -- Tabs and roles
     L["Groups"] = "Groupes"
-    L["Looking for group"] = "Recherche de groupe"
     L["My group"] = "Mon groupe"
     L["Invitations"] = "Invitations"
     L["Tank"] = "Tank"
@@ -675,6 +674,8 @@ if GetLocale() == "frFR" then
     L["%d requests"] = "%d demandes"
     L["In a group: %s"] = "Dans un groupe : %s"
     L["Auto-invite: %d in the queue"] = "Invitation automatique : %d en file"
+    L["Players who fit your group: %d"] = "Joueurs qui conviennent à votre groupe : %d"
+    L["Available players: %d"] = "Joueurs disponibles : %d"
     L["Click to open or close. Right-click: quick menu."] = "Clic : ouvrir ou fermer. Clic droit : menu rapide."
 end
 

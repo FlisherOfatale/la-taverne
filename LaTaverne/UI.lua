@@ -1,8 +1,8 @@
 -- Main window, built from Blizzard's own templates so it looks like the default UI.
 -- Side tabs (sections) on the right edge, bottom tabs for the pages of a section:
--- - Looking for group: Groups (open guild groups, invitations on top) and My group (post / manage / member
---           view) share one bottom tab: My group while in a group of the finder, Browse
---           otherwise; Players (my availability, who's available)
+-- - Groups: open guild groups (invitations on top) and My group (post / manage / member view),
+--           one page for the player: My group while in a group of the finder, the list otherwise
+-- - Availability: my availability, the dungeons asked for, who's available
 -- - Alliance: the Guild Alliance as members see it; Setup (only for players who can edit the
 --             Guild Info)
 -- - Auto-invite: Queue and Settings (Invites.lua)
@@ -4103,7 +4103,7 @@ ns.UIKit = {
 local SECTIONS = {
     -- Icons: the first file the client has (see SetFirstTexture). Groups: the dungeon finder's
     -- eye, like the game's own group finder.
-    { key = "groups", label = "Looking for group",
+    { key = "groups", label = "Groups",
       icon = {
           -- The eye of the queue button (first picture of its animation sheet, 8 x 4 eyes).
           { atlas = "groupfinder-eye-single" },
@@ -4111,8 +4111,12 @@ local SECTIONS = {
           "Interface\\LFGFrame\\UI-LFG-PORTRAIT",
           "Interface\\Icons\\INV_Misc_GroupNeedMore",
       },
-      -- Browse and My group share one bottom tab (see LayoutBottomTabs).
-      pages = { "browse", "players", "mygroup" } },
+      -- Browse and My group are one page for the player (see LayoutBottomTabs): no bottom tabs.
+      pages = { "browse", "mygroup" } },
+    -- Availability: my availability and who's available. A pocket watch: it lasts a set time.
+    { key = "availability", label = "Availability",
+      icon = { "Interface\\Icons\\INV_Misc_PocketWatch_01", "Interface\\Icons\\INV_Misc_Note_01" },
+      pages = { "players" } },
     -- The Guild Alliance; its Setup page only for players who can edit the Guild Info.
     { key = "network", label = "Alliance", icon = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
       pages = { "network", "officers" } },
@@ -4176,6 +4180,46 @@ local function SectionBadge(section)
     return total
 end
 
+-- Something of mine running in that section (a green dot on its side tab): my group (posted,
+-- or one I'm in), my availability, auto-invite.
+local function SectionActive(section)
+    if section.key == "groups" then return (ns.Groups:GetMine() or ns.Groups:GetJoined()) and true or false end
+    if section.key == "availability" then return ns.Players:IsActive() and true or false end
+    if section.key == "autoinvite" then return ns.Invites:IsActive() and true or false end
+    return false
+end
+
+-- The side tab's tooltip: what's going on there (white), what waits for me (green).
+local function SectionStatus(section)
+    local lines = {}
+    local G, P = ns.Groups, ns.Players
+    if section.key == "groups" then
+        local mine, joined = G:GetMine(), G:GetJoined()
+        if mine then
+            lines[#lines + 1] = { format(L["Your group: %s"], ns.DungeonName(mine.dungeon)), 1, 1, 1 }
+            local requests = G:CountRequests()
+            if requests > 0 then lines[#lines + 1] = { format(L["%d requests"], requests), 0.1, 1, 0.1 } end
+        elseif joined then
+            lines[#lines + 1] = { format(L["In a group: %s"], ns.DungeonName(joined.dungeon)), 1, 1, 1 }
+        end
+        local invitations = G:CountNewInvitations()
+        if invitations > 0 then lines[#lines + 1] = { format(L["Invitations: %d"], invitations), 0.1, 1, 0.1 } end
+        lines[#lines + 1] = { format(L["Open groups: %d"], G:CountOpen()), 0.8, 0.8, 0.8 }
+    elseif section.key == "availability" then
+        if P:IsActive() then
+            local left = P:Remaining()
+            lines[#lines + 1] = { left and format(L["Available for %d more min"], math.max(1, math.ceil(left / 60)))
+                or L["Available until you log out"], 1, 1, 1 }
+        end
+        local fitting = P:CountFitting()
+        if fitting > 0 then lines[#lines + 1] = { format(L["Players who fit your group: %d"], fitting), 0.1, 1, 0.1 } end
+        lines[#lines + 1] = { format(L["Available players: %d"], P:CountAvailable()), 0.8, 0.8, 0.8 }
+    elseif section.key == "autoinvite" and ns.Invites:IsActive() then
+        lines[#lines + 1] = { format(L["Auto-invite: %d in the queue"], #ns.Invites:GetQueue()), 1, 1, 1 }
+    end
+    return lines
+end
+
 -- Side tab: the spellbook's skill line tab look, the section's icon, a count in the corner.
 -- Icon size and spacing; the tab's frame texture scales with the icon (64 px for a 32 px icon).
 local SIDE_SIZE, SIDE_STEP = 42, 58
@@ -4223,6 +4267,12 @@ local function NewSideTab(section)
     function b:SetChecked(on) self.selected:SetShown(on and true or false) end
     b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     b.count:SetPoint("BOTTOMRIGHT", -1, 2)
+    -- Something of mine running there: a green dot, top right (like the minimap button's).
+    b.dot = b:CreateTexture(nil, "OVERLAY", nil, 2)
+    b.dot:SetTexture("Interface\\FriendsFrame\\StatusIcon-Online")
+    b.dot:SetSize(14, 14)
+    b.dot:SetPoint("TOPRIGHT", 2, 2)
+    b.dot:Hide()
     b:SetScript("OnClick", function()
         if section.action then section.action() else UI:ShowSection(section.key) end
         if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
@@ -4230,6 +4280,7 @@ local function NewSideTab(section)
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(L[section.label])
+        for _, line in ipairs(SectionStatus(section)) do GameTooltip:AddLine(line[1], line[2], line[3], line[4]) end
         if section.key == "testguild" then
             GameTooltip:AddLine(L["Opens the test guild window."], 1, 1, 1, true)
         elseif section.key == "debug" then
@@ -4258,6 +4309,7 @@ local function LayoutSideTabs()
         b:SetChecked(section == currentSection)
         local badge = shown and SectionBadge(section) or 0
         b.count:SetText(badge > 0 and badge or "")
+        if b.dot then b.dot:SetShown(shown and SectionActive(section)) end
         if shown then
             b:ClearAllPoints()
             if section.tool then
@@ -4288,7 +4340,10 @@ end
 local function LayoutBottomTabs()
     local section = sectionOf[currentPage]
     local visible = VisiblePages(section)
-    local showRow = #visible > 1
+    -- Only when there's more than one tab to show (Browse and My group are one).
+    local tabs = 0
+    for _, page in ipairs(visible) do if page ~= "mygroup" then tabs = tabs + 1 end end
+    local showRow = tabs > 1
     local shownSet = {}
     if showRow then for _, page in ipairs(visible) do shownSet[page] = true end end
 
