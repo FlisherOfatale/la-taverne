@@ -2,7 +2,7 @@
 ## Title: La Taverne
 ## Notes: Guild-only dungeon group finder
 ## Notes-frFR: Recherche de groupes de donjon entre membres de la guilde
-## Version: 0.32.0-alpha
+## Version: 0.32.1-alpha
 ## Author: Oylex
 ## X-Curse-Project-ID: 1814877
 ## IconTexture: Interface\AddOns\LaTaverne\icon

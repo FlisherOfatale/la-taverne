@@ -48,8 +48,25 @@ function Guild:GetName()
     return (GetGuildInfo("player"))
 end
 
+-- Game restrictions (combat, boss, Mythic+, PvP match, some maps): while one is on, the game
+-- blocks reading the Guild Info (ADDON_ACTION_BLOCKED) and the read comes back empty.
+function Guild:Restricted()
+    if InCombatLockdown and InCombatLockdown() then return true end
+    local R = C_RestrictedActions
+    local types = Enum and Enum.AddOnRestrictionType
+    if R and R.IsAddOnRestrictionActive and types then
+        for _, v in pairs(types) do
+            local ok, on = pcall(R.IsAddOnRestrictionActive, v)
+            if ok and on then return true end
+        end
+    end
+    return false
+end
+
+-- The Guild Info, or nil while the game won't let addons read it (see Restricted).
 function Guild:GetInfoText()
     if self:IsSandbox() then return ns.db.dev.infoText or "" end
+    if self:Restricted() then return nil end
     return (GetGuildInfoText and GetGuildInfoText()) or ""
 end
 

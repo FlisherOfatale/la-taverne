@@ -152,6 +152,7 @@ if GetLocale() == "frFR" then
     L["Active"] = "Active"
     L["Not set up"] = "Non configurée"
     L["You can't edit the Guild Info."] = "Vous ne pouvez pas modifier les informations de guilde."
+    L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."] = "Le jeu bloque les informations de guilde pour le moment (combat ou boss). Réessayez dans un instant."
     L["The game doesn't let addons change the Guild Info here."] = "Le jeu ne permet pas aux addons de modifier les informations de guilde ici."
     L["The Guild Info would be too long (%d / %d)."] = "Les informations de guilde seraient trop longues (%d / %d)."
 

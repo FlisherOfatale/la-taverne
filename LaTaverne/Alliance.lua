@@ -18,6 +18,15 @@ local OLD_CHANNEL_GRACE = 600 -- seconds on the previous channel after a key cha
 
 local config = { guilds = {}, key = nil } -- guilds: [lowercase name] = { name, tag }
 local configSig = ""
+local infoPending = false -- the Guild Info couldn't be read (game restriction): read it again after
+
+-- The last setup read from the real Guild Info, saved per character: used when the game blocks
+-- reading it at login or after a /reload (in a dungeon, in combat), until it can be read again.
+local function SavedSetup()
+    local key = ns.FullName("player")
+    ns.db.chars[key] = ns.db.chars[key] or {}
+    return ns.db.chars[key]
+end
 
 -- Short stable hash for the channel name, so the key itself doesn't show in channel lists.
 local function Hash(text)
@@ -101,6 +110,7 @@ end
 
 -- GuildUnion's setup lines ("GU:g:Exact Guild Name:TAG") in the real Guild Info, to import them.
 function Alliance.ReadGuildUnion()
+    if ns.Guild:Restricted() then return {} end
     local text = (GetGuildInfoText and GetGuildInfoText()) or ""
     local list = {}
     for line in (text .. "\n"):gmatch("(.-)\r?\n") do
@@ -132,6 +142,10 @@ function Alliance:Save(guilds, key)
     end
     if not SetGuildInfoText then
         return false, ns.L["The game doesn't let addons change the Guild Info here."]
+    end
+    -- A blocked read comes back empty: writing then would wipe the rest of the Guild Info.
+    if ns.Guild:Restricted() then
+        return false, ns.L["The game blocks the Guild Info right now (combat or boss). Try again in a moment."]
     end
     local text = Alliance.ReplaceLines(GetGuildInfoText and GetGuildInfoText() or "", lines)
     if #text > Alliance.INFO_MAX then
@@ -222,7 +236,21 @@ function Alliance:Refresh()
     if not ns.Guild:InGuild() then
         config = { guilds = {}, key = nil }
     else
-        config = Alliance.Parse(ns.Guild:GetInfoText())
+        local text = ns.Guild:GetInfoText()
+        if text then
+            infoPending = false
+            config = Alliance.Parse(text)
+            if not ns.Guild:IsSandbox() then
+                SavedSetup().alliance = { guild = ns.Guild:GetName(), guilds = config.guilds, key = config.key }
+            end
+        else
+            -- Blocked for now: keep the current setup (and channel) instead of turning it off.
+            infoPending = true
+            -- Nothing read yet since login: use the setup saved last time, if it's the same guild.
+            local saved = SavedSetup().alliance
+            if configSig ~= "" or not saved or not saved.guild or saved.guild ~= ns.Guild:GetName() then return end
+            config = { guilds = saved.guilds or {}, key = saved.key }
+        end
     end
 
     -- Test mode: follow the test guild's channel (joins, switches or leaves it).
@@ -275,6 +303,16 @@ end
 function Alliance:OnLogin()
     ns.On("GUILD_ROSTER_UPDATE", function() Alliance:Refresh() end)
     ns.On("PLAYER_GUILD_UPDATE", function() Alliance:Refresh() end)
+    -- Read the Guild Info again once a restriction is over (the event comes right before or
+    -- after the change, so look a moment later).
+    local function Retry()
+        if not infoPending then return end
+        C_Timer.After(1, function()
+            if infoPending and not ns.Guild:Restricted() then Alliance:Refresh() end
+        end)
+    end
+    if C_RestrictedActions then ns.On("ADDON_RESTRICTION_STATE_CHANGED", Retry) end
+    ns.On("PLAYER_REGEN_ENABLED", Retry)
 end
 
 -- /taverne ally: what the addon understood from the Guild Info.
