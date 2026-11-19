@@ -150,6 +150,19 @@ local function GuildLine()
     return format(L["Guild: %s"], name)
 end
 
+-- The usual box: a thin tooltip border around a flat background. bg, border: { r, g, b, a },
+-- or nil to set them later.
+local function BoxBackdrop(frame, bg, border)
+    if not frame.SetBackdrop then return end
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    if bg then frame:SetBackdropColor(unpack(bg)) end
+    if border then frame:SetBackdropBorderColor(unpack(border)) end
+end
+
 local function NewPanel()
     local p = CreateFrame("Frame", nil, frame.Inset)
     p:SetPoint("TOPLEFT", 8, -8)
@@ -238,15 +251,7 @@ end
 local function NewTextArea(parent, width, height, maxLetters)
     local holder = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     holder:SetSize(width, height)
-    if holder.SetBackdrop then
-        holder:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        holder:SetBackdropColor(0, 0, 0, 0.5)
-        holder:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
-    end
+    BoxBackdrop(holder, { 0, 0, 0, 0.5 }, { 0.5, 0.5, 0.5, 1 })
     local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
@@ -916,15 +921,7 @@ end
 local function NewDungeonPicker(parent, width, getText, opts)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(width, 26)
-    if b.SetBackdrop then
-        b:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        b:SetBackdropColor(0, 0, 0, 0.7)
-        b:SetBackdropBorderColor(0.75, 0.6, 0.2, 1)
-    end
+    BoxBackdrop(b, { 0, 0, 0, 0.7 }, { 0.75, 0.6, 0.2, 1 })
     b.arrow = b:CreateTexture(nil, "ARTWORK")
     b.arrow:SetSize(20, 20)
     b.arrow:SetPoint("RIGHT", -4, -1)
@@ -1482,15 +1479,7 @@ local function InitBrowseRow(row, data)
         row.gold = CreateFrame("Frame", nil, row, "BackdropTemplate")
         row.gold:SetPoint("TOPLEFT", 0, 1)
         row.gold:SetPoint("BOTTOMRIGHT", 0, -1)
-        if row.gold.SetBackdrop then
-            row.gold:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-            })
-            row.gold:SetBackdropBorderColor(1, 0.82, 0, 1)
-            row.gold:SetBackdropColor(1, 0.82, 0, 0.07)
-        end
+        BoxBackdrop(row.gold, { 1, 0.82, 0, 0.07 }, { 1, 0.82, 0, 1 })
         row.gold:SetFrameLevel(math.max(0, row.body:GetFrameLevel() - 1))
         row.sep = CreateFrame("Frame", nil, row)
         row.sep:SetAllPoints()
@@ -1914,15 +1903,7 @@ local function BuildGroupsPanel()
     fp:SetPoint("RIGHT", p, "RIGHT", -2, 0)
     fp:SetHeight(66)
     -- Set apart from the roles bar above and the list below: a gold frame and a warmer tint.
-    if fp.SetBackdrop then
-        fp:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        fp:SetBackdropColor(1, 0.82, 0, 0.12)
-        fp:SetBackdropBorderColor(1, 0.82, 0, 0.8)
-    end
+    BoxBackdrop(fp, { 1, 0.82, 0, 0.12 }, { 1, 0.82, 0, 0.8 })
     p.filterPanel = fp
 
     -- First line: three switches, short labels (the full meaning in their tooltips).
@@ -2459,13 +2440,7 @@ local function BuildManageView(parent)
     banner:SetPoint("TOPLEFT", 2, -36)
     banner:SetPoint("RIGHT", m, "RIGHT", -2, 0)
     banner:SetHeight(58)
-    if banner.SetBackdrop then
-        banner:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-    end
+    BoxBackdrop(banner)
     banner.icon = banner:CreateTexture(nil, "ARTWORK")
     banner.icon:SetSize(26, 26)
     banner.icon:SetPoint("LEFT", 12, 0)
@@ -3408,15 +3383,7 @@ local function BuildOfficerPanel()
     preview:SetPoint("TOPLEFT", below, "TOPLEFT", 24, -160)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
-    if preview.SetBackdrop then
-        preview:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        preview:SetBackdropColor(0, 0, 0, 0.35)
-        preview:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-    end
+    BoxBackdrop(preview, { 0, 0, 0, 0.35 }, { 0.4, 0.4, 0.4, 1 })
     local previewText = preview:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     previewText:SetPoint("TOPLEFT", 8, -7)
     previewText:SetPoint("BOTTOMRIGHT", -8, 6)
@@ -3682,15 +3649,7 @@ local function InitAllianceRow(row, item)
         row.card = CreateFrame("Frame", nil, row, "BackdropTemplate")
         row.card:SetPoint("TOPLEFT", 0, 0)
         row.card:SetPoint("BOTTOMRIGHT", 0, 2)
-        if row.card.SetBackdrop then
-            row.card:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-            })
-            row.card:SetBackdropColor(1, 0.82, 0, 0.08)
-            row.card:SetBackdropBorderColor(1, 0.82, 0, 0.7)
-        end
+        BoxBackdrop(row.card, { 1, 0.82, 0, 0.08 }, { 1, 0.82, 0, 0.7 })
         row.title = NewLabel(row, nil, "GameFontNormalLarge")
         row.title:SetPoint("LEFT", 10, 1)
         row.side = NewLabel(row, nil, "GameFontHighlightSmall")
@@ -3848,7 +3807,11 @@ local function BuildNetworkPanel()
         local mineKey = (ns.Guild:GetName() or ""):lower()
         local activity = {}
         local function Count(tag, field)
-            local key = tag and byTag[tag:lower()] or mineKey
+            local key = mineKey
+            if tag then
+                key = byTag[tag:lower()]
+                if not key then return end -- a tag no longer in the setup: not my guild's
+            end
             activity[key] = activity[key] or { groups = 0, available = 0 }
             activity[key][field] = activity[key][field] + 1
         end
@@ -4011,15 +3974,7 @@ local function BuildOptionsPanel()
     local bind = CreateFrame("Button", nil, c, "BackdropTemplate")
     bind:SetSize(180, 24)
     bind:SetPoint("TOPLEFT", CONTROL_X, rowY)
-    if bind.SetBackdrop then
-        bind:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        bind:SetBackdropColor(0, 0, 0, 0.7)
-        bind:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-    end
+    BoxBackdrop(bind, { 0, 0, 0, 0.7 }, { 0.6, 0.6, 0.6, 1 })
     local bindText = bind:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     bindText:SetPoint("CENTER")
     bind:SetFontString(bindText)
@@ -4232,7 +4187,7 @@ ns.UIKit = {
     NewPanel = NewPanel, NewButton = NewButton, NewLabel = NewLabel, NewCheckbox = NewCheckbox,
     NewInput = NewInput, NewScrollList = NewScrollList, SetListData = SetListData,
     RowBackground = RowBackground, ClassColored = ClassColored, NewTextArea = NewTextArea,
-    SetPlaceholder = SetPlaceholder,
+    SetPlaceholder = SetPlaceholder, BoxBackdrop = BoxBackdrop,
     ShowTooltip = ShowTooltip, Ago = Ago,
     NewIconButton = NewIconButton, NewInfoIcon = NewInfoIcon, NewPageTitle = NewPageTitle, NewChoice = NewChoice, WithTooltip = WithTooltip,
 }

@@ -928,7 +928,7 @@ function Groups:SyncParty(quiet)
 end
 
 -- roles: [key] = role for me and my party members; invites: array of { name, class, level }
--- composition: only used when the size isn't 5. options: { newbies, discord, discordChannel }
+-- composition: only used when the size isn't 5. options: { newbies, discord, discordChannel, handover (the lead was handed to me) }
 function Groups:Create(dungeon, roles, invites, note, composition, options)
     options = options or {}
     if not self:CanPost() then return end
@@ -965,8 +965,8 @@ function Groups:Create(dungeon, roles, invites, note, composition, options)
     CharDB().listing = listing
     UpdateState(listing)
     self:Broadcast()
-    -- The game's group finder sound when a group gets listed (joining a queue).
-    if SOUNDKIT and SOUNDKIT.PVP_ENTER_QUEUE then PlaySound(SOUNDKIT.PVP_ENTER_QUEUE) end
+    -- The game's group finder sound when I list a group (not when the lead is handed to me).
+    if not options.handover then ns.Sound("posted") end
     -- Same notice as the other guild members get, so the leader sees the group went out.
     if self:AlertMode() ~= "none" then
         ns.Print(format(L["New group: %s by %s"], DungeonWithRange(listing.dungeon), listing.leader))
@@ -1051,7 +1051,7 @@ OnBoth("HANDOVER", function(sender, p, isSelf, scope)
     end
     Groups:Create(p.dungeon, roles, invites, type(p.note) == "string" and p.note or "",
         type(p.composition) == "table" and p.composition or nil, {
-            newbies = p.newbies, discord = p.discord,
+            newbies = p.newbies, discord = p.discord, handover = true,
             discordChannel = type(p.discordChannel) == "string" and p.discordChannel or nil,
         })
     SendTo(scope, "HANDOVER_OK", { id = p.id, to = sender })

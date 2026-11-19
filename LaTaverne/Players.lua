@@ -352,6 +352,7 @@ function Players:NoteAddon(name, class, level)
         local item = memory[key]
         if item then
             item.name, item.class, item.level, item.seen = name, p.class, p.level, p.seen
+            item.missed = nil
         else
             memory[key] = { name = name, class = p.class, level = p.level, seen = p.seen }
         end
@@ -361,16 +362,23 @@ end
 -- After asking who's there: forget the remembered members who left the guild, and the ones
 -- online when asked and still online (the roster says so) who didn't answer: they don't run
 -- La Taverne any more. onlineThen: who was online when the question went out (someone who
--- logged in after it never heard it).
+-- logged in after it never heard it). Silent twice in a row, not once: a busy guild can hold an
+-- answer back past the wait.
 local function ForgetSilent(asked, onlineThen)
     local memory = Memory()
     if not memory or ns.Guild:GetRosterCount() == 0 then return end
     local changed = false
     for key, item in pairs(memory) do
         local member = ns.Guild:GetMember(item.name)
-        if not member or (member.online and onlineThen[key] and (item.seen or 0) < asked) then
+        if not member then
             memory[key] = nil
             changed = true
+        elseif member.online and onlineThen[key] and (item.seen or 0) < asked then
+            item.missed = (item.missed or 0) + 1
+            if item.missed >= 2 then
+                memory[key] = nil
+                changed = true
+            end
         end
     end
     if changed then Changed() end

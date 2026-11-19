@@ -27,8 +27,8 @@ local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 -- Messages that are part of vouching itself are never held.
 Vouch.EXEMPT = { VQ = true, VA = true }
 -- A hello only says someone is online: it never starts a question (every login would send one
--- from each online ally). They're checked once they post or talk.
-Vouch.PASSIVE = { HI = true }
+-- from each online ally). They're checked once they post or talk. Same for "who's inviting?".
+Vouch.PASSIVE = { HI = true, INVITING_Q = true }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer }
 -- state: "checking", "confirmed", "unverified", "denied"; source: "answer", "game", "timeout"
@@ -40,25 +40,30 @@ local answering = {} -- [nameKey] = timer: I'm about to answer a question about 
 -- vouching always starts over, nothing here is trusted.
 local function Memory() return ns.SeenMemory("allySeen") end
 
+local function SameGuild(a, b)
+    return type(a) == "string" and type(b) == "string" and strtrim(a):lower() == strtrim(b):lower()
+end
+
 local function Remember(entry)
     local memory = Memory()
     if not memory then return end
     local key = ns.NameKey(entry.name)
     if entry.state == "denied" then memory[key] = nil return end
     -- Runs on every allied message: update in place, a new table only for someone new.
+    -- checked: they got past a hello at least once (a hello alone only lists them on the
+    -- Alliance page; Find and the name autocomplete want more than a claim).
+    local checked = entry.state ~= nil and entry.state ~= "checking" or nil
     local item = memory[key]
     if item then
+        if not SameGuild(item.guild, entry.guild) then item.checked = nil end
         item.name, item.guild, item.seen = entry.name, entry.guild, entry.seen
+        item.checked = item.checked or checked
     else
-        memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen }
+        memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen, checked = checked }
     end
 end
 
 Vouch.stats = { asked = 0, answered = 0, confirmed = 0, denied = 0, unverified = 0, dropped = 0 }
-
-local function SameGuild(a, b)
-    return type(a) == "string" and type(b) == "string" and strtrim(a):lower() == strtrim(b):lower()
-end
 
 local refreshPending = false
 local function Changed()
@@ -107,8 +112,11 @@ local function Settle(entry, state, by, source)
             ns.Print(L["%s says they're in [%s], but [%s] says no: their messages are ignored."]:format(entry.name, tag, tag))
         end
         if waiting then Vouch.stats.dropped = Vouch.stats.dropped + #waiting end
-    elseif waiting then
-        for _, fn in ipairs(waiting) do fn() end
+    else
+        if entry.seen then Remember(entry) end -- now checked
+        if waiting then
+            for _, fn in ipairs(waiting) do fn() end
+        end
     end
     Changed()
 end
@@ -212,7 +220,7 @@ function Vouch:Find(name)
     -- Heard from and checked (a hello alone isn't): what they claim. Otherwise remembered ones.
     if entry and entry.seen and entry.state then return { name = entry.name, guild = entry.guild } end
     local item = (Memory() or {})[key]
-    if item and ns.Alliance:IsAllied(item.guild) then return { name = item.name, guild = item.guild } end
+    if item and item.checked and ns.Alliance:IsAllied(item.guild) then return { name = item.name, guild = item.guild } end
     return nil
 end
 
@@ -230,7 +238,7 @@ function Vouch:Search(text, limit)
     end
     -- Players seen before this session, offline as far as we know.
     for key, item in pairs(Memory() or {}) do
-        if not players[key] and key:find(needle, 1, true) and ns.Alliance:IsAllied(item.guild) and not ns.Guild:IsMember(item.name) then
+        if not players[key] and item.checked and key:find(needle, 1, true) and ns.Alliance:IsAllied(item.guild) and not ns.Guild:IsMember(item.name) then
             out[#out + 1] = { name = item.name, guild = item.guild, online = false, starts = key:sub(1, #needle) == needle }
         end
     end

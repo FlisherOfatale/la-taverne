@@ -51,6 +51,13 @@ local function Sets()
 end
 Invites.Sets = Sets
 
+-- The sets for a dropdown: { text = name, value = index }.
+local function SetChoices()
+    local out = {}
+    for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
+    return out
+end
+
 -- The set in use.
 function Invites:GetSet()
     return Sets()[Settings().set]
@@ -320,6 +327,20 @@ end
 ns.Comm:On("INVITING", function(sender, p, isSelf) OnRunning(sender, p, isSelf, "guild") end)
 ns.Comm:OnAlly("INVITING", function(sender, p, isSelf) OnRunning(sender, p, isSelf, "ally") end)
 
+-- Who's inviting? Asked when I log in or join a channel, so I don't wait for the next beat
+-- (2 min) to see the others. Runners answer a little spread; one answer covers every question
+-- that came in while it waited.
+local answerTimer
+local function OnAskRunning(sender, p, isSelf)
+    if isSelf or not active or answerTimer then return end
+    answerTimer = C_Timer.NewTimer(0.5 + math.random() * 2.5, function()
+        answerTimer = nil
+        if active then SendRunning(true) end
+    end)
+end
+ns.Comm:On("INVITING_Q", OnAskRunning)
+ns.Comm:OnAlly("INVITING_Q", OnAskRunning)
+
 -- Test mode: pretend two others are inviting, to see the queue page: one on "+1" and "inv"
 -- (the usual set's words: the orange "also uses"), one on "+2" from an allied guild.
 function Invites:FakeRunners(on)
@@ -372,6 +393,15 @@ function Invites:IsAllowed()
     if rule == nil then return true end
     if rule == "off" then return false end
     local _, _, rank = GetGuildInfo("player")
+    -- Just after login the game doesn't know my rank yet: the last one seen on this character.
+    local key = ns.FullName("player")
+    local char = key and ns.db.chars[key]
+    if rank ~= nil and key and not ns.Guild:IsSandbox() then
+        ns.db.chars[key] = char or {}
+        ns.db.chars[key].guildRank = rank
+    elseif rank == nil and IsInGuild() and char then
+        rank = char.guildRank
+    end
     -- Test mode outside a real guild: the test guild has no ranks, count me as guild master.
     if rank == nil and ns.Guild:IsSandbox() then rank = 0 end
     return rank ~= nil and rule[rank] == true
@@ -410,6 +440,12 @@ ns.commands.autoinvite = function() Invites:Toggle() end
 Invites.SendRunning = SendRunning
 
 function Invites:OnLogin()
+    -- Who's inviting? Once the guild can hear me, and on each channel I join.
+    C_Timer.After(10, function() ns.Comm:Send("INVITING_Q", {}) end)
+    ns.Comm:OnReady(function(role)
+        if role == "ally" and ns.Alliance:IsActive() then ns.Comm:SendAlly("INVITING_Q", {})
+        elseif role == "sandbox" then ns.Comm:Send("INVITING_Q", {}) end
+    end)
     -- The officers took it away while it runs: stop.
     ns.Alliance:OnChange(function()
         if active and not Invites:IsAllowed() then
@@ -534,11 +570,7 @@ function ns.BuildInvitesPanel()
     auto:SetScript("OnLeave", function() GameTooltip:Hide() end)
     local setLabel = K.NewLabel(p, L["Keywords"], "GameFontNormal")
     Place(setLabel, PAD_X, ROW1_Y)
-    local setChoice = K.NewChoice(p, COL_W * 2 - 16, function()
-            local out = {}
-            for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
-            return out
-        end, function() return Settings().set end, function(i) Invites:UseSet(i) end,
+    local setChoice = K.NewChoice(p, COL_W * 2 - 16, SetChoices, function() return Settings().set end, function(i) Invites:UseSet(i) end,
         { L["Keywords"], L["The set of keywords you answer to. Each leader can use their own (+1 for one group, +2 for another), or all the same one. Edit them in Settings."] })
     Place(setChoice, ColX(1), ROW1_Y)
 
@@ -589,15 +621,7 @@ function ns.BuildInvitesPanel()
         frame:SetPoint("TOPLEFT", list, "TOPLEFT", -4, 4)
         frame:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", 18, -4)
         frame:SetFrameLevel(column:GetFrameLevel())
-        if frame.SetBackdrop then
-            frame:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
-            })
-            frame:SetBackdropColor(0, 0, 0, 0.35)
-            frame:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-        end
+        K.BoxBackdrop(frame, { 0, 0, 0, 0.35 }, { 0.4, 0.4, 0.4, 1 })
     end
     local left = CreateFrame("Frame", nil, p)
     left:SetPoint("TOPLEFT", 0, ROW2_Y - 46)
@@ -723,9 +747,12 @@ function ns.BuildInvitesSettingsPanel()
     back:SetPoint("TOPRIGHT", -2, -4)
     back:SetScript("OnClick", function() ns.UI:ShowPage("autoinvite") end)
     -- Nothing applies while typing: Save applies the fields, Cancel puts the saved ones back.
-    local dirty = false
+    -- Two kinds of change: the minutes, and the set shown. Picking, adding or deleting a set
+    -- drops unsaved changes to the set shown, not the minutes.
+    local minutesDirty, setDirty = false, false
     local editing = Settings().set or 1 -- the keyword set shown below
-    local function Typed() dirty = true p:Refresh() end
+    local function TypedMinutes() minutesDirty = true p:Refresh() end
+    local function Typed() setDirty = true p:Refresh() end
 
     -- "Turn off after [30] minutes", on one line
     local offLabel = K.NewLabel(p, L["Turn off after"])
@@ -734,7 +761,7 @@ function ns.BuildInvitesSettingsPanel()
     minutes:SetPoint("LEFT", offLabel, "RIGHT", 12, 0)
     minutes:SetNumeric(true)
     minutes:SetJustifyH("CENTER")
-    minutes:SetScript("OnTextChanged", function(_, user) if user then Typed() end end)
+    minutes:SetScript("OnTextChanged", function(_, user) if user then TypedMinutes() end end)
     K.NewLabel(p, L["minutes"]):SetPoint("LEFT", minutes, "RIGHT", 6, 0)
 
     -- Keyword sets: pick one to edit, New, Delete; then its name and its words.
@@ -745,14 +772,10 @@ function ns.BuildInvitesSettingsPanel()
         L["Only a message made of the keyword alone counts: \"inv\" yes, \"who can inv Bob?\" no."],
         L["Not case-sensitive. A final ! or ? is ignored."] })
     setsInfo:SetPoint("LEFT", setsHeader, "RIGHT", 6, 0)
-    local pick = K.NewChoice(p, 200, function()
-            local out = {}
-            for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
-            return out
-        end, function() return editing end, function(i)
+    local pick = K.NewChoice(p, 200, SetChoices, function() return editing end, function(i)
             -- Another set: unsaved changes to this one are dropped.
             editing = i
-            dirty = false
+            setDirty = false
             p:Refresh()
         end)
     pick:SetPoint("TOPLEFT", 12, -108)
@@ -762,7 +785,7 @@ function ns.BuildInvitesSettingsPanel()
         local sets = Sets()
         sets[#sets + 1] = { name = format(L["Set %d"], #sets + 1), words = {} }
         editing = #sets
-        dirty = false
+        setDirty = false
         p:Refresh()
     end)
     local deleteSet = K.NewButton(p, L["Delete"], 100, 24)
@@ -778,7 +801,7 @@ function ns.BuildInvitesSettingsPanel()
         -- Inviting with the deleted set: the others see the words I answer to now.
         if wasInUse and active then SendRunning(true) end
         editing = math.min(editing, #sets)
-        dirty = false
+        setDirty = false
         Changed()
         p:Refresh()
     end)
@@ -824,7 +847,7 @@ function ns.BuildInvitesSettingsPanel()
         minutes:ClearFocus()
         name:ClearFocus()
         words.edit:ClearFocus()
-        dirty = false
+        minutesDirty, setDirty = false, false
         savedAt = GetTime()
         if active and editing == Settings().set then SendRunning(true) end -- the others see my new words
         Changed()
@@ -835,7 +858,7 @@ function ns.BuildInvitesSettingsPanel()
         minutes:ClearFocus()
         name:ClearFocus()
         words.edit:ClearFocus()
-        dirty = false
+        minutesDirty, setDirty = false, false
         p:Refresh()
     end)
 
@@ -847,11 +870,12 @@ function ns.BuildInvitesSettingsPanel()
         if pick.GenerateMenu then pick:GenerateMenu() end
         deleteSet:SetEnabled(#sets > 1)
         -- The saved settings, unless I'm in the middle of changing them.
-        if not dirty then
-            minutes:SetText(tostring(s.autoOff))
+        if not minutesDirty then minutes:SetText(tostring(s.autoOff)) end
+        if not setDirty then
             name:SetText(set.name or "")
             words.edit:SetText(table.concat(set.words, "\n"))
         end
+        local dirty = minutesDirty or setDirty
         save:SetEnabled(dirty)
         cancel:SetEnabled(dirty)
         if dirty then
