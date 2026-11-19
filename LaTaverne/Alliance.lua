@@ -117,14 +117,14 @@ function Alliance.BuildLines(guilds, key)
     return lines
 end
 
--- All of La Taverne's lines for my Guild Info: the alliance's (only with an allied guild or a
--- key: a guild alone needs none), then who may use auto-invite (rule: see GetAutoInvite).
+-- All of La Taverne's lines for my Guild Info: the alliance's (only with an allied guild: a
+-- guild alone needs none, not even a key), then who may use auto-invite (see GetAutoInvite).
 function Alliance.InfoLines(guilds, key, rule)
     local others = 0
     for _, entry in ipairs(guilds) do
         if not ns.Guild:IsMyGuild(entry.name) then others = others + 1 end
     end
-    local lines = (others > 0 or key) and Alliance.BuildLines(guilds, key) or {}
+    local lines = others > 0 and Alliance.BuildLines(guilds, key) or {}
     local ai = Alliance.AutoInviteLine(rule)
     if ai then lines[#lines + 1] = ai end
     return lines

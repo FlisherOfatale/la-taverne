@@ -3491,7 +3491,10 @@ local function BuildOfficerPanel()
         local saved = not dirty and (ns.Alliance:IsActive() and ns.Alliance:GetKey() == draft.key or others == 0) and ruleSaved
         step1:SetText(StepTitle(1, L["Guilds of the Guild Alliance"], others > 0))
         stepRule:SetText(StepTitle(2, L["Who can use auto-invite"], ruleSaved))
-        step2:SetText(StepTitle(3, L["Shared key"], draft.key ~= nil))
+        -- The key only means something with an allied guild in the list: greyed until then.
+        local needKey = others > 0
+        step2:SetText(needKey and StepTitle(3, L["Shared key"], draft.key ~= nil)
+            or ("|cff808080" .. "3. " .. L["Shared key"] .. "|r"))
         step3:SetText(StepTitle(4, L["Save to your Guild Info"], saved))
         -- The rank list sets the height of step 2; the rest follows it.
         rule:Refresh()
@@ -3505,7 +3508,12 @@ local function BuildOfficerPanel()
             banner:SetText("")
         end
 
-        if draft.key then
+        keyButton:SetEnabled(needKey)
+        if not needKey then
+            keyText:SetText("|cff808080" .. L["Add an allied guild first (step 1)."] .. "|r")
+            keyButton:SetText(draft.key and L["Change the key"] or L["Create the key"])
+            keyHint.lines = { L["Shared key"], L["Every guild of the Guild Alliance uses the same key. La Taverne makes one for you."] }
+        elseif draft.key then
             keyText:SetText(draft.key)
             keyButton:SetText(L["Change the key"])
             keyHint.lines = { L["Shared key"], L["Every guild of the Guild Alliance uses the same key. La Taverne makes one for you."],
@@ -3518,7 +3526,7 @@ local function BuildOfficerPanel()
 
         -- Every line La Taverne writes, the auto-invite one included; the box fits them.
         local lines = ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule())
-        previewText:SetText(#lines > 0 and table.concat(lines, "\n") or ("|cff808080" .. L["nothing"] .. "|r"))
+        previewText:SetText(table.concat(lines, "\n"))
         preview:SetHeight(math.max(36, #lines * 14 + 16))
         if dirty then
             previewLabel:SetText(L["Preview of La Taverne's lines in the Guild Info. The rest of the Guild Info stays as it is."])
