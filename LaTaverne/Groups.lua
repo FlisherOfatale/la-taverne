@@ -653,25 +653,28 @@ function Groups:MarkRequestsSeen()
     end
 end
 
+-- Invitations I haven't answered and haven't seen yet.
+local function CountUnseenInvitations()
+    local n = 0
+    for _, l in ipairs(Groups:GetInvitations()) do
+        if not myInviteReplies[l.id] and not seenInvitations[l.id] then n = n + 1 end
+    end
+    return n
+end
+
 -- Things waiting for my answer that I haven't seen yet: join requests to my group, invitations.
 function Groups:CountUnseen()
-    local n = 0
+    local n = CountUnseenInvitations()
     local mine = self:GetMine()
     for key, p in pairs(mine and mine.pending or {}) do
         if p.status == "request" and not seenRequests[key] then n = n + 1 end
-    end
-    for _, l in ipairs(self:GetInvitations()) do
-        if not myInviteReplies[l.id] and not seenInvitations[l.id] then n = n + 1 end
     end
     return n
 end
 
 -- An invitation I haven't answered and haven't seen yet (opening La Taverne goes there).
 function Groups:HasUnseenInvitation()
-    for _, l in ipairs(self:GetInvitations()) do
-        if not myInviteReplies[l.id] and not seenInvitations[l.id] then return true end
-    end
-    return false
+    return CountUnseenInvitations() > 0
 end
 
 -- Matching -------------------------------------------------------------------------------
