@@ -23,9 +23,19 @@ local function IsSecret(value)
     return issecretvalue ~= nil and issecretvalue(value)
 end
 
-local function Enabled()
-    return ns.db and ns.db.allyChat.enabled
+-- GuildUnion shares guild chat too: while both are loaded, one of them should stop, or allied
+-- lines show twice. That's the only time La Taverne's switch shows (Options).
+function AllyChat:CanTurnOff()
+    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+    return loaded and loaded("GuildUnion") and true or false
 end
+
+-- Shared chat is a core part of the alliance: always on, unless turned off while GuildUnion
+-- runs too (an old "off" is ignored once GuildUnion is gone).
+local function Enabled()
+    return ns.db and (ns.db.allyChat.enabled or not AllyChat:CanTurnOff())
+end
+AllyChat.Enabled = function() return Enabled() and true or false end
 
 -- Log of allied lines (saved per account, used for the guild window) -----------------------
 

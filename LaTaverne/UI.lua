@@ -3578,7 +3578,7 @@ local function BuildNetworkPanel()
         L["Guilds linked together: their groups, available players and (if you want) guild chat are shared, as if it were one guild."],
         L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."],
         L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] })
-    -- Top right: the channel and my shared chat setting.
+    -- Top right: the channel.
     local status = NewLabel(p, "", "GameFontHighlight")
     status:SetPoint("TOPRIGHT", -8, -12)
     local statusHit = CreateFrame("Frame", nil, p)
@@ -3586,8 +3586,7 @@ local function BuildNetworkPanel()
     statusHit:EnableMouse(true)
     statusHit:SetScript("OnEnter", function(self)
         ShowTooltip(self, { L["Guild Alliance channel"],
-            L["The hidden channel the allied guilds talk on. Ready: groups, availability and shared chat go through."],
-            L["Shared guild chat: see Options."] })
+            L["The hidden channel the allied guilds talk on. Ready: groups, availability and shared chat go through."] })
     end)
     statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -3625,9 +3624,7 @@ local function BuildNetworkPanel()
 
         local ready = ns.Comm:IsAllyReady()
         status:SetText(L["Channel:"] .. " " .. (ready and (READY_ICON .. " |cff20ff20" .. L["ready"] .. "|r")
-            or (WAIT_ICON .. " |cffff9900" .. L["connecting"] .. "|r"))
-            .. "   |cff808080\194\183|r   " .. L["Shared chat:"] .. " "
-            .. (ns.db.allyChat.enabled and ("|cff20ff20" .. L["on"] .. "|r") or ("|cff808080" .. L["off"] .. "|r")))
+            or (WAIT_ICON .. " |cffff9900" .. L["connecting"] .. "|r")))
 
         -- Players heard from, by guild.
         local byGuild = {}
@@ -3802,7 +3799,8 @@ local function BuildOptionsPanel()
     end
     local SHIFT = 28 * #langChecks -- what comes next moves down
 
-    -- Shared guild chat (personal: only changes what I see and send) ----------
+    -- Shared guild chat: always on. The tag option, and (only while GuildUnion is loaded too)
+    -- a switch to stop it, so allied lines don't show twice --------------------------------
     local chatHeader = NewLabel(p, L["Shared guild chat"], "GameFontNormal")
     chatHeader:SetPoint("TOPLEFT", 8, -206 - SHIFT)
     local chatInfo = NewInfoIcon(p, { L["Shared guild chat"],
@@ -3812,15 +3810,20 @@ local function BuildOptionsPanel()
     local chatOff = NewLabel(p, L["Only with a Guild Alliance."], "GameFontDisableSmall")
     chatOff:SetPoint("LEFT", chatInfo, "RIGHT", 10, 0)
     local allyChat, allyTag
+    allyTag = NewCheckbox(p, L["Show the guild tag on allied messages"], function(self)
+        ns.db.allyChat.showTag = self:GetChecked() and true or false
+    end)
+    allyTag:SetPoint("TOPLEFT", 12, -226 - SHIFT)
     allyChat = NewCheckbox(p, L["Share guild chat with the allied guilds"], function(self)
         ns.db.allyChat.enabled = self:GetChecked() and true or false
         allyTag:SetEnabled(ns.db.allyChat.enabled)
     end)
-    allyChat:SetPoint("TOPLEFT", 12, -226 - SHIFT)
-    allyTag = NewCheckbox(p, L["Show the guild tag on allied messages"], function(self)
-        ns.db.allyChat.showTag = self:GetChecked() and true or false
+    allyChat:SetPoint("TOPLEFT", allyTag, "BOTTOMLEFT", 0, 4)
+    allyChat:SetScript("OnEnter", function(self)
+        ShowTooltip(self, { L["Share guild chat with the allied guilds"],
+            L["Shown because GuildUnion is installed: it shares guild chat too. Keep only one of the two sharing, or allied lines show twice."] })
     end)
-    allyTag:SetPoint("TOPLEFT", allyChat, "BOTTOMLEFT", 20, 4)
+    allyChat:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Error report: always there, so players know where to look --------------------
     local errorHeader = NewLabel(p, L["Error report"], "GameFontNormal")
@@ -3848,10 +3851,11 @@ local function BuildOptionsPanel()
 
         local active = ns.Alliance:IsActive()
         chatOff:SetShown(not active)
+        allyChat:SetShown(ns.AllyChat:CanTurnOff())
         allyChat:SetChecked(ns.db.allyChat.enabled)
         allyTag:SetChecked(ns.db.allyChat.showTag)
         allyChat:SetEnabled(active)
-        allyTag:SetEnabled(active and ns.db.allyChat.enabled)
+        allyTag:SetEnabled(active and ns.AllyChat.Enabled())
 
         local errors = ns.Errors:Count()
         showErrors:SetEnabled(errors > 0)
