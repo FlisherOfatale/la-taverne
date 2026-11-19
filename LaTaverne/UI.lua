@@ -3190,6 +3190,7 @@ local function BuildOfficerPanel()
     local TAG_X = 350 -- x of the "Tag" column in the guild rows
     local draft
     local dirty = false
+    local allyDirty = false -- the Guild Alliance part changed (not only the auto-invite rule)
     local imported = false -- the list shows an imported setup, not saved yet
     -- After Save: the lines we're waiting to read back from the Guild Info (pasted by the
     -- officer). The page stays "not saved" until then.
@@ -3229,7 +3230,7 @@ local function BuildOfficerPanel()
     local ruleLabel = NewLabel(p, L["Who can use auto-invite"])
     ruleLabel:SetPoint("TOPLEFT", 16, -40)
     local Changed -- set below (the rule calls it)
-    local rule = ns.NewAutoInviteRule(p, function() Changed() end)
+    local rule = ns.NewAutoInviteRule(p, function() Changed(true) end)
     rule:SetPoint("TOPLEFT", 280, -34)
 
     -- Guild Alliance: hangs from this anchor, under the rule (whose height follows the ranks).
@@ -3252,8 +3253,9 @@ local function BuildOfficerPanel()
         message:SetText(text and ((isError and "|cffff4040" or "|cff40ff40") .. text .. "|r") or "")
     end
 
-    Changed = function()
+    Changed = function(ruleOnly)
         dirty = true
+        if not ruleOnly then allyDirty = true end
         pending = nil -- changed again after Save: Save again
         p:RefreshDraft()
     end
@@ -3443,6 +3445,9 @@ local function BuildOfficerPanel()
             if not entry.mine then others = others + 1 end
         end
         if others > 0 and not draft.key then return L["Create the shared key first."] end
+        -- "Only some ranks" with none ticked would mean nobody: say so instead of saving it.
+        local r = rule:GetRule()
+        if type(r) == "table" and next(r) == nil then return L["Tick at least one rank, or pick Nobody."] end
         return nil
     end
 
@@ -3479,7 +3484,7 @@ local function BuildOfficerPanel()
     cancelButton:SetScript("OnClick", function()
         draft = ns.Alliance:GetDraft()
         rule:Reset()
-        dirty, imported, pending = false, false, nil
+        dirty, allyDirty, imported, pending = false, false, false, nil
         Say(nil)
         p:Refresh()
     end)
@@ -3546,8 +3551,6 @@ local function BuildOfficerPanel()
         for _, entry in ipairs(draft.guilds) do
             if not entry.mine then others = others + 1 end
         end
-        local ruleSaved = ns.Alliance.AutoInviteLine(rule:GetRule()) == ns.Alliance.AutoInviteLine(ns.Alliance:GetAutoInvite())
-        local saved = not dirty and (ns.Alliance:IsActive() and ns.Alliance:GetKey() == draft.key or others == 0) and ruleSaved
         step1:SetText(PartTitle(L["Member guilds"], others > 0))
         -- The key only means something with an allied guild in the list: greyed until then.
         local needKey = others > 0
@@ -3606,7 +3609,9 @@ local function BuildOfficerPanel()
         end
         saveButton:SetEnabled(dirty)
         cancelButton:SetEnabled(dirty)
-        exportButton:SetEnabled(saved)
+        -- Export: the alliance as saved (the auto-invite rule isn't in it).
+        exportButton:SetEnabled(not allyDirty and not imported and ns.Alliance:IsActive()
+            and ns.Alliance:GetKey() == draft.key)
         -- The whole height, for the scroll: the steps down to the two lines under Save.
         self:SetHeight(34 + rule:GetHeight() + 30 + 84 + list:GetHeight() + 160 + preview:GetHeight() + 10 + 24 + 8 + 44)
     end
@@ -3616,7 +3621,7 @@ local function BuildOfficerPanel()
         if pending then
             local now = ns.Alliance:GetDraft()
             if LinesSig(ns.Alliance.InfoLines(now.guilds, ns.Alliance:GetKey(), ns.Alliance:GetAutoInvite())) == pending then
-                pending, dirty = nil, false
+                pending, dirty, allyDirty = nil, false, false
                 Say(L["Saved: the Guild Info has the new lines."])
                 ns.CloseTextDialog("guildinfo")
             end

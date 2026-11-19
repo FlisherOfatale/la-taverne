@@ -306,6 +306,7 @@ if GetLocale() == "frFR" then
     L["A keyword typed by an allied player in the shared guild chat puts them in the queue. Off: only your guild (their +1 may answer someone in their own guild)."] = "Un mot-clé tapé par un joueur allié dans le chat de guilde partagé le met dans la file. Décoché : seulement votre guilde (son +1 peut répondre à quelqu'un de sa propre guilde)."
     L["Turn off after (minutes)"] = "Désactiver après (minutes)"
     L["Keywords (one per line)"] = "Mots-clés (un par ligne)"
+    L["Tick at least one rank, or pick Nobody."] = "Cochez au moins un rang, ou choisissez Personne."
     L["Clear the results"] = "Effacer les résultats"
     L["Orange: your keywords too."] = "En orange : vos mots-clés aussi."
     L["Two made-up players inviting, one on +1 and inv, one on +2 (auto-invite page)."] = "Deux joueurs inventés qui invitent, un sur +1 et inv, un sur +2 (page Invitation automatique)."

@@ -372,6 +372,8 @@ function Invites:IsAllowed()
     if rule == nil then return true end
     if rule == "off" then return false end
     local _, _, rank = GetGuildInfo("player")
+    -- Test mode outside a real guild: the test guild has no ranks, count me as guild master.
+    if rank == nil and ns.Guild:IsSandbox() then rank = 0 end
     return rank ~= nil and rule[rank] == true
 end
 
@@ -915,7 +917,10 @@ function ns.NewAutoInviteRule(parent, onChange)
     function box:Refresh()
         if mode.GenerateMenu then mode:GenerateMenu() end
         local d = Draft()
-        local count = d.mode == "ranks" and math.min(10, GuildControlGetNumRanks and GuildControlGetNumRanks() or 0) or 0
+        local real = GuildControlGetNumRanks and GuildControlGetNumRanks() or 0
+        -- Test mode outside a real guild: five plain ranks to try it with.
+        if real == 0 and ns.Guild:IsSandbox() then real = 5 end
+        local count = d.mode == "ranks" and math.min(10, real) or 0
         for i, cb in ipairs(rankChecks) do
             local shown = i <= count
             cb:SetShown(shown)
