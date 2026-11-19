@@ -137,7 +137,9 @@ local DEFAULTS = {
         whispers = false, -- also listen to whispers
         allied = false,   -- also listen to the allied guilds (shared guild chat)
         autoOff = 30,     -- minutes before it turns itself off
-        keywords = { "+1", "inv", "invite", "inv pls", "inv plz", "inv svp", "invite moi", "invite me" },
+        -- Keyword sets (sets, set: the one in use) are made in Invites.lua: an array of sets
+        -- here would come back after the player deletes one.
+        guild = true,     -- listen to guild chat
     },     -- recent allied lines, for the guild window: { t, a, c, g, tag, m }
     dev = {
         -- Sandbox: all traffic goes to a private test channel instead of the guild,

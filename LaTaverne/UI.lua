@@ -4100,7 +4100,7 @@ ns.UIKit = {
     RowBackground = RowBackground, ClassColored = ClassColored, NewTextArea = NewTextArea,
     SetPlaceholder = SetPlaceholder,
     ShowTooltip = ShowTooltip, Ago = Ago,
-    NewIconButton = NewIconButton, NewInfoIcon = NewInfoIcon, NewPageTitle = NewPageTitle,
+    NewIconButton = NewIconButton, NewInfoIcon = NewInfoIcon, NewPageTitle = NewPageTitle, NewChoice = NewChoice, WithTooltip = WithTooltip,
 }
 
 -- Window --------------------------------------------------------------------------------

@@ -29,6 +29,39 @@ local function IsSecret(v) return issecretvalue ~= nil and issecretvalue(v) end
 
 local function Settings() return ns.db.invites end
 
+-- Keyword sets: several leaders can invite at once, each with their own words ("+1" for group
+-- 1, "+2" for group 2), or all with the same ones (a free-for-all). Every set is editable.
+-- sets = { { name, words = { ... } } }, set = the one in use.
+local USUAL = { "+1", "inv", "invite", "inv pls", "inv plz", "inv svp", "invite moi", "invite me" }
+local function Sets()
+    local s = Settings()
+    if type(s.sets) ~= "table" or #s.sets == 0 then
+        -- First time (or an old version): the usual words, kept as they were edited, then two
+        -- examples of a set per group.
+        s.sets = {
+            { name = L["Usual keywords"], words = type(s.keywords) == "table" and #s.keywords > 0 and s.keywords or CopyTable(USUAL) },
+            { name = "+1", words = { "+1" } },
+            { name = "+2", words = { "+2" } },
+        }
+        s.set = 1
+    end
+    s.keywords = nil
+    if type(s.set) ~= "number" or not s.sets[s.set] then s.set = 1 end
+    return s.sets
+end
+Invites.Sets = Sets
+
+-- The set in use.
+function Invites:GetSet()
+    return Sets()[Settings().set]
+end
+
+function Invites:UseSet(i)
+    if not Sets()[i] then return end
+    Settings().set = i
+    if self.onChange then self.onChange() end
+end
+
 local function Changed()
     if Invites.onChange then Invites.onChange() end
 end
@@ -45,7 +78,7 @@ function Invites:IsKeyword(text)
     if type(text) ~= "string" or IsSecret(text) or #text > 40 then return false end
     local norm = Normalize(text)
     if norm == "" then return false end
-    for _, word in ipairs(Settings().keywords) do
+    for _, word in ipairs(Invites:GetSet().words) do
         if Normalize(word) == norm then return true end
     end
     return false
@@ -181,6 +214,7 @@ function Invites:OnChat(sender, text, source)
     if source ~= "ally" and not ns.Guild:IsMember(sender) then return end
     -- Allied players only when asked: their "+1" may answer a call in their own guild.
     if source == "ally" and not Settings().allied then return end
+    if source == "guild" and Settings().guild == false then return end
     if GroupKeys()[ns.NameKey(sender)] then return end
     Add(sender, source)
 end
@@ -307,7 +341,7 @@ C_Timer.NewTicker(15, function()
 end)
 
 local function KeywordsText()
-    local words = Settings().keywords
+    local words = Invites:GetSet().words
     local shown = {}
     for i = 1, math.min(#words, 3) do shown[i] = words[i] end
     return table.concat(shown, ", ") .. (#words > 3 and ", ..." or "")
@@ -336,7 +370,7 @@ function ns.BuildInvitesPanel()
     state:SetJustifyH("LEFT")
     state:SetWordWrap(false)
 
-    -- The two session options, side by side.
+    -- Row 1: how invites go out, and the keyword set in use.
     local auto = K.NewCheckbox(p, L["Invite right away"], function(self)
         ns.db.invites.auto = self:GetChecked() and true or false
         Changed()
@@ -346,23 +380,43 @@ function ns.BuildInvitesPanel()
         K.ShowTooltip(self, { L["Invite right away"], L["Ticked: the queue sends the invites on its own. Unticked: they wait for you to click Invite."] })
     end)
     auto:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    local whispers = K.NewCheckbox(p, L["Also listen to whispers"], function(self)
+    local setLabel = K.NewLabel(p, L["Keywords"])
+    setLabel:SetPoint("TOPLEFT", 300, -66)
+    local setChoice = K.NewChoice(p, 200, function()
+            local out = {}
+            for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
+            return out
+        end, function() return Settings().set end, function(i) Invites:UseSet(i) end,
+        { L["Keywords"], L["The set of keywords you answer to. Each leader can use their own (+1 for one group, +2 for another), or all the same one. Edit them in Settings."] })
+    setChoice:SetPoint("LEFT", setLabel, "RIGHT", 10, 0)
+
+    -- Row 2: where to listen.
+    local listenLabel = K.NewLabel(p, L["Listen to"])
+    listenLabel:SetPoint("TOPLEFT", 8, -98)
+    local guild = K.NewCheckbox(p, L["Guild chat"], function(self)
+        ns.db.invites.guild = self:GetChecked() and true or false
+        Changed()
+    end)
+    guild:SetPoint("LEFT", listenLabel, "RIGHT", 10, 0)
+    local whispers = K.NewCheckbox(p, L["Whispers"], function(self)
         ns.db.invites.whispers = self:GetChecked() and true or false
+        Changed()
     end)
-    whispers:SetPoint("TOPLEFT", 300, -60)
+    whispers:SetPoint("LEFT", guild.Text or guild, "RIGHT", 24, 0)
     -- Only with a Guild Alliance.
-    local allied = K.NewCheckbox(p, L["Also listen to the allied guilds"], function(self)
+    local allied = K.NewCheckbox(p, L["Allied guilds"], function(self)
         ns.db.invites.allied = self:GetChecked() and true or false
+        Changed()
     end)
-    allied:SetPoint("TOPLEFT", 540, -60)
+    allied:SetPoint("LEFT", whispers.Text or whispers, "RIGHT", 24, 0)
     allied:SetScript("OnEnter", function(self)
-        K.ShowTooltip(self, { L["Also listen to the allied guilds"],
+        K.ShowTooltip(self, { L["Allied guilds"],
             L["A keyword typed by an allied player in the shared guild chat puts them in the queue. Off: only your guild (their +1 may answer someone in their own guild)."] })
     end)
     allied:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local blocked = K.NewLabel(p, "", "GameFontRedSmall")
-    blocked:SetPoint("TOPLEFT", 8, -92)
+    blocked:SetPoint("TOPLEFT", 8, -124)
     blocked:SetPoint("RIGHT", p, "RIGHT", -8, 0)
     blocked:SetJustifyH("LEFT")
 
@@ -370,10 +424,10 @@ function ns.BuildInvitesPanel()
     -- results on the right.
     local SPLIT = 0.6 -- share of the width for the queue
     local left = CreateFrame("Frame", nil, p)
-    left:SetPoint("TOPLEFT", 0, -110)
+    left:SetPoint("TOPLEFT", 0, -142)
     left:SetPoint("BOTTOM", p, "BOTTOM", 0, 0)
     local right = CreateFrame("Frame", nil, p)
-    right:SetPoint("TOPRIGHT", 0, -110)
+    right:SetPoint("TOPRIGHT", 0, -142)
     right:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT", 16, 0)
     p:SetScript("OnSizeChanged", function(self, w) if w and w > 0 then left:SetWidth(w * SPLIT) end end)
     left:SetWidth(440)
@@ -465,10 +519,14 @@ function ns.BuildInvitesPanel()
                 .. (CountInvited() > 0 and ("  \194\183  " .. L["waiting for the last answers"]) or ""))
         end
         auto:SetChecked(s.auto)
+        if setChoice.GenerateMenu then setChoice:GenerateMenu() end
+        guild:SetChecked(s.guild ~= false)
         whispers:SetChecked(s.whispers)
         allied:SetShown(ns.Alliance:IsActive())
         allied:SetChecked(s.allied == true)
-        local why = Invites.blocked or ""
+        -- Listening to nothing: say so (it's on, but nobody can get in).
+        local deaf = s.guild == false and not s.whispers and not (s.allied and ns.Alliance:IsActive())
+        local why = Invites.blocked or (deaf and L["Not listening anywhere: tick guild chat, whispers or allied guilds."]) or ""
         blocked:SetText(why)
         queueHeader:SetText(#queue > 0 and format(L["Queue (%d)"], #queue) or L["Queue"])
         K.SetListData(box, queue)
@@ -491,8 +549,9 @@ function ns.BuildInvitesSettingsPanel()
     local back = K.NewButton(p, L["Back"], 100, 24)
     back:SetPoint("TOPRIGHT", -2, -4)
     back:SetScript("OnClick", function() ns.UI:ShowPage("autoinvite") end)
-    -- Nothing applies while typing: Save applies both fields, Cancel puts the saved ones back.
+    -- Nothing applies while typing: Save applies the fields, Cancel puts the saved ones back.
     local dirty = false
+    local editing = Settings().set or 1 -- the keyword set shown below
     local function Typed() dirty = true p:Refresh() end
 
     -- "Turn off after [30] minutes", on one line
@@ -505,15 +564,60 @@ function ns.BuildInvitesSettingsPanel()
     minutes:SetScript("OnTextChanged", function(_, user) if user then Typed() end end)
     K.NewLabel(p, L["minutes"]):SetPoint("LEFT", minutes, "RIGHT", 6, 0)
 
-    -- Keywords
-    local wordsHeader = K.NewLabel(p, L["Keywords (one per line)"], "GameFontNormal")
-    wordsHeader:SetPoint("TOPLEFT", 8, -86)
-    local wordsInfo = K.NewInfoIcon(p, { L["Keywords (one per line)"],
+    -- Keyword sets: pick one to edit, New, Delete; then its name and its words.
+    local setsHeader = K.NewLabel(p, L["Keyword sets"], "GameFontNormal")
+    setsHeader:SetPoint("TOPLEFT", 8, -86)
+    local setsInfo = K.NewInfoIcon(p, { L["Keyword sets"],
+        L["Several leaders can invite at once: each picks a set on the queue page. One set per group (+1, +2...), or everyone on the same set for a free-for-all."],
         L["Only a message made of the keyword alone counts: \"inv\" yes, \"who can inv Bob?\" no."],
         L["Not case-sensitive. A final ! or ? is ignored."] })
-    wordsInfo:SetPoint("LEFT", wordsHeader, "RIGHT", 6, 0)
-    local words = K.NewTextArea(p, 260, 200)
-    words:SetPoint("TOPLEFT", 12, -106)
+    setsInfo:SetPoint("LEFT", setsHeader, "RIGHT", 6, 0)
+    local pick = K.NewChoice(p, 200, function()
+            local out = {}
+            for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
+            return out
+        end, function() return editing end, function(i)
+            -- Another set: unsaved changes to this one are dropped.
+            editing = i
+            dirty = false
+            p:Refresh()
+        end)
+    pick:SetPoint("TOPLEFT", 12, -108)
+    local newSet = K.NewButton(p, L["New set"], 110, 24)
+    newSet:SetPoint("LEFT", pick, "RIGHT", 10, 0)
+    newSet:SetScript("OnClick", function()
+        local sets = Sets()
+        sets[#sets + 1] = { name = format(L["Set %d"], #sets + 1), words = {} }
+        editing = #sets
+        dirty = false
+        p:Refresh()
+    end)
+    local deleteSet = K.NewButton(p, L["Delete"], 100, 24)
+    deleteSet:SetPoint("LEFT", newSet, "RIGHT", 6, 0)
+    deleteSet:SetScript("OnClick", function()
+        local sets = Sets()
+        if #sets <= 1 then return end
+        table.remove(sets, editing)
+        -- The set in use moves with the list (or goes back to the first).
+        local s = Settings()
+        if s.set == editing then s.set = 1 elseif s.set > editing then s.set = s.set - 1 end
+        editing = math.min(editing, #sets)
+        dirty = false
+        Changed()
+        p:Refresh()
+    end)
+    K.WithTooltip(deleteSet, { L["Delete"], L["Deletes the set shown. The last one can't be deleted."] })
+
+    local nameLabel = K.NewLabel(p, L["Name"])
+    nameLabel:SetPoint("TOPLEFT", 16, -146)
+    local name = K.NewInput(p, 200, 24)
+    name:SetPoint("LEFT", nameLabel, "RIGHT", 12, 0)
+    name:SetScript("OnTextChanged", function(_, user) if user then Typed() end end)
+
+    local wordsLabel = K.NewLabel(p, L["Keywords (one per line)"])
+    wordsLabel:SetPoint("TOPLEFT", 16, -178)
+    local words = K.NewTextArea(p, 260, 180)
+    words:SetPoint("TOPLEFT", 12, -196)
     words.edit:SetScript("OnTextChanged", function(_, user) if user then Typed() end end)
 
     -- Bottom bar: unsaved changes (or "saved") on the left, Cancel and Save on the right.
@@ -530,21 +634,29 @@ function ns.BuildInvitesSettingsPanel()
     save:SetScript("OnClick", function()
         local n = tonumber(minutes:GetText())
         if n and n >= 1 then ns.db.invites.autoOff = n end
-        local list = {}
-        for line in (words.edit:GetText() .. "\n"):gmatch("(.-)\r?\n") do
-            line = strtrim(line)
-            if line ~= "" then list[#list + 1] = line end
+        local set = Sets()[editing]
+        if set then
+            local list = {}
+            for line in (words.edit:GetText() .. "\n"):gmatch("(.-)\r?\n") do
+                line = strtrim(line)
+                if line ~= "" then list[#list + 1] = line end
+            end
+            set.words = list
+            local typed = strtrim(name:GetText() or "")
+            if typed ~= "" then set.name = typed end
         end
-        if #list > 0 then ns.db.invites.keywords = list end
         minutes:ClearFocus()
+        name:ClearFocus()
         words.edit:ClearFocus()
         dirty = false
         savedAt = GetTime()
+        Changed()
         C_Timer.After(3.1, function() if p:IsShown() then p:Refresh() end end)
         p:Refresh()
     end)
     cancel:SetScript("OnClick", function()
         minutes:ClearFocus()
+        name:ClearFocus()
         words.edit:ClearFocus()
         dirty = false
         p:Refresh()
@@ -552,15 +664,23 @@ function ns.BuildInvitesSettingsPanel()
 
     function p:Refresh()
         local s = ns.db.invites
+        local sets = Sets()
+        if not sets[editing] then editing = s.set or 1 end
+        local set = sets[editing]
+        if pick.GenerateMenu then pick:GenerateMenu() end
+        deleteSet:SetEnabled(#sets > 1)
         -- The saved settings, unless I'm in the middle of changing them.
         if not dirty then
             minutes:SetText(tostring(s.autoOff))
-            words.edit:SetText(table.concat(s.keywords, "\n"))
+            name:SetText(set.name or "")
+            words.edit:SetText(table.concat(set.words, "\n"))
         end
         save:SetEnabled(dirty)
         cancel:SetEnabled(dirty)
         if dirty then
             message:SetText("|cffff9900" .. L["Changes not saved yet."] .. "|r")
+        elseif #set.words == 0 then
+            message:SetText("|cffff9900" .. L["This set has no keywords yet: nobody gets in with it."] .. "|r")
         elseif savedAt and GetTime() - savedAt < 3 then
             message:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff40ff40" .. L["Settings saved."] .. "|r")
         else
