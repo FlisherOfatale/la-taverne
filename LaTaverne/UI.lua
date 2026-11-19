@@ -3047,7 +3047,7 @@ local function BuildPlayersPanel()
             -- button's tooltip says why.
             self.status:SetText("|cffffd100" .. InPartyText(true) .. "|r")
         else
-            self.status:SetText("|cff808080" .. L["You're not available."] .. "|r")
+            self.status:SetText("") -- not available: nothing to say
         end
         self.noteLabel:SetShown(active)
         self.note:SetShown(active)
