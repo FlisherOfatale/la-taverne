@@ -1100,11 +1100,11 @@ function Groups:FindPlayer(name)
     local member = ns.Guild:GetMember(name)
     if member then return member end
     if not ns.Alliance:IsActive() then return nil end
-    local tag = TagFor(name)
-    if tag and ns.Vouch then
-        local known = ns.Vouch:Find(name)
-        return { name = known and known.name or name, tag = tag }
-    end
+    if not ns.Vouch then return nil end
+    -- Heard from this session, or remembered from an earlier one (offline as far as we know).
+    local known = ns.Vouch:Find(name)
+    local tag = TagFor(name) or (known and ns.Alliance:GetTag(known.guild))
+    if tag then return { name = known and known.name or name, tag = tag } end
     return nil
 end
 

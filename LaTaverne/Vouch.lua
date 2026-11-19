@@ -196,11 +196,16 @@ function Vouch:GetGuild(name)
     return entry.guild
 end
 
--- A player we heard from (not denied): { name, guild } with their name as they wrote it.
+-- A player we heard from (not denied), or seen in an earlier session (the name autocomplete
+-- offers them too): { name, guild } with their name as they wrote it.
 function Vouch:Find(name)
-    local entry = players[ns.NameKey(name) or ""]
-    if not entry or not entry.seen or entry.state == "denied" then return nil end
-    return { name = entry.name, guild = entry.guild }
+    local key = ns.NameKey(name) or ""
+    local entry = players[key]
+    if entry and entry.state == "denied" then return nil end
+    if entry and entry.seen then return { name = entry.name, guild = entry.guild } end
+    local item = (Memory() or {})[key]
+    if item and ns.Alliance:IsAllied(item.guild) then return { name = item.name, guild = item.guild } end
+    return nil
 end
 
 -- Allied players we heard from whose name contains the text, for name autocomplete.
