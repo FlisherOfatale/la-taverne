@@ -151,7 +151,8 @@ local function Decorate(button)
     dot:Hide()
 
     local function Update()
-        local unseen = ns.Groups:CountUnseen()
+        -- The glow and count can be turned off in Options.
+        local unseen = ns.db.minimapGlow ~= false and ns.Groups:CountUnseen() or 0
         if unseen > 0 then
             glow:Show()
             if not pulse:IsPlaying() then pulse:Play() end

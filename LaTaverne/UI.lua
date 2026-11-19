@@ -599,7 +599,6 @@ local function NewInfoIcon(parent, lines)
     return b
 end
 
--- Page title, the same on every page: large, top left. info: tooltip lines for a ⓘ after it.
 -- A section of a page: a gold header, smaller than the page title, with a thin line under it
 -- across the page (header.line, shown and hidden with ShowSection).
 local SECTION_FONT = _G.GameFontNormalMed2 and "GameFontNormalMed2" or "GameFontNormal"
@@ -617,6 +616,7 @@ local function ShowSection(header, on)
     header.line:SetShown(on and true or false)
 end
 
+-- Page title, the same on every page: large, top left. info: tooltip lines for a ⓘ after it.
 local function NewPageTitle(parent, text, info)
     local title = NewLabel(parent, text, "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 8, -8)
@@ -3787,18 +3787,73 @@ local function SaveKeyBindings()
     if SaveBindings and GetCurrentBindingSet then SaveBindings(GetCurrentBindingSet()) end
 end
 
+-- Options: one column of sections (General, Minimap, Alerts, Shared guild chat), labels on the
+-- left and their control at CONTROL_X; the error report and the version on the bottom line.
+local CONTROL_X = 280
+local OPTION_ROW, OPTION_GAP = 28, 38 -- between two rows; between a section's last row and the next header
+
+-- A dropdown of the game's style: choices = { { text, value } }, get() and set(value).
+local function NewChoice(parent, width, choices, get, set, tooltip)
+    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    dd:SetWidth(width)
+    dd:SetupMenu(function(_, root)
+        for _, choice in ipairs(type(choices) == "function" and choices() or choices) do
+            root:CreateRadio(choice.text, function() return get() == choice.value end, function() set(choice.value) end)
+        end
+    end)
+    if tooltip then
+        dd:SetScript("OnEnter", function(self) ShowTooltip(self, tooltip) end)
+        dd:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    return dd
+end
+
+local function WithTooltip(widget, lines)
+    widget:SetScript("OnEnter", function(self) ShowTooltip(self, lines) end)
+    widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return widget
+end
+
+-- The chat windows a line can go to: the main one, then each other window that exists.
+local function ChatWindowChoices()
+    local out = { { text = L["Main chat window"], value = 0 } }
+    for i = 2, (NUM_CHAT_WINDOWS or 10) do
+        local name, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(i)
+        if name and name ~= "" and (shown or docked) then out[#out + 1] = { text = name, value = i } end
+    end
+    return out
+end
+
+local SCALES = { 0.8, 0.9, 1, 1.1, 1.2, 1.3 }
+
 local function BuildOptionsPanel()
     local p = NewPanel()
     NewPageTitle(p, L["Options"])
+    local y = -40
+
+    -- Section helpers: a header, then rows going down.
+    local function Section(text)
+        local header = NewSectionHeader(p, text)
+        header:SetPoint("TOPLEFT", 8, y)
+        y = y - 28
+        return header
+    end
+    local function Row(label)
+        local rowY = y
+        if label then NewLabel(p, label):SetPoint("TOPLEFT", 16, rowY - 4) end
+        y = y - OPTION_ROW
+        return rowY
+    end
+    local function EndSection() y = y - (OPTION_GAP - OPTION_ROW) end
 
     -- General ------------------------------------------------------------------
-    NewLabel(p, L["General"], "GameFontNormal"):SetPoint("TOPLEFT", 8, -40)
+    Section(L["General"])
 
     -- Keyboard shortcut: click, then press a key. Dark like the game's key binding buttons.
-    NewLabel(p, L["Shortcut to open La Taverne"]):SetPoint("TOPLEFT", 16, -66)
+    local rowY = Row(L["Shortcut to open La Taverne"])
     local bind = CreateFrame("Button", nil, p, "BackdropTemplate")
     bind:SetSize(180, 24)
-    bind:SetPoint("TOPLEFT", 280, -60)
+    bind:SetPoint("TOPLEFT", CONTROL_X, rowY)
     if bind.SetBackdrop then
         bind:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -3813,10 +3868,7 @@ local function BuildOptionsPanel()
     bind:SetFontString(bindText)
     bind:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
     bind:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    bind:SetScript("OnEnter", function(self)
-        ShowTooltip(self, { L["Shortcut to open La Taverne"], L["Click to change, right-click to remove. Escape cancels."] })
-    end)
-    bind:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    WithTooltip(bind, { L["Shortcut to open La Taverne"], L["Click to change, right-click to remove. Escape cancels."] })
 
     local function StopWaiting()
         bind.waiting = false
@@ -3851,121 +3903,150 @@ local function BuildOptionsPanel()
     end)
     bind:SetScript("OnHide", StopWaiting)
 
-    -- Minimap button
+    -- Window size, and back to the middle of the screen.
+    rowY = Row(L["Window size"])
+    local scaleChoices = {}
+    for _, s in ipairs(SCALES) do scaleChoices[#scaleChoices + 1] = { text = format("%d %%", math.floor(s * 100 + 0.5)), value = s } end
+    local scale = NewChoice(p, 110, scaleChoices, function() return ns.db.scale or 1 end,
+        function(s) UI:SetScale(s) end)
+    scale:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
+    local resetPos = NewButton(p, L["Recenter the window"], 160)
+    resetPos:SetPoint("LEFT", scale, "RIGHT", 10, 0)
+    resetPos:SetScript("OnClick", function() UI:ResetPosition() end)
+
+    -- Which chat window gets La Taverne's lines.
+    rowY = Row(L["La Taverne messages in"])
+    local chatWindow = NewChoice(p, 180, ChatWindowChoices, function() return ns.ChatWindow() and ns.db.chatWindow or 0 end,
+        function(i)
+            ns.db.chatWindow = i ~= 0 and i or nil
+            ns.Print(L["La Taverne messages show here."])
+        end,
+        { L["La Taverne messages in"], L["New groups, join requests, invitations... Chat windows you made yourself are listed too."] })
+    chatWindow:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
+
+    -- Dungeon names in the other languages (one switch per language, not the client's own).
+    local langChecks = {}
+    for _, lang in ipairs(ns.OtherDungeonLanguages()) do
+        rowY = Row()
+        local cb = NewCheckbox(p, format(L["Also show dungeon names in %s, in tooltips"], L[lang.name]), function(self)
+            ns.db.dungeonLanguages = ns.db.dungeonLanguages or {}
+            ns.db.dungeonLanguages[lang.key] = self:GetChecked() and true or nil
+        end)
+        cb:SetPoint("TOPLEFT", 12, rowY + 2)
+        WithTooltip(cb, { cb.Text and cb.Text:GetText() or "",
+            L["Hover a dungeon (lists, group titles, players) to see its name there too. Handy with players who use the game in another language."] })
+        cb.key = lang.key
+        langChecks[#langChecks + 1] = cb
+    end
+    EndSection()
+
+    -- Minimap ------------------------------------------------------------------
+    Section(L["Minimap"])
+    rowY = Row()
     local minimap = NewCheckbox(p, L["Show the minimap button"], function(self)
         ns.db.minimap.hide = not self:GetChecked()
         local icon = LibStub("LibDBIcon-1.0")
         if ns.db.minimap.hide then icon:Hide(ADDON) else icon:Show(ADDON) end
     end)
-    minimap:SetPoint("TOPLEFT", 12, -94)
+    minimap:SetPoint("TOPLEFT", 12, rowY + 2)
     -- The game's add-on drawer by the minimap (only when the game has one).
     local drawer = NewCheckbox(p, L["Show in the add-on drawer"], function(self)
         ns.Minimap:SetInDrawer(self:GetChecked())
     end)
-    drawer:SetPoint("TOPLEFT", 276, -94)
-    drawer:SetScript("OnEnter", function(self)
-        ShowTooltip(self, { L["Show in the add-on drawer"],
-            L["The game's button by the minimap that lists your add-ons."] })
+    drawer:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
+    WithTooltip(drawer, { L["Show in the add-on drawer"], L["The game's button by the minimap that lists your add-ons."] })
+    rowY = Row()
+    local glow = NewCheckbox(p, L["Glow and count on the button when something waits for you"], function(self)
+        ns.db.minimapGlow = self:GetChecked() and true or false
+        if ns.Minimap.Update then ns.Minimap.Update() end
     end)
-    drawer:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    glow:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(glow, { L["Glow and count on the button when something waits for you"],
+        L["Someone asks to join your group, or a group invites you. Opening the page that shows it stops the glow."] })
+    EndSection()
 
-    -- Group finder -------------------------------------------------------------
-    NewLabel(p, L["Group finder"], "GameFontNormal"):SetPoint("TOPLEFT", 8, -136)
+    -- Alerts -------------------------------------------------------------------
+    Section(L["Alerts"])
     -- New groups: a chat line for all of them, only those that fit me, or none
-    NewLabel(p, L["Tell me about new groups"]):SetPoint("TOPLEFT", 16, -164)
-    local ALERT_MODES = {
-        { key = "all", text = L["All groups"] },
-        { key = "fit", text = L["Only groups that fit me"] },
-        { key = "none", text = L["None"] },
-    }
-    local alerts = CreateFrame("DropdownButton", nil, p, "WowStyle1DropdownTemplate")
-    alerts:SetPoint("TOPLEFT", 280, -158)
-    alerts:SetWidth(220)
-    alerts:SetupMenu(function(_, root)
-        for _, mode in ipairs(ALERT_MODES) do
-            root:CreateRadio(mode.text,
-                function() return ns.Groups:AlertMode() == mode.key end,
-                function() ns.db.alerts = mode.key end)
-        end
-    end)
-    alerts:SetScript("OnEnter", function(self)
-        ShowTooltip(self, { L["Tell me about new groups"],
+    rowY = Row(L["Tell me about new groups"])
+    local alerts = NewChoice(p, 220, {
+            { text = L["All groups"], value = "all" },
+            { text = L["Only groups that fit me"], value = "fit" },
+            { text = L["None"], value = "none" },
+        }, function() return ns.Groups:AlertMode() end, function(mode) ns.db.alerts = mode end,
+        { L["Tell me about new groups"],
             L["A chat line when a guild member posts a group. Fit me: it needs one of the roles you ticked in the group list, and the dungeon is at your level."] })
-    end)
-    alerts:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    alerts:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
     local alertSound = NewCheckbox(p, L["With a sound"], function(self)
         ns.db.alertSound = self:GetChecked() and true or nil
     end)
     alertSound:SetPoint("LEFT", alerts, "RIGHT", 12, 0)
-
-    -- Dungeon names in the other languages (one switch per language, not the client's own).
-    local langChecks = {}
-    for i, lang in ipairs(ns.OtherDungeonLanguages()) do
-        local cb = NewCheckbox(p, format(L["Also show dungeon names in %s, in tooltips"], L[lang.name]), function(self)
-            ns.db.dungeonLanguages = ns.db.dungeonLanguages or {}
-            ns.db.dungeonLanguages[lang.key] = self:GetChecked() and true or nil
-        end)
-        cb:SetPoint("TOPLEFT", 12, -188 - (i - 1) * 28)
-        cb:SetScript("OnEnter", function(self)
-            ShowTooltip(self, { self.Text and self.Text:GetText() or "",
-                L["Hover a dungeon (lists, group titles, players) to see its name there too. Handy with players who use the game in another language."] })
-        end)
-        cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        cb.key = lang.key
-        langChecks[#langChecks + 1] = cb
-    end
-    local SHIFT = 28 * #langChecks -- what comes next moves down
+    rowY = Row()
+    local requestSound = NewCheckbox(p, L["A sound when someone asks to join my group"], function(self)
+        ns.db.requestSound = self:GetChecked() and true or false
+    end)
+    requestSound:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(requestSound, { L["A sound when someone asks to join my group"],
+        L["Also when a player accepts your invitation. The chat line is always there."] })
+    rowY = Row()
+    local quiet = NewCheckbox(p, L["Quiet in dungeons, raids and combat"], function(self)
+        ns.db.quiet = self:GetChecked() and true or nil
+    end)
+    quiet:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(quiet, { L["Quiet in dungeons, raids and combat"],
+        L["No new group alerts and no sounds there. Join requests and invitations still show in the chat."] })
+    EndSection()
 
     -- Shared guild chat: always on. The tag option, and (only while GuildUnion is loaded too)
     -- a switch to stop it, so allied lines don't show twice --------------------------------
-    local chatHeader = NewLabel(p, L["Shared guild chat"], "GameFontNormal")
-    chatHeader:SetPoint("TOPLEFT", 8, -206 - SHIFT)
+    local chatHeader = Section(L["Shared guild chat"])
     local chatInfo = NewInfoIcon(p, { L["Shared guild chat"],
         L["Messages from the allied guilds show up in your guild chat, and yours in theirs."],
         L["Only with a Guild Alliance."] })
     chatInfo:SetPoint("LEFT", chatHeader, "RIGHT", 6, 0)
     local chatOff = NewLabel(p, L["Only with a Guild Alliance."], "GameFontDisableSmall")
     chatOff:SetPoint("LEFT", chatInfo, "RIGHT", 10, 0)
-    local allyChat, allyTag
-    allyTag = NewCheckbox(p, L["Show the guild tag on allied messages"], function(self)
+    rowY = Row()
+    local allyTag = NewCheckbox(p, L["Show the guild tag on allied messages"], function(self)
         ns.db.allyChat.showTag = self:GetChecked() and true or false
     end)
-    allyTag:SetPoint("TOPLEFT", 12, -226 - SHIFT)
-    allyChat = NewCheckbox(p, L["Share guild chat with the allied guilds"], function(self)
+    allyTag:SetPoint("TOPLEFT", 12, rowY + 2)
+    local allyChat = NewCheckbox(p, L["Share guild chat with the allied guilds"], function(self)
         ns.db.allyChat.enabled = self:GetChecked() and true or false
         allyTag:SetEnabled(ns.db.allyChat.enabled)
     end)
-    allyChat:SetPoint("TOPLEFT", allyTag, "BOTTOMLEFT", 0, 4)
-    allyChat:SetScript("OnEnter", function(self)
-        ShowTooltip(self, { L["Share guild chat with the allied guilds"],
-            L["Shown because GuildUnion is installed: it shares guild chat too. Keep only one of the two sharing, or allied lines show twice."] })
-    end)
-    allyChat:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    allyChat:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
+    WithTooltip(allyChat, { L["Share guild chat with the allied guilds"],
+        L["Shown because GuildUnion is installed: it shares guild chat too. Keep only one of the two sharing, or allied lines show twice."] })
 
-    -- Error report: always there, so players know where to look --------------------
-    local errorHeader = NewLabel(p, L["Error report"], "GameFontNormal")
-    errorHeader:SetPoint("TOPLEFT", 8, -300 - SHIFT)
-    local errorCount = NewLabel(p, "", "GameFontHighlight")
-    errorCount:SetPoint("TOPLEFT", 16, -326 - SHIFT)
-    local showErrors = NewButton(p, L["Show the error report"], 200)
-    showErrors:SetPoint("TOPLEFT", 280, -320 - SHIFT)
+    -- Bottom line: the error report (always there, so players know where to look), and the
+    -- version (to say which one you have when reporting a problem).
+    local errorCount = NewLabel(p, "", "GameFontHighlightSmall")
+    errorCount:SetPoint("BOTTOMLEFT", 16, 12)
+    local showErrors = NewButton(p, L["Show the error report"], 180)
+    showErrors:SetPoint("LEFT", errorCount, "RIGHT", 12, 0)
     showErrors:SetScript("OnClick", function() ns.Errors:Show() end)
-    local clearErrors = NewButton(p, L["Clear"], 100)
-    clearErrors:SetPoint("LEFT", showErrors, "RIGHT", 8, 0)
+    local clearErrors = NewButton(p, L["Clear"], 80)
+    clearErrors:SetPoint("LEFT", showErrors, "RIGHT", 6, 0)
     clearErrors:SetScript("OnClick", function()
         ns.Errors:Clear()
         p:Refresh()
     end)
-    -- The version, at the bottom (to say which one you have when reporting a problem).
     local version = NewLabel(p, "La Taverne " .. (ns.version or "?"), "GameFontDisableSmall")
-    version:SetPoint("TOPLEFT", 16, -366 - SHIFT)
+    version:SetPoint("BOTTOMRIGHT", -12, 12)
+
     function p:Refresh()
         if not bind.waiting then bind:SetText(BindingText()) end
-        if alerts.GenerateMenu then alerts:GenerateMenu() end
-        alertSound:SetChecked(ns.db.alertSound == true)
+        for _, dd in ipairs({ scale, chatWindow, alerts }) do
+            if dd.GenerateMenu then dd:GenerateMenu() end
+        end
         minimap:SetChecked(not ns.db.minimap.hide)
         drawer:SetShown(ns.Minimap:HasDrawer())
         drawer:SetChecked(ns.db.inDrawer ~= false)
+        glow:SetChecked(ns.db.minimapGlow ~= false)
+        alertSound:SetChecked(ns.db.alertSound == true)
+        requestSound:SetChecked(ns.db.requestSound ~= false)
+        quiet:SetChecked(ns.db.quiet == true)
         for _, cb in ipairs(langChecks) do cb:SetChecked((ns.db.dungeonLanguages or {})[cb.key] == true) end
 
         local active = ns.Alliance:IsActive()
@@ -4226,6 +4307,7 @@ local function CreateMainFrame()
     frame = CreateFrame("Frame", "LaTaverneFrame", UIParent, "ButtonFrameTemplate")
     frame:SetSize(780, 580)
     frame:SetPoint("CENTER", -20, 0)
+    frame:SetScale(ns.db.scale or 1) -- window size, from Options
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     -- Keep the side tabs on screen too.
@@ -4410,6 +4492,28 @@ end
 function UI:Open()
     if not frame then CreateMainFrame() end
     frame:Show()
+end
+
+-- Window size (Options): the scale, kept. The window stays centered on the same point.
+function UI:SetScale(scale)
+    ns.db.scale = scale ~= 1 and scale or nil
+    if not frame then return end
+    local x, y = frame:GetCenter()
+    local old = frame:GetEffectiveScale()
+    frame:SetScale(scale)
+    if x and y then
+        local ratio = old / frame:GetEffectiveScale()
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * ratio, y * ratio)
+    end
+end
+
+-- Back to the middle of the screen (Options).
+function UI:ResetPosition()
+    if not frame then return end
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", -20, 0)
+    if frame.SetUserPlaced then frame:SetUserPlaced(false) end
 end
 
 function UI:ShowAutoInvite()
