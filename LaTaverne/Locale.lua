@@ -627,7 +627,6 @@ if GetLocale() == "frFR" then
     L["You're not available."] = "Vous n'êtes pas disponible."
     L["Available for %d more min"] = "Disponible encore %d min"
     L["Available until you log out"] = "Disponible jusqu'à la déconnexion"
-    L["Change..."] = "Modifier..."
     L["Available players (%d)"] = "Joueurs disponibles (%d)"
     L["Nobody is available right now."] = "Personne n'est disponible pour le moment."
     L["Other members online (%d)"] = "Autres membres en ligne (%d)"

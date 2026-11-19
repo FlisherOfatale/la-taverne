@@ -2999,12 +2999,14 @@ local function BuildPlayersPanel()
     p.avail:SetScript("OnClick", function() OpenAvailability() end)
     p.avail:SetScript("OnEnter", function(self) AvailabilityTooltip(self) end)
     p.avail:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    p.stop = NewButton(p, L["Stop"], 100)
-    p.stop:SetPoint("TOPRIGHT", -2, -4)
-    p.stop:SetScript("OnClick", function() ns.Players:Stop(L["You're no longer available."]) end)
-    p.change = NewButton(p, L["Change..."], 120)
-    p.change:SetPoint("RIGHT", p.stop, "LEFT", -6, 0)
+    -- Available: "My availability" in green at the top right (the form, like My group on the
+    -- Groups tab), and Stop under the note in my section.
+    p.change = NewButton(p, "|cff20ff20" .. L["My availability"] .. "|r", 160)
+    p.change:SetPoint("TOPRIGHT", -2, -4)
     p.change:SetScript("OnClick", function() OpenAvailability() end)
+    p.stop = NewButton(p, L["Stop"], 100)
+    p.stop:SetPoint("TOPLEFT", 76, -122)
+    p.stop:SetScript("OnClick", function() ns.Players:Stop(L["You're no longer available."]) end)
 
     -- While available: a "My availability" section (status line, note). In a group: the status
     -- line alone. Otherwise nothing: the page starts with the lists.
@@ -3043,7 +3045,7 @@ local function BuildPlayersPanel()
         self.status:ClearAllPoints()
         self.status:SetPoint("TOPLEFT", 8, available and -68 or -40)
         self.status:SetPoint("RIGHT", self, "RIGHT", -8, 0)
-        local y = available and -132 or ((self.status:GetText() or "") ~= "" and -72 or -40)
+        local y = available and -160 or ((self.status:GetText() or "") ~= "" and -72 or -40)
         ShowSection(self.demandHeader, showDemand)
         self.anyLine:SetShown(showDemand)
         self.demand:SetShown(showDemand and demandRows > 0)
