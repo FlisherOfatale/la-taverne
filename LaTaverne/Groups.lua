@@ -970,6 +970,7 @@ function Groups:Create(dungeon, roles, invites, note, composition, options)
         ns.Print(format(L["New group: %s by %s"], DungeonWithRange(listing.dungeon), listing.leader))
     end
     Changed()
+    return true
 end
 
 function Groups:Delist()

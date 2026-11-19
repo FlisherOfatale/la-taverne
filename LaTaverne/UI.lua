@@ -2142,7 +2142,7 @@ local function BuildCreateForm(parent)
     -- Reset only shows when there's something to clear: a dungeon, my role, players added,
     -- roles given to party members, a changed mix, a note, an option.
     local function UpdateReset()
-        local dirty = f.dungeon or (f.myRole and f.myRole ~= ns.Groups:GetLastRole()) or next(f.extra) or next(f.partyRoles) or f.mixChanged
+        local dirty = f.dungeon or f.myRole ~= ns.Groups:GetLastRole() or next(f.extra) or next(f.partyRoles) or f.mixChanged
             or f.newbies:GetChecked() or f.discord:GetChecked()
             or strtrim(note:GetText() or "") ~= "" or strtrim(f.discordChannel:GetText() or "") ~= ""
         reset:SetShown(dirty and true or false)
@@ -2363,11 +2363,12 @@ local function BuildCreateForm(parent)
         local default = ns.Groups.DEFAULT_COMPOSITION[Size()]
         local composition = (default and not SameMix(f.mix, default)) and CopyTable(f.mix) or nil
 
-        ns.Groups:Create(f.dungeon, roles, f.extra, strtrim(note:GetText() or ""), composition, {
+        local posted = ns.Groups:Create(f.dungeon, roles, f.extra, strtrim(note:GetText() or ""), composition, {
             newbies = f.newbies:GetChecked(),
             discord = f.discord:GetChecked(),
             discordChannel = f.discordChannel:GetText(),
         })
+        if not posted then return end
         ns.Groups:SetLastRole(f.myRole) -- the next form starts with it
         -- My group says it went out (see BuildManageView).
         UI.justPosted = GetTime()
