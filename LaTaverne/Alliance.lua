@@ -175,16 +175,19 @@ function Alliance.ValidTag(tag)
     return type(tag) == "string" and #strtrim(tag) >= 1 and #strtrim(tag) <= 6 and not tag:find("[:;\n|%s]")
 end
 
--- Save the setup: the alliance (guilds, key) and who may use auto-invite (rule). Test mode
--- writes the fake Guild Info. In a real guild the game forbids addons to change the Guild Info
--- (SetGuildInfoText is protected), so this returns the whole new Guild Info text for the
--- officer to paste: ok, error text, text to paste.
+-- Save the setup: the alliance (guilds, key) and who may use auto-invite (rule). The game
+-- forbids addons to change the Guild Info (SetGuildInfoText is protected), so this returns the
+-- whole new Guild Info text for the officer to paste: ok, error text, text to paste. Test mode
+-- does the same with the test Guild Info (pasted in the test guild window), so the officer's
+-- steps can be tried.
 function Alliance:Save(guilds, key, rule)
     local lines = Alliance.InfoLines(guilds, key, rule)
     if ns.Guild:IsSandbox() then
-        ns.db.dev.infoText = Alliance.ReplaceLines(ns.db.dev.infoText or "", lines, true)
-        self:Refresh()
-        return true
+        local text = Alliance.ReplaceLines(ns.db.dev.infoText or "", lines, true)
+        if #text > Alliance.INFO_MAX then
+            return false, ns.L["The Guild Info would be too long (%d / %d)."]:format(#text, Alliance.INFO_MAX)
+        end
+        return true, nil, text
     end
     if not (CanEditGuildInfo and CanEditGuildInfo()) then
         return false, ns.L["You can't edit the Guild Info."]

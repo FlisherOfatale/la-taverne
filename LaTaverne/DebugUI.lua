@@ -347,7 +347,7 @@ local function BuildWindow()
         if ns.Alliance:IsActive() then
             allianceText:SetText("|cff40ff40" .. L["Allied with: %s"]:format(table.concat(guilds, ", ")) .. "|r")
         else
-            allianceText:SetText("|cff808080" .. L["No Guild Alliance: set it up on the Alliance tab, Setup page, or type LT: lines here."] .. "|r")
+            allianceText:SetText("|cff808080" .. L["No Guild Alliance: set it up on the Setup tab, or type LT: lines here."] .. "|r")
         end
 
         if ns.Alliance:GetTestKey() then

@@ -3200,11 +3200,9 @@ local function BuildOfficerPanel()
     end
 
     NewPageTitle(outer, L["Setup"], { L["Setup"],
-        L["Only players who can edit the Guild Info see this page."],
+        L["What La Taverne writes in the Guild Info: the Guild Alliance, and who can use auto-invite."],
+        L["Only players who can edit the Guild Info see this tab."],
         L["Set up the guilds once, then send the setup to an officer of each allied guild (Export, then Import on their side)."] })
-    local back = NewButton(outer, L["Back"], 100, 24)
-    back:SetPoint("TOPRIGHT", -2, -4)
-    back:SetScript("OnClick", function() UI:ShowPage("network") end)
 
 
 
@@ -3406,18 +3404,17 @@ local function BuildOfficerPanel()
         elseif paste then
             -- Real guild: the game won't let addons write the Guild Info, the officer pastes it.
             -- The page follows on its own once the new lines are in the Guild Info.
+            -- Test mode: the same window, pasted in the test guild window's Guild Info instead.
             dirty, imported = false, false
             Say(L["Paste the text into the Guild Info: La Taverne reads it on its own a few seconds later."])
             ns.TextDialog({
                 title = L["Paste into the Guild Info"],
-                hint = L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."],
+                hint = ns.Guild:IsSandbox()
+                    and L["Test mode: the same steps as in a real guild. Press Ctrl+C to copy this text, then in the test guild window (button above the window), select all of its Guild Info (Ctrl+A), paste (Ctrl+V) and click Save."]
+                    or L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."],
                 text = paste,
                 selectAll = true,
             })
-        else
-            dirty, imported = false, false
-            Say(L["Saved to the test guild's Guild Info."])
-            C_Timer.After(2.2, function() if p:IsShown() then p:Refresh() end end)
         end
         p:Refresh()
     end)
@@ -3433,7 +3430,7 @@ local function BuildOfficerPanel()
     exportButton:SetScript("OnClick", function()
         ns.TextDialog({
             title = L["Export the Guild Alliance setup"],
-            hint = L["Press Ctrl+C to copy, then send it to an officer of each allied guild (whisper, Discord...). In their guild they open La Taverne, Alliance tab, Setup page, Import, paste it, then Save. They can also paste these lines at the end of their Guild Info by hand."],
+            hint = L["Press Ctrl+C to copy, then send it to an officer of each allied guild (whisper, Discord...). In their guild they open La Taverne, Setup tab, Import, paste it, then Save. They can also paste these lines at the end of their Guild Info by hand."],
             text = table.concat(ns.Alliance.BuildLines(draft.guilds, draft.key), "\n"),
             selectAll = true,
         })
@@ -3717,7 +3714,7 @@ local function BuildNetworkPanel()
     -- Not set up yet: a short explanation, and the way to the setup for officers.
     local empty = NewLabel(p, L["Your guild isn't linked to other guilds yet."], "GameFontDisable")
     empty:SetPoint("TOP", 0, -120)
-    local emptyHint = NewLabel(p, L["Officers set it up on the Setup page."], "GameFontDisableSmall")
+    local emptyHint = NewLabel(p, L["Officers set it up on the Setup tab."], "GameFontDisableSmall")
     emptyHint:SetPoint("TOP", empty, "BOTTOM", 0, -6)
     local setup = NewButton(p, L["Set up the Guild Alliance"], 220)
     setup:SetPoint("TOP", emptyHint, "BOTTOM", 0, -12)
@@ -3743,7 +3740,7 @@ local function BuildNetworkPanel()
         empty:SetText(L["Your guild isn't linked to other guilds yet."])
         setup:SetShown(not active and ns.Guild:IsOfficer() and true or false)
         emptyHint:SetText(ns.Guild:IsOfficer() and L["You can set it up: you can edit the Guild Info."]
-            or L["Officers set it up on the Setup page."])
+            or L["Officers set it up on the Setup tab."])
         if not active then return end
 
         status:SetText(L["Channel:"] .. " " .. ns.Comm:AllyStatusText())
@@ -4179,12 +4176,16 @@ local SECTIONS = {
       pages = { "players" } },
     -- The Guild Alliance; its Setup page only for players who can edit the Guild Info.
     { key = "network", label = "Alliance", icon = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
-      pages = { "network", "officers" } },
+      pages = { "network" } },
     -- Auto-invite: a horn, calling people in.
     { key = "autoinvite", label = "Auto-invite",
       icon = { "Interface\\Icons\\INV_Misc_Horn_01", "Interface\\Icons\\Ability_Warrior_BattleShout" },
       pages = { "autoinvite", "autoinviteSettings" } },
-    -- Pinned to the bottom of the side bar, last one lowest.
+    -- Pinned to the bottom of the side bar, last one lowest. Setup: players who can edit the
+    -- Guild Info only; everything La Taverne writes there (the alliance, who can use auto-invite).
+    { key = "setup", label = "Setup",
+      icon = { "Interface\\Icons\\INV_Scroll_03", "Interface\\Icons\\INV_Misc_Note_01" },
+      pages = { "officers" }, bottom = true },
     { key = "options", label = "Options", icon = "Interface\\Icons\\INV_Misc_Gear_01",
       pages = { "options" }, bottom = true },
     -- Not a page: opens (or closes) the test guild window, one click away. Test mode only.
