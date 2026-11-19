@@ -53,7 +53,13 @@ local function Remember(entry)
     if not memory then return end
     local key = ns.NameKey(entry.name)
     if entry.state == "denied" then memory[key] = nil return end
-    memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen }
+    -- Runs on every allied message: update in place, a new table only for someone new.
+    local item = memory[key]
+    if item then
+        item.name, item.guild, item.seen = entry.name, entry.guild, entry.seen
+    else
+        memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen }
+    end
 end
 
 Vouch.stats = { asked = 0, answered = 0, confirmed = 0, denied = 0, unverified = 0, dropped = 0 }
