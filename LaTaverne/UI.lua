@@ -1783,7 +1783,7 @@ local function BuildAvailabilityForm(parent, onDone)
         elseif not active and (IsInGroup() or ns.Groups:GetMine()) then
             why = InPartyText(false)
         end
-        self.message:SetText(why and ("|cff808080" .. why .. "|r") or "")
+        self.message:SetText(why and ("|cffff4040" .. why .. "|r") or "")
         self.confirm:SetText(active and L["Save"] or L["I'm available"])
         self.confirm:SetEnabled(why == nil)
         self.second:SetText(L["Stop"])
@@ -2834,7 +2834,8 @@ local function RoleIcons(roles)
 end
 
 -- Rows: a player, the "Other members online (n)" line that folds the rest, or a message.
-local PLAYER_ROW, TOGGLE_ROW, MESSAGE_ROW = 38, 28, 30
+-- Section header rows get room above them (spacing before a section, none after it).
+local PLAYER_ROW, TOGGLE_ROW, MESSAGE_ROW = 38, 40, 24
 
 local function InitPlayerRow(row, e)
     if not row.built then
@@ -2870,18 +2871,24 @@ local function InitPlayerRow(row, e)
 
         row.toggle = CreateFrame("Button", nil, row)
         row.toggle:SetAllPoints()
-        -- A section header like "Available players", that folds the list under it.
+        -- A section header that folds the list under it ("Available players", "Other members
+        -- online"): its text at the bottom of the row, the room above it.
         row.toggle.text = NewLabel(row.toggle, "", SECTION_FONT)
-        row.toggle.text:SetPoint("LEFT", 8, 2)
+        row.toggle.text:SetPoint("BOTTOMLEFT", 8, 8)
         row.toggle.line = row.toggle:CreateTexture(nil, "ARTWORK")
         row.toggle.line:SetColorTexture(1, 0.82, 0, 0.25)
         row.toggle.line:SetHeight(1)
         row.toggle.line:SetPoint("TOPLEFT", row.toggle.text, "BOTTOMLEFT", 0, -4)
         row.toggle.line:SetPoint("RIGHT", row.toggle, "RIGHT", 0, 0)
         row.toggle:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        -- "Only those who fit my group", on the Available players header (with my group open).
+        row.toggle.fit = NewCheckbox(row.toggle, L["Only those who fit my group"], function(self)
+            if row.onFit then row.onFit(self:GetChecked() and true or false) end
+        end)
+        row.toggle.fit:SetPoint("LEFT", row.toggle.text, "RIGHT", 16, 0)
 
         row.message = NewLabel(row, "", "GameFontDisable")
-        row.message:SetPoint("LEFT", 12, 0)
+        row.message:SetPoint("TOPLEFT", 12, -4)
         row.built = true
     end
     row.player:SetShown(e.kind == "player")
@@ -2891,8 +2898,11 @@ local function InitPlayerRow(row, e)
         -- The game's own +/- icons (the font has no arrow characters).
         row.toggle.text:SetText((e.open and "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
             or "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t ")
-            .. format(L["Other members online (%d)"], e.count))
+            .. format(e.label, e.count))
         row.toggle:SetScript("OnClick", e.onClick)
+        row.onFit = e.onFit
+        row.toggle.fit:SetShown(e.onFit ~= nil)
+        row.toggle.fit:SetChecked(e.fitChecked == true)
         return
     elseif e.kind == "message" then
         row.message:SetText(e.text)
@@ -3020,14 +3030,10 @@ local function BuildPlayersPanel()
     p.anyLine:SetPoint("LEFT", p.demandHeader, "RIGHT", 12, 0)
     p.demand = NewScrollList(p, 24, InitDemandRow)
 
-    -- Players: available first, then the others (folded).
-    p.listHeader = NewSectionHeader(p, L["Available players"])
-    p.fitOnly = NewCheckbox(p, L["Only those who fit my group"], function(self)
-        ns.db.playersFitOnly = self:GetChecked() and true or false
-        p:Refresh()
-    end)
-    p.fitOnly:SetPoint("LEFT", p.listHeader, "RIGHT", 16, 0)
+    -- Players: two folding sections in one list, available players (open) then the others
+    -- (folded).
     p.list = NewScrollList(p, PlayerRowHeight, InitPlayerRow)
+    p.showAvailable = true
     p.showOthers = false
 
     function p:Layout(available, demandRows, showDemand)
@@ -3054,10 +3060,9 @@ local function BuildPlayersPanel()
             end
             y = y - 18
         end
-        self.listHeader:ClearAllPoints()
-        self.listHeader:SetPoint("TOPLEFT", 8, y)
+        -- The list starts with the Available players header row, its text where y is.
         self.list:ClearAllPoints()
-        self.list:SetPoint("TOPLEFT", 0, y - 30)
+        self.list:SetPoint("TOPLEFT", 0, y + (TOGGLE_ROW - 28)) -- (clear of the buttons at the top)
         self.list:SetPoint("BOTTOMRIGHT", -20, 0)
     end
 
@@ -3099,8 +3104,6 @@ local function BuildPlayersPanel()
         local mine = ns.Groups:GetMine()
         local canFit = mine ~= nil and ns.Groups:IsOpen(mine)
         local fitOnly = canFit and ns.db.playersFitOnly ~= false
-        self.fitOnly:SetShown(canFit)
-        self.fitOnly:SetChecked(ns.db.playersFitOnly ~= false)
         local shown, others = {}, {}
         for _, e in ipairs(P:GetOnline()) do
             e.kind = "player"
@@ -3110,15 +3113,21 @@ local function BuildPlayersPanel()
                 others[#others + 1] = e
             end
         end
-        self.listHeader:SetText(#shown > 0 and format(L["Available players (%d)"], #shown) or L["Available players"])
-        local list = {}
-        for _, e in ipairs(shown) do list[#list + 1] = e end
-        if #shown == 0 then
-            list[1] = { kind = "message", text = fitOnly and L["Nobody available fits your group right now."]
-                or L["Nobody is available right now."] }
+        local list = { { kind = "toggle", label = L["Available players (%d)"], count = #shown,
+            open = self.showAvailable,
+            onClick = function() self.showAvailable = not self.showAvailable self:Refresh() end,
+            onFit = canFit and function(on) ns.db.playersFitOnly = on self:Refresh() end or nil,
+            fitChecked = ns.db.playersFitOnly ~= false } }
+        if self.showAvailable then
+            for _, e in ipairs(shown) do list[#list + 1] = e end
+            if #shown == 0 then
+                list[#list + 1] = { kind = "message", text = fitOnly and L["Nobody available fits your group right now."]
+                    or L["Nobody is available right now."] }
+            end
         end
         if #others > 0 then
-            list[#list + 1] = { kind = "toggle", count = #others, open = self.showOthers,
+            list[#list + 1] = { kind = "toggle", label = L["Other members online (%d)"], count = #others,
+                open = self.showOthers,
                 onClick = function() self.showOthers = not self.showOthers self:Refresh() end }
             if self.showOthers then
                 for _, e in ipairs(others) do list[#list + 1] = e end
