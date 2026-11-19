@@ -179,6 +179,8 @@ function Invites:OnChat(sender, text, source)
     if not active or type(sender) ~= "string" or IsSecret(sender) then return end
     if ns.IsMe(sender) or not self:IsKeyword(text) then return end
     if source ~= "ally" and not ns.Guild:IsMember(sender) then return end
+    -- Allied players only when asked: their "+1" may answer a call in their own guild.
+    if source == "ally" and not Settings().allied then return end
     if GroupKeys()[ns.NameKey(sender)] then return end
     Add(sender, source)
 end
@@ -344,6 +346,16 @@ function ns.BuildInvitesPanel()
         ns.db.invites.whispers = self:GetChecked() and true or false
     end)
     whispers:SetPoint("TOPLEFT", 300, -60)
+    -- Only with a Guild Alliance.
+    local allied = K.NewCheckbox(p, L["Also listen to the allied guilds"], function(self)
+        ns.db.invites.allied = self:GetChecked() and true or false
+    end)
+    allied:SetPoint("TOPLEFT", 540, -60)
+    allied:SetScript("OnEnter", function(self)
+        K.ShowTooltip(self, { L["Also listen to the allied guilds"],
+            L["A keyword typed by an allied player in the shared guild chat puts them in the queue. Off: only your guild (their +1 may answer someone in their own guild)."] })
+    end)
+    allied:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local blocked = K.NewLabel(p, "", "GameFontRedSmall")
     blocked:SetPoint("TOPLEFT", 8, -92)
@@ -450,6 +462,8 @@ function ns.BuildInvitesPanel()
         end
         auto:SetChecked(s.auto)
         whispers:SetChecked(s.whispers)
+        allied:SetShown(ns.Alliance:IsActive())
+        allied:SetChecked(s.allied == true)
         local why = Invites.blocked or ""
         blocked:SetText(why)
         queueHeader:SetText(#queue > 0 and format(L["Queue (%d)"], #queue) or L["Queue"])

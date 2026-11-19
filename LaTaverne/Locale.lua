@@ -314,6 +314,8 @@ if GetLocale() == "frFR" then
     L["Guild members who type a keyword alone in guild chat (or allied guild chat) get a group invite. Handy for big events: everyone types +1."] = "Les membres de la guilde qui tapent un mot-clé seul dans le chat de guilde (ou celui des guildes alliées) reçoivent une invitation de groupe. Pratique pour les grands événements : tout le monde tape +1."
     L["Invite right away (otherwise, wait for me to click Invite)"] = "Inviter tout de suite (sinon, attendre que je clique sur Inviter)"
     L["Also listen to whispers"] = "Écouter aussi les chuchotements"
+    L["Also listen to the allied guilds"] = "Écouter aussi les guildes alliées"
+    L["A keyword typed by an allied player in the shared guild chat puts them in the queue. Off: only your guild (their +1 may answer someone in their own guild)."] = "Un mot-clé tapé par un joueur allié dans le chat de guilde partagé le met dans la file. Décoché : seulement votre guilde (son +1 peut répondre à quelqu'un de sa propre guilde)."
     L["Turn off after (minutes)"] = "Désactiver après (minutes)"
     L["Keywords (one per line)"] = "Mots-clés (un par ligne)"
     L["Only a message made of the keyword alone counts: \"inv\" yes, \"who can inv Bob?\" no."] = "Seul un message fait du mot-clé seul compte : \"inv\" oui, \"qui peut inv Bob ?\" non."

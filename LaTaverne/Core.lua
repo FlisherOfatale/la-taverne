@@ -135,6 +135,7 @@ local DEFAULTS = {
     invites = {       -- keyword auto-invite (always off at login)
         auto = true,      -- invite right away, or wait for a click
         whispers = false, -- also listen to whispers
+        allied = false,   -- also listen to the allied guilds (shared guild chat)
         autoOff = 30,     -- minutes before it turns itself off
         keywords = { "+1", "inv", "invite", "inv pls", "inv plz", "inv svp", "invite moi", "invite me" },
     },     -- recent allied lines, for the guild window: { t, a, c, g, tag, m }
