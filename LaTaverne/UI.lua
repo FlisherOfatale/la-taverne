@@ -765,25 +765,29 @@ local function NewDungeonLine(row, left)
 end
 
 -- A dungeon's tooltip: its name in the other languages switched on in Options. Nothing when
--- none is on (or the name is the same).
-local function DungeonTip(owner, d)
+-- none is on (or the name is the same). head: the first line instead of the dungeon's name
+-- (a group's whole title, which can be cut on screen); then the tooltip always shows.
+local function DungeonTip(owner, d, head)
     if type(d) == "string" then d = ns.DungeonByKey(d) end
-    if not d then return end
-    local others = ns.DungeonOtherNames(d)
-    if #others == 0 then return end
-    local lines = { ns.DungeonLabel(d) }
+    local others = d and ns.DungeonOtherNames(d) or {}
+    if not head and #others == 0 then return end
+    local lines = { head or ns.DungeonLabel(d) }
     for _, line in ipairs(others) do lines[#lines + 1] = line end
     ShowTooltip(owner, lines)
 end
 
 -- A hover area over a text that starts with a dungeon's name (titles): as wide as the text.
--- Set hit.dungeon, then hit:Fit() after changing the text.
+-- Set hit.dungeon (and hit.listing for a group's title: its whole title in the tooltip), then hit:Fit() after
+-- changing the text.
 local function NewDungeonHover(parent, fontString)
     local hit = CreateFrame("Frame", nil, parent)
     hit:SetPoint("TOPLEFT", fontString, "TOPLEFT")
     hit:SetPoint("BOTTOMLEFT", fontString, "BOTTOMLEFT")
     hit:EnableMouse(true)
-    hit:SetScript("OnEnter", function(self) if self.dungeon then DungeonTip(self, self.dungeon) end end)
+    hit:SetScript("OnEnter", function(self)
+        local full = self.listing and DungeonTitle(self.listing)
+        if self.dungeon or full then DungeonTip(self, self.dungeon, full) end
+    end)
     hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
     function hit:Fit()
         local textWidth, lineWidth = fontString:GetStringWidth() or 0, fontString:GetWidth() or 0
@@ -1079,6 +1083,7 @@ local function FillListingRow(row, l)
 
     row.title:SetText(DungeonTitle(l))
     row.titleHit.dungeon = l.dungeon
+    row.titleHit.listing = l
     row.titleHit:Fit()
     -- An allied leader nobody from their guild could confirm yet: "?" after the tag.
     local unverified = l.tag and ns.Vouch and ns.Vouch:GetState(l.leader) == "unverified"
@@ -1398,7 +1403,14 @@ local function InitGroupRow(row, l, invite)
 
     local app = ns.Groups:GetApplication(l.id)
     if app and app.status == "pending" then
-        row.status:SetText("|cffffd100" .. L["Request sent"] .. "|r")
+        -- Received: the leader's addon has it. Not yet and they're offline: it waits for them.
+        if app.acked then
+            row.status:SetText("|cffffd100" .. L["Request received"] .. "|r")
+        elseif ns.Groups:IsLeaderAway(l) then
+            row.status:SetText("|cffff9900" .. L["Request waiting: leader offline"] .. "|r")
+        else
+            row.status:SetText("|cffffd100" .. L["Request sent"] .. "|r")
+        end
         row.button:SetText(L["Cancel"])
         row.button:SetScript("OnClick", function() ns.Groups:CancelApply(l.id) end)
         return
@@ -1425,6 +1437,9 @@ local function InitGroupRow(row, l, invite)
         row.button:SetScript("OnClick", function() ns.Groups:Apply(l.id) end)
         if ns.Groups:GetMine() then
             row.status:SetText("|cffff9900" .. L["Your group will be removed if you're accepted."] .. "|r")
+        elseif ns.Groups:IsLeaderAway(l) then
+            -- A request still works: it's sent again when they're back.
+            row.status:SetText("|cff808080" .. L["Leader offline"] .. "|r")
         end
     end
 end
@@ -2592,6 +2607,7 @@ local function BuildManageView(parent)
     function m:Refresh(mine)
         self.title:SetText(DungeonTitle(mine))
         self.titleHit.dungeon = mine.dungeon
+        self.titleHit.listing = mine
         self.titleHit:Fit()
         if not self.note:HasFocus() then self.note:SetText(mine.note or "") end
         self.newbies:SetChecked(mine.newbies == true)
@@ -2694,6 +2710,7 @@ local function BuildMemberView(parent)
         self.listing = l
         self.title:SetText(DungeonTitle(l) .. "  " .. FlagIcons(l))
         self.titleHit.dungeon = l.dungeon
+        self.titleHit.listing = l
         self.titleHit:Fit()
         self.leader:SetText(NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN)
 
@@ -3748,7 +3765,7 @@ local function BuildOptionsPanel()
     end)
     allyTag:SetPoint("TOPLEFT", allyChat, "BOTTOMLEFT", 20, 4)
 
-    -- Error report: only when there are errors ---------------------------------
+    -- Error report: always there, so players know where to look --------------------
     local errorHeader = NewLabel(p, L["Error report"], "GameFontNormal")
     errorHeader:SetPoint("TOPLEFT", 8, -300 - SHIFT)
     local errorCount = NewLabel(p, "", "GameFontHighlight")
@@ -3762,6 +3779,9 @@ local function BuildOptionsPanel()
         ns.Errors:Clear()
         p:Refresh()
     end)
+    -- The version, at the bottom (to say which one you have when reporting a problem).
+    local version = NewLabel(p, "La Taverne " .. (ns.version or "?"), "GameFontDisableSmall")
+    version:SetPoint("TOPLEFT", 16, -366 - SHIFT)
     function p:Refresh()
         if not bind.waiting then bind:SetText(BindingText()) end
         if alerts.GenerateMenu then alerts:GenerateMenu() end
@@ -3777,8 +3797,9 @@ local function BuildOptionsPanel()
         allyTag:SetEnabled(active and ns.db.allyChat.enabled)
 
         local errors = ns.Errors:Count()
-        for _, item in ipairs({ errorHeader, errorCount, showErrors, clearErrors }) do item:SetShown(errors > 0) end
-        errorCount:SetText(L["Errors recorded: %d"]:format(errors))
+        showErrors:SetEnabled(errors > 0)
+        clearErrors:SetEnabled(errors > 0)
+        errorCount:SetText(errors > 0 and L["Errors recorded: %d"]:format(errors) or L["No errors recorded."])
     end
     return p
 end

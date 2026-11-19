@@ -1,5 +1,6 @@
 -- Minimap button (LibDataBroker launcher + LibDBIcon).
--- Left-click opens La Taverne; right-click opens a short menu (available / stop, Options).
+-- Left-click opens La Taverne; right-click opens a short menu (available / stop, open groups,
+-- my group, auto-invite and its start / stop, Options).
 -- The tooltip says where I'm at: my group, my availability, auto-invite.
 local ADDON, ns = ...
 local Minimap = ns.NewModule("Minimap")
@@ -15,6 +16,15 @@ local function QuickMenu(owner)
         else
             root:CreateButton(L["I'm available..."], function() ns.UI.OpenAvailability() end)
         end
+        if root.CreateDivider then root:CreateDivider() end
+        root:CreateButton(L["Open groups"], function() ns.UI:Open() ns.UI:ShowPage("browse") end)
+        -- My group, or the create form when I have none (same page).
+        root:CreateButton(ns.Groups:GetMine() and L["My group"] or L["Create a group"],
+            function() ns.UI:Open() ns.UI:ShowPage("mygroup") end)
+        root:CreateButton(L["Auto-invite"], function() ns.UI:ShowAutoInvite() end)
+        root:CreateButton(ns.Invites:IsActive() and L["Stop auto-invite"] or L["Start auto-invite"],
+            function() ns.Invites:Toggle() end)
+        if root.CreateDivider then root:CreateDivider() end
         root:CreateButton(L["Options"], function() ns.UI:ShowSection("options") ns.UI:Open() end)
     end)
 end

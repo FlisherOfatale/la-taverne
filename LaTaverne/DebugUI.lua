@@ -26,7 +26,8 @@ local function FormatChat(line)
     if line.system then
         return TimeText(line.t) .. "|cffffd100" .. line.system .. "|r"
     end
-    local tag = line.tag and ("|cff8fb8e8[" .. line.tag .. "]|r ") or ""
+    -- Same option as the real chat (Options, Shared guild chat).
+    local tag = (line.tag and ns.db.allyChat.showTag) and ("|cff8fb8e8[" .. line.tag .. "]|r ") or ""
     return TimeText(line.t) .. tag .. "[" .. K.ClassColored(line.author, line.class) .. "]: " .. line.text
 end
 

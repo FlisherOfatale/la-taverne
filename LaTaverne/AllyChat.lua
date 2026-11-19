@@ -172,9 +172,17 @@ local function GuildChatShown()
     return ok2 and stream and Enum.ClubStreamType and stream.streamType == Enum.ClubStreamType.Guild or false
 end
 
+-- The time in front, as the window shows its own lines, when the chat timestamps setting is on.
+local function TimeStamp(t)
+    local fmt = (GetChatTimestampFormat and GetChatTimestampFormat()) or CHAT_TIMESTAMP_FORMAT
+    if not fmt or not t then return "" end
+    local ok, text = pcall(BetterDate or date, fmt, t)
+    return ok and type(text) == "string" and text or ""
+end
+
 local function WindowLine(entry)
     local link = "|Hplayer:" .. entry.a .. "|h[" .. ClassColored(entry.a, entry.c) .. "]|h"
-    return TagText(entry.tag) .. link .. ": " .. entry.m
+    return TimeStamp(entry.t) .. TagText(entry.tag) .. link .. ": " .. entry.m
 end
 
 local function AddToWindow(entry)

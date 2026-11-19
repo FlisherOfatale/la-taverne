@@ -55,6 +55,9 @@ local PENDING_STATUS = { request = true, invited = true, accepted = true }
 
 local listings = {}        -- other leaders' listings: [id] = listing
 local myApplications = {}  -- requests I sent: [id] = { role, status = "pending" | "accepted" | "declined" }
+-- A request carries what was sent (payload), when (sent), how often (tries), and acked once the
+-- leader's addon said it got it. The leader may be offline when I ask: an unacked request is sent
+-- again when their group shows up again (their heartbeat), so it isn't lost.
 local myInviteReplies = {} -- invitations I answered: [id] = "accepted" | "declined"
 local seenInvitations = {} -- invitations I saw on the Invitations page: [id] = true
 local callbacks = {}
@@ -261,6 +264,15 @@ end
 
 function Groups:GetApplication(id)
     return myApplications[id]
+end
+
+-- The leader of someone else's group looks offline: the guild roster says so, or their group
+-- missed its last heartbeat.
+function Groups:IsLeaderAway(l)
+    if not l or self:IsMine(l) then return false end
+    local member = ns.Guild:GetMember(l.leader)
+    if member and member.online == false then return true end
+    return GetServerTime() - (l.seen or 0) > HEARTBEAT + 20
 end
 
 -- Someone else's listing I'm a member of (I'm in their group).
@@ -1182,11 +1194,13 @@ function Groups:Apply(id)
     if not l or #roles == 0 or not self:IsOpen(l) then return end
     if self:GetMine() and not self:IsAloneInMine() then return end -- remove my group first
     local _, class = UnitClass("player")
-    myApplications[id] = { roles = roles, status = "pending", time = GetServerTime() }
-    SendTo(l.scope, "APPLY", {
+    local payload = {
         id = id, to = l.leader, roles = roles, role = roles[1], newbie = self:IsNewPlayer() or nil,
         class = class, level = UnitLevel("player"),
-    })
+    }
+    local now = GetServerTime()
+    myApplications[id] = { roles = roles, status = "pending", time = now, sent = now, tries = 1, payload = payload }
+    SendTo(l.scope, "APPLY", payload)
     Changed()
 end
 
@@ -1247,8 +1261,22 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
         if id ~= l.id and ns.NameKey(other.leader) == ns.NameKey(sender) then listings[id] = nil end
     end
     local previous = listings[l.id]
+    local now = GetServerTime()
+    -- Their group had gone quiet (leader offline) before this update.
+    local wasAway = not previous or now - (previous.seen or 0) > HEARTBEAT + 20
     listings[l.id] = l
     if not previous then AlertNewGroup(l) end
+    -- My request didn't reach them (no receipt): send it again. Once at their next update (a
+    -- /reload, a lost message), then each time they come back after being away.
+    local app = myApplications[l.id]
+    -- Back from away: a waiting request gets its full time again (10 min to answer).
+    if app and app.status == "pending" and wasAway then app.time = now end
+    if app and app.status == "pending" and not app.acked and app.payload
+        and now - (app.sent or 0) > 20 and (wasAway or (app.tries or 1) < 2) and (app.tries or 1) < 6 then
+        app.sent, app.time, app.tries = now, now, (app.tries or 1) + 1
+        SendTo(l.scope, "APPLY", app.payload)
+        ns.Print(format(L["Your request to %s was sent again: their addon hadn't received it."], l.leader))
+    end
     -- New invitation for me? A new one replaces my answer to an earlier one (invited again
     -- after leaving, or after the leader cancelled), and isn't "seen" yet.
     local wasInvited = previous and Groups:IsInvited(previous)
@@ -1290,6 +1318,9 @@ OnBoth("APPLY", function(sender, p, isSelf, scope)
     if scope == "ally" and not Groups:IsShared(l) then return end -- "My guild" only
     local key = ns.NameKey(sender)
     if l.members[key] or (l.pending[key] and l.pending[key].status ~= "request") then return end
+    -- Tell them it arrived (they send it again otherwise). Already here: nothing more to do.
+    SendTo(scope, "APPLY_ACK", { id = l.id, to = sender })
+    if l.pending[key] then return end
     ns.Guild:NoteClass(sender, p.class, p.level)
     -- Prefer what the guild roster says about class and level.
     local member = ns.Guild:GetMember(sender)
@@ -1314,6 +1345,18 @@ OnBoth("APPLY", function(sender, p, isSelf, scope)
     ns.Print(format(L["%s wants to join as %s."], sender .. (tag and (" [" .. tag .. "]") or ""), table.concat(labels, " / ")))
     if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
     Changed()
+end)
+
+-- The leader's addon got my request.
+OnBoth("APPLY_ACK", function(sender, p, isSelf)
+    if isSelf or not ns.IsMe(p.to) then return end
+    local app = myApplications[p.id]
+    local l = listings[p.id]
+    if not app or not l or ns.NameKey(l.leader) ~= ns.NameKey(sender) then return end
+    if not app.acked then
+        app.acked = true
+        Changed()
+    end
 end)
 
 OnBoth("APPLY_CANCEL", function(sender, p, isSelf)
@@ -1438,20 +1481,28 @@ function Groups:OnLogin()
         local now = GetServerTime()
         local removed = false
         for id, l in pairs(listings) do
-            if now - l.seen > EXPIRE or (not l.started and now - l.created > MAX_AGE) then
+            local tooOld = not l.started and now - l.created > MAX_AGE
+            if now - l.seen > EXPIRE or tooOld then
                 listings[id] = nil
-                myApplications[id] = nil
+                -- Leader offline: a pending request waits for their return (sent again then).
+                local app = myApplications[id]
+                if tooOld or not (app and app.status == "pending") then myApplications[id] = nil end
                 myInviteReplies[id] = nil
                 removed = true
             end
         end
-        -- My requests nobody answered (the leader may be gone): expired, I can ask again.
+        -- My requests nobody answered: expired, I can ask again. Not while the leader is away
+        -- (it waits for them); a request for a group gone for good goes after MAX_AGE.
         for id, app in pairs(myApplications) do
-            if app.status == "pending" and app.time and now - app.time > REQUEST_TTL + 30 then
-                app.status = "expired"
-                removed = true
-                local l = listings[id]
-                if l then ns.Print(format(L["No answer from %s: your request expired. You can ask again."], l.leader)) end
+            local l = listings[id]
+            if app.status == "pending" and app.time then
+                if not l then
+                    if now - app.time > MAX_AGE then myApplications[id] = nil end
+                elseif not Groups:IsLeaderAway(l) and now - app.time > REQUEST_TTL + 30 then
+                    app.status = "expired"
+                    removed = true
+                    ns.Print(format(L["No answer from %s: your request expired. You can ask again."], l.leader))
+                end
             end
         end
         local mine = Groups:GetMine()
