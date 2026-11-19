@@ -39,7 +39,7 @@ local function QuickMenu(owner)
             -- Idle: the two ways to start, then the two lists.
             root:CreateButton(L["Create a group"], function() OpenPage("mygroup") end)
             local avail = root:CreateButton(L["I'm available..."], function() ns.UI.OpenAvailability() end)
-            if IsInGroup() and avail.SetEnabled then
+            if ns.InParty() and avail.SetEnabled then
                 avail:SetEnabled(false)
                 if avail.SetTooltip then
                     avail:SetTooltip(function(tooltip)

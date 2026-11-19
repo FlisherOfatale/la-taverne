@@ -1227,7 +1227,7 @@ function Groups:Apply(id)
     local roles = RoleList(self:GetMyRoles())
     if not l or #roles == 0 or not self:IsOpen(l) then return end
     if self:GetMine() and not self:IsAloneInMine() then return end -- remove my group first
-    if not self:GetMine() and IsInGroup() then return end -- leave my party first
+    if not self:GetMine() and ns.InParty() then ns.Print(L["Leave your party first."]) return end
     local _, class = UnitClass("player")
     local payload = {
         id = id, to = l.leader, roles = roles, role = roles[1], newbie = self:IsNewPlayer() or nil,
@@ -1253,7 +1253,7 @@ function Groups:ReplyInvitation(id, accepted, role, roles)
     if not l then return end
     if accepted and not ROLE_SET[role] then return end
     if accepted and self:GetMine() and not self:IsAloneInMine() then return end -- remove my group first
-    if accepted and not self:GetMine() and IsInGroup() then return end -- leave my party first
+    if accepted and not self:GetMine() and ns.InParty() then ns.Print(L["Leave your party first."]) return end
     local _, class = UnitClass("player")
     myInviteReplies[id] = accepted and "accepted" or "declined"
     if accepted and ns.Players then ns.Players:Stop(L["You accepted an invitation: you're no longer available."]) end
@@ -1323,7 +1323,7 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
     end
     if newInvite then
         ns.Print(format(L["%s invites you to %s."], sender, DungeonWithRange(l.dungeon)) .. " " .. GroupLink(l)
-            .. ((not Groups:GetMine() and IsInGroup()) and (" |cffff9900" .. L["Leave your party first."] .. "|r") or ""))
+            .. ((not Groups:GetMine() and ns.InParty()) and (" |cffff9900" .. L["Leave your party first."] .. "|r") or ""))
         if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
     end
     Changed()

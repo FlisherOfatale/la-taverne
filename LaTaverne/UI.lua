@@ -1341,7 +1341,7 @@ local function JoinBlocked()
     if ns.Groups:GetMine() then
         return not ns.Groups:IsAloneInMine() and L["Remove your group first."] or nil
     end
-    if IsInGroup() then return L["Leave your party first."] end
+    if ns.InParty() then return L["Leave your party first."] end
     return nil
 end
 
@@ -1786,7 +1786,7 @@ local function BuildAvailabilityForm(parent, onDone)
             why = L["Tick at least one role you can play first."]
         elseif not draft.any and not next(draft.dungeons) then
             why = L["Choose at least one dungeon, or any dungeon at my level."]
-        elseif not active and (IsInGroup() or ns.Groups:GetMine()) then
+        elseif not active and (ns.InParty() or ns.Groups:GetMine()) then
             why = InPartyText(false)
         end
         -- Why the button is greyed out: in its tooltip. The bottom line is for errors only.
@@ -1830,7 +1830,7 @@ local function AvailabilityTooltip(owner)
     local P = ns.Players
     local lines = { L["I'm available"],
         L["Tell the guild you want a group: leaders see your roles (ticked in the group list) and the dungeons you want, and can invite you."] }
-    if not P:IsActive() and (IsInGroup() or ns.Groups:GetMine()) then
+    if not P:IsActive() and (ns.InParty() or ns.Groups:GetMine()) then
         -- Why the button is greyed out.
         lines[#lines + 1] = "|cffff4040" .. InPartyText(false) .. "|r"
     elseif P:IsPaused() then
@@ -3089,7 +3089,7 @@ local function BuildPlayersPanel()
         P:AskWho() -- who runs La Taverne (at most every 30 s)
         local active = P:IsActive()
         self.avail:SetShown(not active)
-        self.avail:SetEnabled(not IsInGroup() and not ns.Groups:GetMine())
+        self.avail:SetEnabled(not ns.InParty() and not ns.Groups:GetMine())
         self.change:SetShown(active)
         local s = P.Settings()
         local forText = DungeonsShort(s.dungeons, L["any dungeon at my level"])

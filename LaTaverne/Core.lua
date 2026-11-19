@@ -30,6 +30,11 @@ function ns.IsMe(name)
     return ns.NameKey(name) == ns.NameKey(ns.FullName("player"))
 end
 
+-- In a party or raid I made (not a battleground or the game's dungeon finder group).
+function ns.InParty()
+    return IsInGroup(LE_PARTY_CATEGORY_HOME or 1) and true or false
+end
+
 -- On my in-game ignore list (the game's list, compared by name).
 function ns.IsIgnored(name)
     if not name or not C_FriendList or not C_FriendList.GetNumIgnores then return false end

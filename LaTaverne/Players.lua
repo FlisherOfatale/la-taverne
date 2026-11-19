@@ -143,7 +143,7 @@ end
 
 -- Start. Returns ok, error text.
 function Players:Start()
-    if IsInGroup() then return false, L["You're in a party: post a group for your party instead."] end
+    if ns.InParty() then return false, L["You're in a party: post a group for your party instead."] end
     if not next(ns.Groups:GetMyRoles()) then return false, L["Tick at least one role you can play first."] end
     local duration = Settings().duration or Players.DEFAULT_DURATION
     state.active = true
@@ -512,7 +512,7 @@ function Players:OnLogin()
     C_Timer.NewTicker(HEARTBEAT, function() if state.active then Players:Broadcast() end end)
     -- Joining any party ends it: in a party, post a group for the party instead.
     ns.On("GROUP_ROSTER_UPDATE", function()
-        if state.active and IsInGroup() then
+        if state.active and ns.InParty() then
             Players:Stop(L["You joined a party: you're no longer available."])
         end
     end)
