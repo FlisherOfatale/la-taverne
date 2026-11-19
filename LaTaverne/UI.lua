@@ -3193,10 +3193,10 @@ local function BuildOfficerPanel()
     local imported = false -- the list shows an imported setup, not saved yet
 
     local CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t "
-    -- Steps 1, 2, 3: the number stays, a green check comes in front once the step is done.
-    local function StepTitle(number, text, done)
-        if done then return CHECK .. "|cff40ff40" .. number .. ".|r " .. text end
-        return "|cffffd100" .. number .. ".|r " .. text
+    -- A part of a section: gold, or green with a check once done.
+    local function PartTitle(text, done)
+        if done then return CHECK .. "|cff40ff40" .. text .. "|r" end
+        return text
     end
 
     NewPageTitle(outer, L["Setup"], { L["Setup"],
@@ -3206,9 +3206,33 @@ local function BuildOfficerPanel()
 
 
 
-    -- Import / Export sit on step 1's line: they fill the guild list, and send it to the others.
+    -- Three sections: Auto-invite (my guild's own, alliance or not), Guild Alliance (the same
+    -- lines in every allied guild), and saving both to the Guild Info.
+
+    -- Auto-invite: who can use it -------------------------------------------------------------
+    local ruleHeader = NewSectionHeader(p, L["Auto-invite"])
+    ruleHeader:SetPoint("TOPLEFT", 8, -6)
+    local ruleInfo = NewInfoIcon(p, { L["Who can use auto-invite"],
+        L["Saved in the Guild Info, for the whole guild. Players who aren't allowed don't see the Auto-invite tab."],
+        L["Players who can edit the Guild Info can always use it."],
+        L["Only for your guild: Export doesn't send it (ranks differ from one guild to another)."] })
+    ruleInfo:SetPoint("LEFT", ruleHeader, "RIGHT", 6, 0)
+    local ruleLabel = NewLabel(p, L["Who can use auto-invite"])
+    ruleLabel:SetPoint("TOPLEFT", 16, -40)
+    local Changed -- set below (the rule calls it)
+    local rule = ns.NewAutoInviteRule(p, function() Changed() end)
+    rule:SetPoint("TOPLEFT", 280, -34)
+
+    -- Guild Alliance: hangs from this anchor, under the rule (whose height follows the ranks).
+    local ally = CreateFrame("Frame", nil, p)
+    ally:SetHeight(1)
+    ally:SetPoint("TOPLEFT", 0, -100)
+    ally:SetPoint("RIGHT", p, "RIGHT", 0, 0)
+    local allyHeader = NewSectionHeader(p, L["Guild Alliance"])
+    allyHeader:SetPoint("TOPLEFT", ally, "TOPLEFT", 8, 0)
+    -- Import / Export, on the section's line: only the alliance's lines (not auto-invite).
     local exportButton = NewButton(p, L["Export"], 100)
-    exportButton:SetPoint("TOPRIGHT", -26, -32)
+    exportButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, 4)
     -- Import: a window to paste a setup in (or fill it from GuildUnion).
     local importButton = NewButton(p, L["Import..."], 110)
     importButton:SetPoint("RIGHT", exportButton, "LEFT", -6, 0)
@@ -3218,17 +3242,17 @@ local function BuildOfficerPanel()
         message:SetText(text and ((isError and "|cffff4040" or "|cff40ff40") .. text .. "|r") or "")
     end
 
-    local function Changed()
+    Changed = function()
         dirty = true
         p:RefreshDraft()
     end
 
-    -- Step 1: the guilds ---------------------------------------------------------------------
+    -- The guilds
     local step1 = NewLabel(p, "", "GameFontNormal")
-    step1:SetPoint("TOPLEFT", 8, -38)
+    step1:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -32)
     local status = NewLabel(p, "", "GameFontHighlightSmall")
     status:SetPoint("LEFT", step1, "RIGHT", 16, 0)
-    status:SetPoint("RIGHT", importButton, "LEFT", -12, 0)
+    status:SetPoint("RIGHT", p, "RIGHT", -26, 0)
     status:SetWordWrap(false)
     status:SetJustifyH("LEFT")
 
@@ -3264,19 +3288,19 @@ local function BuildOfficerPanel()
         if not row.tag:HasFocus() then row.tag:SetText(data.tag or "") end
         row.remove:SetShown(not data.mine)
     end)
-    list:SetPoint("TOPLEFT", 20, -58)
+    list:SetPoint("TOPLEFT", ally, "TOPLEFT", 20, -52)
     list:SetPoint("RIGHT", -20, 0)
     list:SetHeight(26 * 3)
 
     -- Add a guild: an empty row under the list, same columns (name, tag, button).
     local addName = NewInput(p, 300, 60)
-    addName:SetPoint("TOPLEFT", 32, -144)
+    addName:SetPoint("TOPLEFT", ally, "TOPLEFT", 32, -138)
     SetPlaceholder(addName, L["Add a guild..."])
     NewLabel(p, L["Tag"], "GameFontNormalSmall"):SetPoint("LEFT", addName, "LEFT", 20 + TAG_X - 32, 0)
     local addTag = NewInput(p, 70, 6)
     addTag:SetPoint("LEFT", addName, "LEFT", 20 + TAG_X + 35 - 32, 0)
     local addButton = NewButton(p, L["Add"], 90)
-    addButton:SetPoint("TOPRIGHT", -26, -144)
+    addButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, -138)
     local addHint = NewInfoIcon(p, { L["Add a guild..."],
         L["Exact guild name, as the game writes it. Tag: up to 6 letters, shown in chat."] })
     addHint:SetPoint("RIGHT", addButton, "LEFT", -8, 0)
@@ -3315,25 +3339,11 @@ local function BuildOfficerPanel()
         return table.concat(ns.Alliance.BuildLines(guilds, draft.key), "\n")
     end
 
-    -- Step 2: who can use auto-invite (any guild, alliance or not) --------------------------
-    local stepRule = NewLabel(p, "", "GameFontNormal")
-    stepRule:SetPoint("TOPLEFT", 8, -194)
-    local ruleInfo = NewInfoIcon(p, { L["Who can use auto-invite"],
-        L["Saved in the Guild Info, for the whole guild. Players who aren't allowed don't see the Auto-invite tab."],
-        L["Players who can edit the Guild Info can always use it."] })
-    ruleInfo:SetPoint("LEFT", stepRule, "RIGHT", 6, 0)
-    local rule = ns.NewAutoInviteRule(p, function() Changed() end)
-    rule:SetPoint("TOPLEFT", 8, -216)
-    -- The steps under it move with its height (the rank list): they hang from this anchor.
-    local lower = CreateFrame("Frame", nil, p)
-    lower:SetSize(1, 1)
-    lower:SetPoint("TOPLEFT", 0, -260)
-
-    -- Step 3: the shared key (small, last before saving: the one officers come back for) -----
+    -- The shared key (small, last before saving: the one officers come back for)
     local step2 = NewLabel(p, "", "GameFontNormal")
-    step2:SetPoint("TOPLEFT", lower, "TOPLEFT", 8, 0)
+    step2:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -178)
     local keyText = NewLabel(p, "", "GameFontHighlight")
-    keyText:SetPoint("TOPLEFT", lower, "TOPLEFT", 26, -24)
+    keyText:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -202)
     local keyButton = NewButton(p, "", 170)
     keyButton:SetPoint("LEFT", keyText, "RIGHT", 24, 0)
     keyButton:SetScript("OnClick", function()
@@ -3344,15 +3354,15 @@ local function BuildOfficerPanel()
     local keyHint = NewInfoIcon(p, {})
     keyHint:SetPoint("LEFT", step2, "RIGHT", 6, 0)
 
-    -- Step 4: save, with a preview of La Taverne's lines -------------------------------------
-    local step3 = NewLabel(p, "", "GameFontNormal")
-    step3:SetPoint("TOPLEFT", lower, "TOPLEFT", 8, -66)
+    -- Save both to the Guild Info, with a preview of La Taverne's lines ---------------------
+    local saveHeader = NewSectionHeader(p, L["Save to your Guild Info"])
+    saveHeader:SetPoint("TOPLEFT", ally, "TOPLEFT", 8, -246)
     local previewLabel = NewLabel(p, "", "GameFontDisableSmall")
-    previewLabel:SetPoint("TOPLEFT", lower, "TOPLEFT", 26, -86)
+    previewLabel:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -274)
     previewLabel:SetPoint("RIGHT", -8, 0)
     previewLabel:SetJustifyH("LEFT")
     local preview = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    preview:SetPoint("TOPLEFT", lower, "TOPLEFT", 24, -102)
+    preview:SetPoint("TOPLEFT", ally, "TOPLEFT", 24, -290)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
     if preview.SetBackdrop then
@@ -3391,7 +3401,7 @@ local function BuildOfficerPanel()
             if not ns.Alliance.ValidTag(entry.tag) then return L["The tag must be 1 to 6 letters, no spaces."] .. " (" .. entry.name .. ")" end
             if not entry.mine then others = others + 1 end
         end
-        if others > 0 and not draft.key then return L["Create the key first (step 3)."] end
+        if others > 0 and not draft.key then return L["Create the shared key first."] end
         return nil
     end
 
@@ -3486,16 +3496,14 @@ local function BuildOfficerPanel()
         end
         local ruleSaved = ns.Alliance.AutoInviteLine(rule:GetRule()) == ns.Alliance.AutoInviteLine(ns.Alliance:GetAutoInvite())
         local saved = not dirty and (ns.Alliance:IsActive() and ns.Alliance:GetKey() == draft.key or others == 0) and ruleSaved
-        step1:SetText(StepTitle(1, L["Guilds of the Guild Alliance"], others > 0))
-        stepRule:SetText(StepTitle(2, L["Who can use auto-invite"], ruleSaved))
+        step1:SetText(PartTitle(L["Guilds of the Guild Alliance"], others > 0))
         -- The key only means something with an allied guild in the list: greyed until then.
         local needKey = others > 0
-        step2:SetText(needKey and StepTitle(3, L["Shared key"], draft.key ~= nil)
-            or ("|cff808080" .. "3. " .. L["Shared key"] .. "|r"))
-        step3:SetText(StepTitle(4, L["Save to your Guild Info"], saved))
-        -- The rank list sets the height of step 2; the rest follows it.
+        step2:SetText(needKey and PartTitle(L["Shared key"], draft.key ~= nil)
+            or ("|cff808080" .. L["Shared key"] .. "|r"))
+        -- The rank list sets the height of the Auto-invite section; the rest follows it.
         rule:Refresh()
-        lower:SetPoint("TOPLEFT", 0, -216 - rule:GetHeight() - 18)
+        ally:SetPoint("TOPLEFT", 0, -34 - rule:GetHeight() - 30)
 
         if imported then
             banner:SetText("|cffff9900" .. L["Imported setup shown below. It is not applied yet: click Save to apply it, or Cancel."] .. "|r")
@@ -3507,7 +3515,7 @@ local function BuildOfficerPanel()
 
         keyButton:SetEnabled(needKey)
         if not needKey then
-            keyText:SetText("|cff808080" .. L["Add an allied guild first (step 1)."] .. "|r")
+            keyText:SetText("|cff808080" .. L["Add an allied guild first."] .. "|r")
             keyButton:SetText(draft.key and L["Change the key"] or L["Create the key"])
             keyHint.lines = { L["Shared key"], L["Every guild of the Guild Alliance uses the same key. La Taverne makes one for you."] }
         elseif draft.key then
@@ -3523,7 +3531,12 @@ local function BuildOfficerPanel()
 
         -- Every line La Taverne writes, the auto-invite one included; the box fits them.
         local lines = ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule())
-        previewText:SetText(table.concat(lines, "\n"))
+        -- Each line in its section's color: auto-invite gold, alliance blue (like the tags).
+        local shown = {}
+        for i, line in ipairs(lines) do
+            shown[i] = (line:match("^LT:ai:") and "|cffffd100" or "|cff8fb8e8") .. line .. "|r"
+        end
+        previewText:SetText(table.concat(shown, "\n"))
         preview:SetHeight(math.max(36, #lines * 14 + 16))
         if dirty then
             previewLabel:SetText(L["Preview of La Taverne's lines in the Guild Info. The rest of the Guild Info stays as it is."])
@@ -3541,7 +3554,7 @@ local function BuildOfficerPanel()
         cancelButton:SetEnabled(dirty)
         exportButton:SetEnabled(saved)
         -- The whole height, for the scroll: the steps down to the two lines under Save.
-        self:SetHeight(216 + rule:GetHeight() + 18 + 102 + preview:GetHeight() + 10 + 24 + 8 + 44)
+        self:SetHeight(34 + rule:GetHeight() + 30 + 290 + preview:GetHeight() + 10 + 24 + 8 + 44)
     end
 
     function p:Refresh()

@@ -837,7 +837,7 @@ function ns.NewAutoInviteRule(parent, onChange)
     mode:SetPoint("TOPLEFT", 10, 0)
 
     -- One checkbox per guild rank (the game's names, guild master first), in two columns.
-    local RANK_ROW, RANK_COL = 26, 240
+    local RANK_ROW, RANK_COL = 26, 200
     local rankChecks = {}
     for i = 1, 10 do
         local cb = K.NewCheckbox(box, "", function(self)
