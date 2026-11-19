@@ -2,9 +2,15 @@
 -- Left-click opens La Taverne; right-click opens a short menu (available / stop, open groups,
 -- my group, auto-invite and its start / stop, Options).
 -- The tooltip says where I'm at: my group, my availability, auto-invite.
+-- On the button: a golden pulse with a count when something waits for my answer and I haven't
+-- seen it yet (join requests to my group, invitations), and a small steady green dot while
+-- something of mine is on (my group looking for players, available, auto-invite).
 local ADDON, ns = ...
 local Minimap = ns.NewModule("Minimap")
 local L = ns.L
+
+-- Things that are on right now show in green, so it's clear they can be stopped.
+local function On(text) return "|cff20ff20" .. text .. "|r" end
 
 local function QuickMenu(owner)
     if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
@@ -12,7 +18,7 @@ local function QuickMenu(owner)
         root:CreateTitle("La Taverne")
         local P = ns.Players
         if P:IsActive() then
-            root:CreateButton(L["Stop being available"], function() P:Stop(L["You're no longer available."]) end)
+            root:CreateButton(On(L["Stop being available"]), function() P:Stop(L["You're no longer available."]) end)
         else
             root:CreateButton(L["I'm available..."], function() ns.UI.OpenAvailability() end)
         end
@@ -22,7 +28,7 @@ local function QuickMenu(owner)
         root:CreateButton(ns.Groups:GetMine() and L["My group"] or L["Create a group"],
             function() ns.UI:Open() ns.UI:ShowPage("mygroup") end)
         root:CreateButton(L["Auto-invite"], function() ns.UI:ShowAutoInvite() end)
-        root:CreateButton(ns.Invites:IsActive() and L["Stop auto-invite"] or L["Start auto-invite"],
+        root:CreateButton(ns.Invites:IsActive() and On(L["Stop auto-invite"]) or L["Start auto-invite"],
             function() ns.Invites:Toggle() end)
         if root.CreateDivider then root:CreateDivider() end
         root:CreateButton(L["Options"], function() ns.UI:ShowSection("options") ns.UI:Open() end)
@@ -74,6 +80,61 @@ local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
     end,
 })
 
+-- Something of mine others can see right now.
+local function SomethingOn()
+    local mine = ns.Groups:GetMine()
+    if mine then
+        local state = ns.Groups:GetState(mine)
+        if state ~= "running" and state ~= "full" then return true end
+    end
+    return ns.Players:IsActive() or ns.Invites:IsActive()
+end
+
+local function Decorate(button)
+    local glow = button:CreateTexture(nil, "OVERLAY")
+    glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    glow:SetBlendMode("ADD")
+    glow:SetVertexColor(1, 0.82, 0)
+    glow:SetSize(58, 58)
+    glow:SetPoint("CENTER", 0, 0)
+    glow:Hide()
+    local pulse = glow:CreateAnimationGroup()
+    pulse:SetLooping("BOUNCE")
+    local fade = pulse:CreateAnimation("Alpha")
+    fade:SetFromAlpha(1)
+    fade:SetToAlpha(0.25)
+    fade:SetDuration(0.8)
+
+    local count = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    count:SetPoint("BOTTOMRIGHT", 2, -1)
+    count:SetTextColor(1, 0.82, 0)
+
+    local dot = button:CreateTexture(nil, "OVERLAY")
+    dot:SetTexture("Interface\\FriendsFrame\\StatusIcon-Online")
+    dot:SetSize(12, 12)
+    dot:SetPoint("TOPRIGHT", 1, 1)
+    dot:Hide()
+
+    local function Update()
+        local unseen = ns.Groups:CountUnseen()
+        if unseen > 0 then
+            glow:Show()
+            if not pulse:IsPlaying() then pulse:Play() end
+            count:SetText(unseen)
+        else
+            pulse:Stop()
+            glow:Hide()
+            count:SetText("")
+        end
+        dot:SetShown(SomethingOn() and true or false)
+    end
+    C_Timer.NewTicker(1, Update)
+    Update()
+end
+
 function Minimap:OnLogin()
-    LibStub("LibDBIcon-1.0"):Register(ADDON, launcher, ns.db.minimap)
+    local icon = LibStub("LibDBIcon-1.0")
+    icon:Register(ADDON, launcher, ns.db.minimap)
+    local button = icon.GetMinimapButton and icon:GetMinimapButton(ADDON)
+    if button then Decorate(button) end
 end

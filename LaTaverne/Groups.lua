@@ -60,6 +60,7 @@ local myApplications = {}  -- requests I sent: [id] = { role, status = "pending"
 -- again when their group shows up again (their heartbeat), so it isn't lost.
 local myInviteReplies = {} -- invitations I answered: [id] = "accepted" | "declined"
 local seenInvitations = {} -- invitations I saw on the Invitations page: [id] = true
+local seenRequests = {}    -- join requests to my group I saw on My group: [name key] = true
 local callbacks = {}
 
 function Groups:OnChange(fn)
@@ -635,6 +636,27 @@ function Groups:MarkInvitationsSeen()
     for _, l in ipairs(self:GetInvitations()) do seenInvitations[l.id] = true end
 end
 
+-- My group page was shown: the join requests on it are seen (the minimap button stops glowing).
+function Groups:MarkRequestsSeen()
+    local mine = self:GetMine()
+    for key, p in pairs(mine and mine.pending or {}) do
+        if p.status == "request" then seenRequests[key] = true end
+    end
+end
+
+-- Things waiting for my answer that I haven't seen yet: join requests to my group, invitations.
+function Groups:CountUnseen()
+    local n = 0
+    local mine = self:GetMine()
+    for key, p in pairs(mine and mine.pending or {}) do
+        if p.status == "request" and not seenRequests[key] then n = n + 1 end
+    end
+    for _, l in ipairs(self:GetInvitations()) do
+        if not myInviteReplies[l.id] and not seenInvitations[l.id] then n = n + 1 end
+    end
+    return n
+end
+
 -- An invitation I haven't answered and haven't seen yet (opening La Taverne goes there).
 function Groups:HasUnseenInvitation()
     for _, l in ipairs(self:GetInvitations()) do
@@ -932,6 +954,8 @@ function Groups:Create(dungeon, roles, invites, note, composition, options)
     CharDB().listing = listing
     UpdateState(listing)
     self:Broadcast()
+    -- The game's group finder sound when a group gets listed (joining a queue).
+    if SOUNDKIT and SOUNDKIT.PVP_ENTER_QUEUE then PlaySound(SOUNDKIT.PVP_ENTER_QUEUE) end
     -- Same notice as the other guild members get, so the leader sees the group went out.
     if self:AlertMode() ~= "none" then
         ns.Print(format(L["New group: %s by %s"], DungeonWithRange(listing.dungeon), listing.leader))
@@ -1193,6 +1217,7 @@ function Groups:Apply(id)
     local roles = RoleList(self:GetMyRoles())
     if not l or #roles == 0 or not self:IsOpen(l) then return end
     if self:GetMine() and not self:IsAloneInMine() then return end -- remove my group first
+    if not self:GetMine() and IsInGroup() then return end -- leave my party first
     local _, class = UnitClass("player")
     local payload = {
         id = id, to = l.leader, roles = roles, role = roles[1], newbie = self:IsNewPlayer() or nil,
@@ -1218,6 +1243,7 @@ function Groups:ReplyInvitation(id, accepted, role, roles)
     if not l then return end
     if accepted and not ROLE_SET[role] then return end
     if accepted and self:GetMine() and not self:IsAloneInMine() then return end -- remove my group first
+    if accepted and not self:GetMine() and IsInGroup() then return end -- leave my party first
     local _, class = UnitClass("player")
     myInviteReplies[id] = accepted and "accepted" or "declined"
     if accepted and ns.Players then ns.Players:Stop(L["You accepted an invitation: you're no longer available."]) end
@@ -1286,7 +1312,8 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
         seenInvitations[l.id] = nil
     end
     if newInvite then
-        ns.Print(format(L["%s invites you to %s."], sender, DungeonWithRange(l.dungeon)) .. " " .. GroupLink(l))
+        ns.Print(format(L["%s invites you to %s."], sender, DungeonWithRange(l.dungeon)) .. " " .. GroupLink(l)
+            .. ((not Groups:GetMine() and IsInGroup()) and (" |cffff9900" .. L["Leave your party first."] .. "|r") or ""))
         if SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
     end
     Changed()
@@ -1340,6 +1367,7 @@ OnBoth("APPLY", function(sender, p, isSelf, scope)
     -- Nobody from their guild could confirm them: the leader sees it on the request.
     entry.unverified = scope == "ally" and ns.Vouch and ns.Vouch:GetState(sender) == "unverified" or nil
     l.pending[key] = entry
+    seenRequests[key] = nil -- a new request: not seen yet
     local labels = {}
     for _, role in ipairs(list) do labels[#labels + 1] = ns.RoleLabel(role) end
     ns.Print(format(L["%s wants to join as %s."], sender .. (tag and (" [" .. tag .. "]") or ""), table.concat(labels, " / ")))

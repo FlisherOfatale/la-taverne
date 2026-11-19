@@ -288,8 +288,6 @@ end
 ns.Comm:OnAlly("CHAT", function(sender, payload, isSelf)
     if isSelf or not Enabled() then return end
     local tag = ns.Alliance:GetTag(payload.g) or "?"
-    -- Nobody from their guild could confirm them (yet): a "?" after the tag.
-    if ns.Vouch and ns.Vouch:GetState(sender) == "unverified" then tag = tag .. "?" end
     Receive(sender, payload, tag)
 
 end)

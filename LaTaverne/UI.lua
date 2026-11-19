@@ -43,7 +43,9 @@ local function Ago(t)
     if seconds < 60 then return L["just now"] end
     local minutes = math.floor(seconds / 60)
     if minutes < 60 then return format(L["%d min ago"], minutes) end
-    return format(L["%d h ago"], math.floor(minutes / 60))
+    local hours = math.floor(minutes / 60)
+    if hours < 48 then return format(L["%d h ago"], hours) end
+    return format(L["%d d ago"], math.floor(hours / 24))
 end
 
 -- isGuest: true ("not in guild"), or an allied guild's tag ("[TA]"), or nothing.
@@ -1085,14 +1087,14 @@ local function FillListingRow(row, l)
     row.titleHit.dungeon = l.dungeon
     row.titleHit.listing = l
     row.titleHit:Fit()
-    -- An allied leader nobody from their guild could confirm yet: "?" after the tag.
+    -- An allied leader nobody from their guild could confirm yet: said in the tooltip only.
     local unverified = l.tag and ns.Vouch and ns.Vouch:GetState(l.leader) == "unverified"
     local note = (l.note and l.note ~= "") and ("  |cffb0b0b0\194\171 " .. l.note:gsub("\n", " ") .. " \194\187|r") or ""
     local icons = FlagIcons(l)
-    row.leader:SetText(NameText(l.leader, LeaderClass(l), l.tag and (l.tag .. (unverified and "?" or ""))) .. " " .. CROWN
+    row.leader:SetText(NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN
         .. (icons ~= "" and ("  " .. icons) or "") .. note)
-    local tip = { NameText(l.leader, LeaderClass(l), l.tag and (l.tag .. (unverified and "?" or ""))) .. " " .. CROWN }
-    if unverified then tip[#tip + 1] = format(L["Nobody from [%s] could confirm this player yet."], l.tag) end
+    local tip = { NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN }
+    if unverified then tip[#tip + 1] = format(L["Not checked yet: nobody from [%s] was online to confirm this player is a member."], l.tag) end
     if l.note and l.note ~= "" then tip[#tip + 1] = "|cffffd100" .. L["Note"] .. ":|r " .. l.note end
     for _, line in ipairs(FlagLines(l)) do tip[#tip + 1] = line end
     row.leaderHit.tooltip = tip
@@ -1230,9 +1232,10 @@ local function InitPendingRow(row, p)
         row.built = true
     end
 
-    -- Allied players show their guild's tag; "?" when nobody from that guild could confirm them.
+    -- Allied players show their guild's tag, and "not checked yet" when nobody from that guild
+    -- could confirm them.
     row.name:SetText(NameText(p.name, p.class, p.tag)
-        .. (p.unverified and (" |cffff9900(" .. L["unverified"] .. ")|r") or ""))
+        .. (p.unverified and (" |cffff9900(" .. L["not checked yet"] .. ")|r") or ""))
     -- Under the name: level, and "new player" once, as words (a leader wants to know).
     local detail = {}
     if p.level then detail[#detail + 1] = format(L["Level %d"], p.level) end
@@ -1326,10 +1329,16 @@ local function AcceptInvitation(button, l)
     end
 end
 
--- My own group is listed: alone in it, joining another group is fine (mine is removed once
--- I'm accepted); with anyone else in it (member, invited, request), remove it first.
+-- Why I can't join or accept another group right now, or nil. My own group is listed: alone in
+-- it, joining another group is fine (mine is removed once I'm accepted); with anyone else in it
+-- (member, invited, request), remove it first. In a party outside the finder: leave it first,
+-- the game won't let the leader invite me.
 local function JoinBlocked()
-    return ns.Groups:GetMine() ~= nil and not ns.Groups:IsAloneInMine()
+    if ns.Groups:GetMine() then
+        return not ns.Groups:IsAloneInMine() and L["Remove your group first."] or nil
+    end
+    if IsInGroup() then return L["Leave your party first."] end
+    return nil
 end
 
 local function InitGroupRow(row, l, invite)
@@ -1382,9 +1391,11 @@ local function InitGroupRow(row, l, invite)
         row.button:SetText(L["Accept"])
         row.decline:Show()
         row.decline:SetScript("OnClick", function() ns.Groups:ReplyInvitation(l.id, false) end)
-        if JoinBlocked() then
+        local blocked = JoinBlocked()
+        if blocked then
             row.button:Disable()
-            row.button.tooltip = { L["Accept"], "|cffff4040" .. L["Remove your group first."] .. "|r" }
+            row.button.tooltip = { L["Accept"], "|cffff4040" .. blocked .. "|r" }
+            row.status:SetText("|cffff9900" .. blocked .. "|r")
         else
             row.button:SetScript("OnClick", function(button) AcceptInvitation(button, l) end)
             if ns.Groups:GetMine() then
@@ -1432,7 +1443,7 @@ local function InitGroupRow(row, l, invite)
         row.button:Disable()
     elseif JoinBlocked() then
         row.button:Disable()
-        row.button.tooltip = { L["Join"], "|cffff4040" .. L["Remove your group first."] .. "|r" }
+        row.button.tooltip = { L["Join"], "|cffff4040" .. JoinBlocked() .. "|r" }
     else
         row.button:SetScript("OnClick", function() ns.Groups:Apply(l.id) end)
         if ns.Groups:GetMine() then
@@ -1811,8 +1822,9 @@ local function AvailabilityTooltip(owner)
     local P = ns.Players
     local lines = { L["I'm available"],
         L["Tell the guild you want a group: leaders see your roles (ticked in the group list) and the dungeons you want, and can invite you."] }
-    if IsInGroup() then
-        lines[#lines + 1] = "|cffff9900" .. L["You're in a party: post a group for your party instead."] .. "|r"
+    if not P:IsActive() and (IsInGroup() or ns.Groups:GetMine()) then
+        -- Why the button is greyed out.
+        lines[#lines + 1] = "|cffff4040" .. InPartyText(false) .. "|r"
     elseif P:IsPaused() then
         lines[#lines + 1] = "|cffffd100" .. L["Paused while you're in a dungeon."] .. "|r"
     end
@@ -1831,6 +1843,7 @@ local function BuildGroupsPanel()
     -- I'm available (solo only): left of "Create a group".
     p.avail = NewButton(p, "", 170)
     p.avail:SetPoint("TOPRIGHT", -168, -4)
+    p.avail:SetMotionScriptsWhileDisabled(true) -- the tooltip says why it's greyed out
     p.avail:SetScript("OnClick", function() OpenAvailability() end)
     p.avail:SetScript("OnEnter", function(self) AvailabilityTooltip(self) end)
     p.avail:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2840,7 +2853,6 @@ local function InitPlayerRow(row, e)
 
     local a = e.avail
     local tag = e.tag or (a and a.tag)
-    if tag and a and a.unverified then tag = tag .. "?" end
     local level = e.level and (" |cff808080" .. format(L["Level %d"], e.level) .. "|r") or ""
     local afk = a and a.afk and (" |cffff9900" .. L["(AFK)"] .. "|r") or ""
     -- Their La Taverne version: shown only when it's older than mine; always in the tooltip.
@@ -2925,6 +2937,7 @@ local function BuildPlayersPanel()
     -- Not available: "I'm available...". Available: "Change..." (the same menu) and "Stop".
     p.avail = NewButton(p, L["I'm available..."], 170)
     p.avail:SetPoint("TOPRIGHT", -2, -4)
+    p.avail:SetMotionScriptsWhileDisabled(true) -- the tooltip says why it's greyed out
     p.avail:SetScript("OnClick", function() OpenAvailability() end)
     p.avail:SetScript("OnEnter", function(self) AvailabilityTooltip(self) end)
     p.avail:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3008,10 +3021,10 @@ local function BuildPlayersPanel()
             self.status:SetText("|cff20ff20" .. timeText .. "|r  \194\183  " .. RoleIcons(ns.Groups:GetMyRoles())
                 .. " \194\183  " .. forText
                 .. (P:IsPaused() and ("  |cffffd100" .. L["(paused: in a dungeon)"] .. "|r") or ""))
-        elseif IsInGroup() or ns.Groups:GetMine() then
-            -- In a group of the finder it's normal (gold); just in a party, a hint (orange).
-            local inFinder = ns.Groups:GetMine() or ns.Groups:GetJoined()
-            self.status:SetText((inFinder and "|cffffd100" or "|cffff9900") .. InPartyText(true) .. "|r")
+        elseif ns.Groups:GetMine() or ns.Groups:GetJoined() then
+            -- In a group of the finder it's normal (gold). Just in a party: the greyed-out
+            -- button's tooltip says why.
+            self.status:SetText("|cffffd100" .. InPartyText(true) .. "|r")
         else
             self.status:SetText("|cff808080" .. L["You're not available."] .. "|r")
         end
@@ -3434,7 +3447,7 @@ local NO_ICON = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14|t"
 -- A player's vouching state as an icon and one word, plus the full line for the tooltip.
 local VOUCH_SHORT = {
     confirmed = { READY_ICON, "20ff20", "confirmed" },
-    unverified = { WAIT_ICON, "ff9900", "not confirmed" },
+    unverified = { WAIT_ICON, "ff9900", "not checked: nobody from their guild online" },
     denied = { NO_ICON, "ff4040", "not in this guild" },
 }
 
@@ -3460,10 +3473,13 @@ local function InitAllianceRow(row, item)
         row.side:SetPoint("RIGHT", -12, 1)
         row.name = NewLabel(row)
         row.name:SetPoint("LEFT", 26, 0)
-        row.state = NewLabel(row, nil, "GameFontHighlightSmall")
-        row.state:SetPoint("LEFT", 300, 0)
         row.seen = NewLabel(row, nil, "GameFontDisableSmall")
         row.seen:SetPoint("RIGHT", -12, 0)
+        row.state = NewLabel(row, nil, "GameFontHighlightSmall")
+        row.state:SetPoint("LEFT", 260, 0)
+        row.state:SetPoint("RIGHT", row.seen, "LEFT", -10, 0) -- a long state is cut, never over the time
+        row.state:SetJustifyH("LEFT")
+        row.state:SetWordWrap(false)
         row.note = NewLabel(row, nil, "GameFontDisable")
         row.note:SetPoint("LEFT", 26, 0)
         row.hit = CreateFrame("Frame", nil, row)
@@ -3490,11 +3506,18 @@ local function InitAllianceRow(row, item)
     elseif player then
         local p = item.player
         local short = VOUCH_SHORT[p.state]
-        row.name:SetText(p.name)
-        row.state:SetText(short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
-            or ("|cff808080" .. L["Checking..."] .. "|r"))
+        -- Not heard from lately (or only seen before this session): greyed.
+        row.name:SetText(p.online and p.name or ("|cff9d9d9d" .. p.name .. "|r"))
+        if p.remembered then
+            row.state:SetText("|cff808080" .. L["Not heard since you logged in"] .. "|r")
+        else
+            row.state:SetText(short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
+                or ("|cff808080" .. L["Checking..."] .. "|r"))
+        end
         row.seen:SetText(p.seen and Ago(p.seen) or "")
-        row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r", ns.Vouch.StateText(p) }
+        row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",
+            p.remembered and L["Seen before, not heard from since you logged in."] or ns.Vouch.StateText(p),
+            p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
     else
         row.note:SetText(item.text)
     end
@@ -3510,7 +3533,8 @@ local function BuildNetworkPanel()
     local p = NewPanel()
     NewPageTitle(p, L["Guild Alliance"], { L["Guild Alliance"],
         L["Guilds linked together: their groups, available players and (if you want) guild chat are shared, as if it were one guild."],
-        L["Members of their guild confirm who they are. Players their guild doesn't know are ignored. A ? after the tag in chat: nobody from that guild could answer yet."] })
+        L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."],
+        L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] })
     -- Top right: the channel and my shared chat setting.
     local status = NewLabel(p, "", "GameFontHighlight")
     status:SetPoint("TOPRIGHT", -8, -12)
@@ -3584,9 +3608,9 @@ local function BuildNetworkPanel()
                 rows[#rows + 1] = g
                 rows[#rows + 1] = { kind = "note", text = L["Allied players see you with this tag."] }
             else
-                local confirmed = 0
-                for _, pl in ipairs(seen) do if pl.state == "confirmed" then confirmed = confirmed + 1 end end
-                g.side = #seen > 0 and format(L["%d seen, %d confirmed"], #seen, confirmed) or ""
+                local online = 0
+                for _, pl in ipairs(seen) do if pl.online then online = online + 1 end end
+                g.side = #seen > 0 and format(L["%d online, %d known"], online, #seen) or ""
                 rows[#rows + 1] = g
                 if #seen == 0 then
                     rows[#rows + 1] = { kind = "note", text = L["Nobody from this guild heard from yet."] }
@@ -4153,6 +4177,7 @@ function UI:Refresh()
     if panel then panel:Refresh() end
     -- Looking at Browse: the invitations on top won't pull me there again.
     if currentPage == "browse" then ns.Groups:MarkInvitationsSeen() end
+    if currentPage == "mygroup" then ns.Groups:MarkRequestsSeen() end
 end
 
 function UI:ShowPage(page)

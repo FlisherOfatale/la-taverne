@@ -17,6 +17,7 @@ if GetLocale() == "frFR" then
     L["just now"] = "à l'instant"
     L["%d min ago"] = "il y a %d min"
     L["%d h ago"] = "il y a %d h"
+    L["%d d ago"] = "il y a %d j"
 
     -- Groups tab
     L["Open groups: %d"] = "Groupes ouverts : %d"
@@ -378,6 +379,7 @@ if GetLocale() == "frFR" then
     L["Until I log out"] = "Jusqu'à ma déconnexion"
     L["You joined a party: you're no longer available."] = "Vous avez rejoint un groupe : vous n'êtes plus disponible."
     L["You're available (%s). Leaders looking for players see you."] = "Vous êtes disponible (%s). Les chefs qui cherchent des joueurs vous voient."
+    L["Leave your party first."] = "Quittez d'abord votre groupe actuel."
     L["You're in a party: post a group for your party instead."] = "Vous êtes en groupe : publiez plutôt un groupe pour votre groupe."
     L["You're no longer available."] = "Vous n'êtes plus disponible."
     L["Your availability ends in %d min (at %s)."] = "Votre disponibilité se termine dans %d min (à %s)."
@@ -435,7 +437,7 @@ if GetLocale() == "frFR" then
     L["Already %d %s in the group: keep at least that many."] = "Déjà %d %s dans le groupe : gardez-en au moins autant."
 
 
-    L["Nobody from [%s] could confirm this player yet."] = "Personne de [%s] n'a encore pu confirmer ce joueur."
+    L["Not checked yet: nobody from [%s] was online to confirm this player is a member."] = "Pas encore vérifié : personne de [%s] n'était en ligne pour confirmer que ce joueur en fait partie."
 
     -- Allied guilds in the group finder (0.14)
 
@@ -448,11 +450,12 @@ if GetLocale() == "frFR" then
     L["In [%s] (the game says so)"] = "Dans [%s] (selon le jeu)"
     L["Confirmed by %s"] = "Confirmé par %s"
     L["Not in [%s]"] = "Pas dans [%s]"
-    L["Unverified: nobody from [%s] answered"] = "Non vérifié : personne de [%s] n'a répondu"
+    L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."] = "Pas encore vérifié : personne de [%s] n'était en ligne pour confirmer qu'il en fait partie. Ses messages passent quand même ; c'est revérifié dès que quelqu'un de [%s] est en ligne."
     L["Checking..."] = "Vérification..."
-    L["unverified"] = "non vérifié"
+    L["not checked yet"] = "pas encore vérifié"
     L["Allied players seen"] = "Joueurs alliés vus"
-    L["Members of their guild confirm who they are. Players their guild doesn't know are ignored. A ? after the tag in chat: nobody from that guild could answer yet."] = "Les membres de leur guilde confirment qui ils sont. Les joueurs que leur guilde ne connaît pas sont ignorés. Un ? après le tag dans le chat : personne de cette guilde n'a encore pu répondre."
+    L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."] = "Les membres de leur guilde confirment qui ils sont. Les joueurs que leur guilde ne connaît pas sont ignorés."
+    L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] = "Pas encore vérifié : personne de sa guilde n'était en ligne pour le confirmer. Il passe quand même, et sera revérifié plus tard."
     L["Questions about me"] = "Questions sur moi"
     L["Stay quiet (normal)"] = "Ne pas répondre (normal)"
     L["Answer: yes, in my guild"] = "Répondre : oui, dans ma guilde"
@@ -600,7 +603,7 @@ if GetLocale() == "frFR" then
     L["GuildUnion has no allied guilds to import."] = "GuildUnion n'a pas de guilde alliée à importer."
     -- Alliance page
     L["confirmed"] = "confirmé"
-    L["not confirmed"] = "non confirmé"
+    L["not checked: nobody from their guild online"] = "pas vérifié : personne de sa guilde en ligne"
     L["not in this guild"] = "pas dans cette guilde"
     L["Channel:"] = "Canal :"
     L["connecting"] = "connexion..."
@@ -608,7 +611,10 @@ if GetLocale() == "frFR" then
     L["on"] = "activé"
     L["The hidden channel the allied guilds talk on. Ready: groups, availability and shared chat go through."] = "Le canal caché sur lequel les guildes alliées se parlent. Prêt : les groupes, les disponibilités et le chat partagé passent."
     L["Allied players see you with this tag."] = "Les joueurs alliés vous voient avec ce tag."
-    L["%d seen, %d confirmed"] = "%d vus, %d confirmés"
+    L["%d online, %d known"] = "%d en ligne, %d connus"
+    L["Not heard since you logged in"] = "Pas entendu depuis votre connexion"
+    L["Seen before, not heard from since you logged in."] = "Déjà vu avant, pas entendu depuis votre connexion."
+    L["Last heard from:"] = "Dernier signe :"
     L["Nobody from this guild heard from yet."] = "Personne de cette guilde entendu pour l'instant."
     L["Your group is posted (%s): the available players who fit it are below."] = "Votre groupe est publié (%s) : les joueurs disponibles qui lui conviennent sont en dessous."
     L["Your group is posted (%s): no need to be available."] = "Votre groupe est publié (%s) : pas besoin d'être disponible."

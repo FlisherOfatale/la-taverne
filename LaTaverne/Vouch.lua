@@ -6,7 +6,7 @@
 -- random delay; the others stay quiet once someone answered). Everyone keeps the answers.
 --   confirmed:  normal.
 --   denied:     their messages are dropped (allied chat, auto-invite, and later allied groups).
---   unverified: nobody from B answered (nobody online): let through, with a "?" after the tag.
+--   unverified: nobody from B answered (nobody online): let through (no mark in chat).
 -- While we wait for the answer (a few seconds, only the first time), their messages are held.
 -- Answers are kept 30 minutes (unverified: asked again after 5). Once the player is in our
 -- party or raid, or targeted, the game's own guild info replaces the answers (not in debug
@@ -20,6 +20,10 @@ local KEEP_UNVERIFIED = 5 * 60
 local WAIT = 4                         -- seconds to wait for an answer
 local ANSWER_MIN, ANSWER_MAX = 0.3, 2  -- random delay before answering
 local HOLD_MAX = 10                    -- messages held per player while waiting
+local ONLINE = 10 * 60                 -- heard from this recently: online
+local REMEMBER = 14 * 24 * 3600        -- allied players seen are remembered this long
+local HELLO_QUIET = 30                 -- no answer to a hello if I said hello this recently
+local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 
 -- Messages that are part of vouching itself are never held.
 Vouch.EXEMPT = { VQ = true, VA = true }
@@ -28,6 +32,26 @@ Vouch.EXEMPT = { VQ = true, VA = true }
 -- state: "checking", "confirmed", "unverified", "denied"; source: "answer", "game", "timeout"
 local players = {}
 local answering = {} -- [nameKey] = timer: I'm about to answer a question about this player
+
+-- Allied players seen before, saved so the Alliance page isn't empty at login. Kept per guild
+-- of mine (test guilds apart): [nameKey] = { name, guild, seen }. Only a name and a time:
+-- vouching always starts over, nothing here is trusted.
+local function Memory()
+    local mine = ns.Guild:GetName()
+    if not mine or mine == "" then return nil end
+    local key = (ns.Guild:IsSandbox() and "test:" or "") .. mine:lower()
+    ns.db.allySeen = ns.db.allySeen or {}
+    ns.db.allySeen[key] = ns.db.allySeen[key] or {}
+    return ns.db.allySeen[key]
+end
+
+local function Remember(entry)
+    local memory = Memory()
+    if not memory then return end
+    local key = ns.NameKey(entry.name)
+    if entry.state == "denied" then memory[key] = nil return end
+    memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen }
+end
 
 Vouch.stats = { asked = 0, answered = 0, confirmed = 0, denied = 0, unverified = 0, dropped = 0 }
 
@@ -76,6 +100,7 @@ local function Settle(entry, state, by, source)
     local waiting = entry.waiting
     entry.waiting = nil
     if state == "denied" then
+        Remember(entry) -- forgets them
         if old ~= "denied" then
             local tag = ns.Alliance:GetTag(entry.guild) or entry.guild
             ns.Print(L["%s says they're in [%s], but [%s] says no: their messages are ignored."]:format(entry.name, tag, tag))
@@ -120,6 +145,7 @@ end
 function Vouch:Gate(sender, guild, fn)
     local entry = Entry(sender, guild)
     entry.seen = GetServerTime()
+    Remember(entry)
 
     local real = GameGuild(sender)
     if real then
@@ -186,7 +212,13 @@ function Vouch:Search(text, limit)
     local now = GetServerTime()
     for key, entry in pairs(players) do
         if entry.seen and entry.state ~= "denied" and key:find(needle, 1, true) and not ns.Guild:IsMember(entry.name) then
-            out[#out + 1] = { name = entry.name, guild = entry.guild, online = now - entry.seen < 600, starts = key:sub(1, #needle) == needle }
+            out[#out + 1] = { name = entry.name, guild = entry.guild, online = now - entry.seen < ONLINE, starts = key:sub(1, #needle) == needle }
+        end
+    end
+    -- Players seen before this session, offline as far as we know.
+    for key, item in pairs(Memory() or {}) do
+        if not players[key] and key:find(needle, 1, true) and ns.Alliance:IsAllied(item.guild) and not ns.Guild:IsMember(item.name) then
+            out[#out + 1] = { name = item.name, guild = item.guild, online = false, starts = key:sub(1, #needle) == needle }
         end
     end
     table.sort(out, function(a, b)
@@ -198,15 +230,24 @@ function Vouch:Search(text, limit)
 end
 
 
--- Allied players heard from, most recent first: { name, guild, tag, state, by, source, seen, t }.
+-- Allied players heard from, most recent first: { name, guild, tag, state, by, source, seen, t,
+-- online }, then the ones seen before this session ({ name, guild, tag, seen, remembered }).
 function Vouch:GetPlayers()
     local list = {}
+    local now = GetServerTime()
     for _, entry in pairs(players) do
         if entry.seen or entry.manual then
             list[#list + 1] = {
                 name = entry.name, guild = entry.guild, tag = ns.Alliance:GetTag(entry.guild),
                 state = entry.state, by = entry.by, source = entry.source, seen = entry.seen or entry.asked, t = entry.t,
+                online = entry.seen and now - entry.seen < ONLINE or false,
             }
+        end
+    end
+    for key, item in pairs(Memory() or {}) do
+        if not players[key] then
+            list[#list + 1] = { name = item.name, guild = item.guild, tag = ns.Alliance:GetTag(item.guild),
+                seen = item.seen, remembered = true, online = false }
         end
     end
     table.sort(list, function(a, b) return (a.seen or 0) > (b.seen or 0) end)
@@ -222,7 +263,7 @@ function Vouch.StateText(item)
     elseif item.state == "denied" then
         return "|cffff4040" .. L["Not in [%s]"]:format(tag) .. "|r"
     elseif item.state == "unverified" then
-        return "|cffff9900" .. L["Unverified: nobody from [%s] answered"]:format(tag) .. "|r"
+        return "|cffff9900" .. L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."]:format(tag, tag) .. "|r"
     end
     return "|cff808080" .. L["Checking..."] .. "|r"
 end
@@ -325,8 +366,37 @@ ns.Comm:OnAlly("VA", function(sender, payload, isSelf)
     Settle(entry, state, sender, "answer")
 end)
 
+-- Hello: each addon says it's there when it joins the alliance channel, and the ones already
+-- online answer once (spread out, and one answer covers everyone who just said hello). So the
+-- Alliance page shows who's online within seconds, not only players who post or talk.
+local lastHello = 0
+local helloTimer
+local function SayHello(answer)
+    lastHello = GetServerTime()
+    ns.Comm:SendAlly("HI", { r = answer or nil })
+end
+
+ns.Comm:OnAlly("HI", function(sender, payload, isSelf)
+    if isSelf or payload.r or helloTimer then return end
+    if GetServerTime() - lastHello < HELLO_QUIET then return end
+    helloTimer = C_Timer.NewTimer(HELLO_MIN + math.random() * (HELLO_MAX - HELLO_MIN), function()
+        helloTimer = nil
+        if GetServerTime() - lastHello >= HELLO_QUIET then SayHello(true) end
+    end)
+end)
+
 -- The game shows allied players' real guild once they're in the group.
 function Vouch:OnLogin()
+    ns.Comm:OnReady(function(role)
+        if role == "ally" and ns.Alliance:IsActive() then SayHello(false) end
+    end)
+    -- Drop players not seen for two weeks (left, changed guild, stopped playing).
+    local now = GetServerTime()
+    for _, memory in pairs(ns.db.allySeen or {}) do
+        for key, item in pairs(memory) do
+            if type(item) ~= "table" or not item.seen or now - item.seen > REMEMBER then memory[key] = nil end
+        end
+    end
     ns.On("GROUP_ROSTER_UPDATE", function()
         for _, entry in pairs(players) do
             local real = GameGuild(entry.name)

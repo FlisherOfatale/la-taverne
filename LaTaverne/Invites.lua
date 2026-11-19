@@ -390,7 +390,7 @@ function ns.BuildInvitesPanel()
         local status = entry.status == "invited" and ("|cffffd100" .. L["invited"] .. "|r") or L["waiting"]
         local source = L[SOURCE_TEXT[entry.source] or entry.source]
         if entry.source == "ally" and ns.Vouch and ns.Vouch:GetState(entry.name) == "unverified" then
-            source = source .. " |cffff9900(" .. L["unverified"] .. ")|r"
+            source = source .. " |cffff9900(" .. L["not checked yet"] .. ")|r"
         end
         row.info:SetText(status .. "  \194\183  " .. source .. "  \194\183  " .. K.Ago(entry.time))
         row.invite:SetShown(entry.status == "queued")
