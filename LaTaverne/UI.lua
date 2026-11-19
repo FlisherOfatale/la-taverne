@@ -3829,18 +3829,32 @@ local SCALES = { 0.8, 0.9, 1, 1.1, 1.2, 1.3 }
 local function BuildOptionsPanel()
     local p = NewPanel()
     NewPageTitle(p, L["Options"])
-    local y = -40
+    -- The options scroll between the title and the bottom line (error report, version), with a
+    -- scroll bar only once they don't fit. The bar's room is always kept: nothing moves.
+    local scroll = CreateFrame("ScrollFrame", "LaTaverneOptionsScroll", p, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 0, -32)
+    scroll:SetPoint("BOTTOMRIGHT", -26, 40)
+    local bar = scroll.ScrollBar or _G["LaTaverneOptionsScrollScrollBar"]
+    if bar then bar:Hide() end
+    local c = CreateFrame("Frame", nil, scroll)
+    c:SetSize(1, 1)
+    scroll:SetScrollChild(c)
+    scroll:SetScript("OnSizeChanged", function(self, width) c:SetWidth(width) end)
+    scroll:HookScript("OnScrollRangeChanged", function(_, _, yRange)
+        if bar then bar:SetShown((yRange or 0) > 0.5) end
+    end)
+    local y = -8
 
     -- Section helpers: a header, then rows going down.
     local function Section(text)
-        local header = NewSectionHeader(p, text)
+        local header = NewSectionHeader(c, text)
         header:SetPoint("TOPLEFT", 8, y)
         y = y - 28
         return header
     end
     local function Row(label)
         local rowY = y
-        if label then NewLabel(p, label):SetPoint("TOPLEFT", 16, rowY - 4) end
+        if label then NewLabel(c, label):SetPoint("TOPLEFT", 16, rowY - 4) end
         y = y - OPTION_ROW
         return rowY
     end
@@ -3851,7 +3865,7 @@ local function BuildOptionsPanel()
 
     -- Keyboard shortcut: click, then press a key. Dark like the game's key binding buttons.
     local rowY = Row(L["Shortcut to open La Taverne"])
-    local bind = CreateFrame("Button", nil, p, "BackdropTemplate")
+    local bind = CreateFrame("Button", nil, c, "BackdropTemplate")
     bind:SetSize(180, 24)
     bind:SetPoint("TOPLEFT", CONTROL_X, rowY)
     if bind.SetBackdrop then
@@ -3907,16 +3921,16 @@ local function BuildOptionsPanel()
     rowY = Row(L["Window size"])
     local scaleChoices = {}
     for _, s in ipairs(SCALES) do scaleChoices[#scaleChoices + 1] = { text = format("%d %%", math.floor(s * 100 + 0.5)), value = s } end
-    local scale = NewChoice(p, 110, scaleChoices, function() return ns.db.scale or 1 end,
+    local scale = NewChoice(c, 110, scaleChoices, function() return ns.db.scale or 1 end,
         function(s) UI:SetScale(s) end)
     scale:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
-    local resetPos = NewButton(p, L["Recenter the window"], 160)
+    local resetPos = NewButton(c, L["Recenter the window"], 160)
     resetPos:SetPoint("LEFT", scale, "RIGHT", 10, 0)
     resetPos:SetScript("OnClick", function() UI:ResetPosition() end)
 
     -- Which chat window gets La Taverne's lines.
     rowY = Row(L["La Taverne messages in"])
-    local chatWindow = NewChoice(p, 180, ChatWindowChoices, function() return ns.ChatWindow() and ns.db.chatWindow or 0 end,
+    local chatWindow = NewChoice(c, 180, ChatWindowChoices, function() return ns.ChatWindow() and ns.db.chatWindow or 0 end,
         function(i)
             ns.db.chatWindow = i ~= 0 and i or nil
             ns.Print(L["La Taverne messages show here."])
@@ -3928,7 +3942,7 @@ local function BuildOptionsPanel()
     local langChecks = {}
     for _, lang in ipairs(ns.OtherDungeonLanguages()) do
         rowY = Row()
-        local cb = NewCheckbox(p, format(L["Also show dungeon names in %s, in tooltips"], L[lang.name]), function(self)
+        local cb = NewCheckbox(c, format(L["Also show dungeon names in %s, in tooltips"], L[lang.name]), function(self)
             ns.db.dungeonLanguages = ns.db.dungeonLanguages or {}
             ns.db.dungeonLanguages[lang.key] = self:GetChecked() and true or nil
         end)
@@ -3943,20 +3957,20 @@ local function BuildOptionsPanel()
     -- Minimap ------------------------------------------------------------------
     Section(L["Minimap"])
     rowY = Row()
-    local minimap = NewCheckbox(p, L["Show the minimap button"], function(self)
+    local minimap = NewCheckbox(c, L["Show the minimap button"], function(self)
         ns.db.minimap.hide = not self:GetChecked()
         local icon = LibStub("LibDBIcon-1.0")
         if ns.db.minimap.hide then icon:Hide(ADDON) else icon:Show(ADDON) end
     end)
     minimap:SetPoint("TOPLEFT", 12, rowY + 2)
     -- The game's add-on drawer by the minimap (only when the game has one).
-    local drawer = NewCheckbox(p, L["Show in the add-on drawer"], function(self)
+    local drawer = NewCheckbox(c, L["Show in the add-on drawer"], function(self)
         ns.Minimap:SetInDrawer(self:GetChecked())
     end)
     drawer:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
     WithTooltip(drawer, { L["Show in the add-on drawer"], L["The game's button by the minimap that lists your add-ons."] })
     rowY = Row()
-    local glow = NewCheckbox(p, L["Glow and count on the button when something waits for you"], function(self)
+    local glow = NewCheckbox(c, L["Glow and count on the button when something waits for you"], function(self)
         ns.db.minimapGlow = self:GetChecked() and true or false
         if ns.Minimap.Update then ns.Minimap.Update() end
     end)
@@ -3969,7 +3983,7 @@ local function BuildOptionsPanel()
     Section(L["Alerts"])
     -- New groups: a chat line for all of them, only those that fit me, or none
     rowY = Row(L["Tell me about new groups"])
-    local alerts = NewChoice(p, 220, {
+    local alerts = NewChoice(c, 220, {
             { text = L["All groups"], value = "all" },
             { text = L["Only groups that fit me"], value = "fit" },
             { text = L["None"], value = "none" },
@@ -3977,19 +3991,19 @@ local function BuildOptionsPanel()
         { L["Tell me about new groups"],
             L["A chat line when a guild member posts a group. Fit me: it needs one of the roles you ticked in the group list, and the dungeon is at your level."] })
     alerts:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
-    local alertSound = NewCheckbox(p, L["With a sound"], function(self)
+    local alertSound = NewCheckbox(c, L["With a sound"], function(self)
         ns.db.alertSound = self:GetChecked() and true or nil
     end)
     alertSound:SetPoint("LEFT", alerts, "RIGHT", 12, 0)
     rowY = Row()
-    local requestSound = NewCheckbox(p, L["A sound when someone asks to join my group"], function(self)
+    local requestSound = NewCheckbox(c, L["A sound when someone asks to join my group"], function(self)
         ns.db.requestSound = self:GetChecked() and true or false
     end)
     requestSound:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(requestSound, { L["A sound when someone asks to join my group"],
         L["Also when a player accepts your invitation. The chat line is always there."] })
     rowY = Row()
-    local quiet = NewCheckbox(p, L["Quiet in dungeons, raids and combat"], function(self)
+    local quiet = NewCheckbox(c, L["Quiet in dungeons, raids and combat"], function(self)
         ns.db.quiet = self:GetChecked() and true or nil
     end)
     quiet:SetPoint("TOPLEFT", 12, rowY + 2)
@@ -4000,24 +4014,27 @@ local function BuildOptionsPanel()
     -- Shared guild chat: always on. The tag option, and (only while GuildUnion is loaded too)
     -- a switch to stop it, so allied lines don't show twice --------------------------------
     local chatHeader = Section(L["Shared guild chat"])
-    local chatInfo = NewInfoIcon(p, { L["Shared guild chat"],
+    local chatInfo = NewInfoIcon(c, { L["Shared guild chat"],
         L["Messages from the allied guilds show up in your guild chat, and yours in theirs."],
         L["Only with a Guild Alliance."] })
     chatInfo:SetPoint("LEFT", chatHeader, "RIGHT", 6, 0)
-    local chatOff = NewLabel(p, L["Only with a Guild Alliance."], "GameFontDisableSmall")
+    local chatOff = NewLabel(c, L["Only with a Guild Alliance."], "GameFontDisableSmall")
     chatOff:SetPoint("LEFT", chatInfo, "RIGHT", 10, 0)
     rowY = Row()
-    local allyTag = NewCheckbox(p, L["Show the guild tag on allied messages"], function(self)
+    local allyTag = NewCheckbox(c, L["Show the guild tag on allied messages"], function(self)
         ns.db.allyChat.showTag = self:GetChecked() and true or false
     end)
     allyTag:SetPoint("TOPLEFT", 12, rowY + 2)
-    local allyChat = NewCheckbox(p, L["Share guild chat with the allied guilds"], function(self)
+    -- Only with GuildUnion loaded (see Refresh): its own row, under the tag.
+    rowY = Row()
+    local allyChat = NewCheckbox(c, L["Share guild chat with the allied guilds"], function(self)
         ns.db.allyChat.enabled = self:GetChecked() and true or false
         allyTag:SetEnabled(ns.db.allyChat.enabled)
     end)
-    allyChat:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
+    allyChat:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(allyChat, { L["Share guild chat with the allied guilds"],
         L["Shown because GuildUnion is installed: it shares guild chat too. Keep only one of the two sharing, or allied lines show twice."] })
+    local contentHeight = -y + 8
 
     -- Bottom line: the error report (always there, so players know where to look), and the
     -- version (to say which one you have when reporting a problem).
@@ -4052,6 +4069,8 @@ local function BuildOptionsPanel()
         local active = ns.Alliance:IsActive()
         chatOff:SetShown(not active)
         allyChat:SetShown(ns.AllyChat:CanTurnOff())
+        -- The scroll height: without the GuildUnion switch, its row isn't there.
+        c:SetHeight(contentHeight - (ns.AllyChat:CanTurnOff() and 0 or OPTION_ROW))
         allyChat:SetChecked(ns.db.allyChat.enabled)
         allyTag:SetChecked(ns.db.allyChat.showTag)
         allyChat:SetEnabled(active)
