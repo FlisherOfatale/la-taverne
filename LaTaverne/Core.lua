@@ -64,6 +64,30 @@ function ns.IsMe(name)
     return ns.NameKey(name) == ns.NameKey(ns.FullName("player"))
 end
 
+-- Players seen with La Taverne, remembered two weeks so the Alliance page lists them while
+-- they're offline: ns.db[field][guild of mine][nameKey] = { name, seen, ... }, test guilds
+-- apart. field: "guildSeen" (my guild's members), "allySeen" (allied players). Nothing in it
+-- is trusted, it's only a name and a time. nil while my guild isn't known yet.
+ns.SEEN_KEEP = 14 * 24 * 3600
+function ns.SeenMemory(field)
+    local mine = ns.Guild:GetName()
+    if not mine or mine == "" then return nil end
+    local key = (ns.Guild:IsSandbox() and "test:" or "") .. mine:lower()
+    ns.db[field] = ns.db[field] or {}
+    ns.db[field][key] = ns.db[field][key] or {}
+    return ns.db[field][key]
+end
+
+-- Forget the ones not seen for two weeks (left, changed guild, stopped playing). At login.
+function ns.PruneSeen(field)
+    local now = GetServerTime()
+    for _, memory in pairs(ns.db[field] or {}) do
+        for key, item in pairs(memory) do
+            if type(item) ~= "table" or not item.seen or now - item.seen > ns.SEEN_KEEP then memory[key] = nil end
+        end
+    end
+end
+
 -- In a party or raid I made (not a battleground or the game's dungeon finder group).
 function ns.InParty()
     return IsInGroup(LE_PARTY_CATEGORY_HOME or 1) and true or false

@@ -21,7 +21,6 @@ local WAIT = 4                         -- seconds to wait for an answer
 local ANSWER_MIN, ANSWER_MAX = 0.3, 2  -- random delay before answering
 local HOLD_MAX = 10                    -- messages held per player while waiting
 local ONLINE = 10 * 60                 -- heard from this recently: online
-local REMEMBER = 14 * 24 * 3600        -- allied players seen are remembered this long
 local BEAT = 240                       -- "still here" on the alliance channel, so idle players stay online
 local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 
@@ -39,14 +38,7 @@ local answering = {} -- [nameKey] = timer: I'm about to answer a question about 
 -- Allied players seen before, saved so the Alliance page isn't empty at login. Kept per guild
 -- of mine (test guilds apart): [nameKey] = { name, guild, seen }. Only a name and a time:
 -- vouching always starts over, nothing here is trusted.
-local function Memory()
-    local mine = ns.Guild:GetName()
-    if not mine or mine == "" then return nil end
-    local key = (ns.Guild:IsSandbox() and "test:" or "") .. mine:lower()
-    ns.db.allySeen = ns.db.allySeen or {}
-    ns.db.allySeen[key] = ns.db.allySeen[key] or {}
-    return ns.db.allySeen[key]
-end
+local function Memory() return ns.SeenMemory("allySeen") end
 
 local function Remember(entry)
     local memory = Memory()
@@ -417,13 +409,7 @@ function Vouch:OnLogin()
     C_Timer.NewTicker(BEAT + math.random(0, 30), function()
         if ns.Alliance:IsActive() and ns.Comm:IsAllyReady() then SayHello(true) end
     end)
-    -- Drop players not seen for two weeks (left, changed guild, stopped playing).
-    local now = GetServerTime()
-    for _, memory in pairs(ns.db.allySeen or {}) do
-        for key, item in pairs(memory) do
-            if type(item) ~= "table" or not item.seen or now - item.seen > REMEMBER then memory[key] = nil end
-        end
-    end
+    ns.PruneSeen("allySeen")
     ns.On("GROUP_ROSTER_UPDATE", function()
         for _, entry in pairs(players) do
             local real = GameGuild(entry.name)
