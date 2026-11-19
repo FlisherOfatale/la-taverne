@@ -2087,8 +2087,8 @@ local function BuildCreateForm(parent)
     })
     dropdown:SetPoint("TOPLEFT", COL, -44)
 
-    -- My role: big role icons with a checkbox. Starts with none: I pick it myself (clicking it
-    -- again unpicks it). Picking one ticks it in the roles bar of the group list too (it
+    -- My role: big role icons with a checkbox. Starts with the role of the last group I posted
+    -- (none the first time); clicking it again unpicks it. Picking one ticks it in the roles bar of the group list too (it
     -- replaces the role ticked there when there's only one, it's added when there are several).
     NewLabel(f, L["My role"]):SetPoint("TOPLEFT", 8, -98)
     f.roleButtons = {}
@@ -2142,7 +2142,7 @@ local function BuildCreateForm(parent)
     -- Reset only shows when there's something to clear: a dungeon, my role, players added,
     -- roles given to party members, a changed mix, a note, an option.
     local function UpdateReset()
-        local dirty = f.dungeon or f.myRole or next(f.extra) or next(f.partyRoles) or f.mixChanged
+        local dirty = f.dungeon or (f.myRole and f.myRole ~= ns.Groups:GetLastRole()) or next(f.extra) or next(f.partyRoles) or f.mixChanged
             or f.newbies:GetChecked() or f.discord:GetChecked()
             or strtrim(note:GetText() or "") ~= "" or strtrim(f.discordChannel:GetText() or "") ~= ""
         reset:SetShown(dirty and true or false)
@@ -2284,6 +2284,11 @@ local function BuildCreateForm(parent)
         end
         dropdown:Update()
         local myClass = MyClass()
+        -- The first time the form shows: the role of the last group I posted.
+        if not self.roleLoaded then
+            self.roleLoaded = true
+            self.myRole = self.myRole or ns.Groups:GetLastRole()
+        end
         if self.myRole and not ns.CanTakeRole(myClass, self.myRole) then self.myRole = nil end
         for role, button in pairs(self.roleButtons) do
             button:SetAllowed(ns.CanTakeRole(myClass, role))
@@ -2338,7 +2343,7 @@ local function BuildCreateForm(parent)
 
     function f:Reset()
         self.dungeon = nil
-        self.myRole = nil
+        self.myRole = ns.Groups:GetLastRole() -- back to the role of my last group
         self.error = nil
         wipe(self.extra)
         wipe(self.partyRoles)
@@ -2363,6 +2368,7 @@ local function BuildCreateForm(parent)
             discord = f.discord:GetChecked(),
             discordChannel = f.discordChannel:GetText(),
         })
+        ns.Groups:SetLastRole(f.myRole) -- the next form starts with it
         -- My group says it went out (see BuildManageView).
         UI.justPosted = GetTime()
 

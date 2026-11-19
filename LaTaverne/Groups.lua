@@ -173,6 +173,15 @@ local function MyKey()
     return ns.NameKey(ns.FullName("player"))
 end
 
+-- The role I took in the last group I posted (per character): the create form starts with it.
+function Groups:GetLastRole()
+    return CharDB().lastRole
+end
+
+function Groups:SetLastRole(role)
+    CharDB().lastRole = role
+end
+
 function Groups:GetMine()
     return CharDB().listing
 end
