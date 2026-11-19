@@ -410,13 +410,6 @@ C_Timer.NewTicker(15, function()
     for _, p in ipairs(tickers) do if p:IsShown() then p:Refresh() end end
 end)
 
-local function KeywordsText()
-    local words = Invites:GetSet().words
-    local shown = {}
-    for i = 1, math.min(#words, 3) do shown[i] = words[i] end
-    return table.concat(shown, ", ") .. (#words > 3 and ", ..." or "")
-end
-
 function ns.BuildInvitesPanel()
     local K = ns.UIKit
     local p = K.NewPanel()
@@ -425,8 +418,9 @@ function ns.BuildInvitesPanel()
         L["Guild members who type a keyword alone in guild chat (or allied guild chat) get a group invite. Handy for big events: everyone types +1."],
         L["Always off when you log in, and it turns itself off after a while (Settings)."] })
 
-    -- Start / Stop: the one thing most people come here for.
-    local toggle = K.NewButton(p, "", 140, 24)
+    -- Start / Stop: the one thing most people come here for. While on it's green and counts
+    -- down: "Stop (28 min)".
+    local toggle = K.NewButton(p, "", 150, 24)
     toggle:SetPoint("TOPRIGHT", -2, -4)
     toggle:SetScript("OnClick", function() Invites:Toggle() end)
     -- The settings page, in place of this one (Back returns).
@@ -434,10 +428,10 @@ function ns.BuildInvitesPanel()
     settings:SetPoint("RIGHT", toggle, "LEFT", -8, 0)
     settings:SetScript("OnClick", function() ns.UI:ShowPage("autoinviteSettings") end)
 
-    -- Right of the state line: the others inviting right now ("2 others are inviting"), who and
-    -- with which keywords in its tooltip. Orange when one of them uses one of my keywords.
+    -- Right of the "Listen to" row: the others inviting right now ("2 others are inviting"), who
+    -- and with which keywords in its tooltip. Orange when one of them uses one of my keywords.
     local others = K.NewLabel(p, "", "GameFontHighlight")
-    others:SetPoint("TOPRIGHT", -8, -40)
+    others:SetPoint("TOPRIGHT", -8, -78)
     local othersHit = CreateFrame("Frame", nil, p)
     othersHit:SetAllPoints(others)
     othersHit:EnableMouse(true)
@@ -460,24 +454,18 @@ function ns.BuildInvitesPanel()
     end)
     othersHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    local state = K.NewLabel(p, "", "GameFontHighlight")
-    state:SetPoint("TOPLEFT", 8, -40)
-    state:SetPoint("RIGHT", others, "LEFT", -12, 0)
-    state:SetJustifyH("LEFT")
-    state:SetWordWrap(false)
-
     -- Row 1: how invites go out, and the keyword set in use.
     local auto = K.NewCheckbox(p, L["Invite right away"], function(self)
         ns.db.invites.auto = self:GetChecked() and true or false
         Changed()
     end)
-    auto:SetPoint("TOPLEFT", 4, -60)
+    auto:SetPoint("TOPLEFT", 4, -38)
     auto:SetScript("OnEnter", function(self)
         K.ShowTooltip(self, { L["Invite right away"], L["Ticked: the queue sends the invites on its own. Unticked: they wait for you to click Invite."] })
     end)
     auto:SetScript("OnLeave", function() GameTooltip:Hide() end)
     local setLabel = K.NewLabel(p, L["Keywords"])
-    setLabel:SetPoint("TOPLEFT", 300, -66)
+    setLabel:SetPoint("TOPLEFT", 300, -44)
     local setChoice = K.NewChoice(p, 200, function()
             local out = {}
             for i, set in ipairs(Sets()) do out[#out + 1] = { text = set.name, value = i } end
@@ -486,25 +474,23 @@ function ns.BuildInvitesPanel()
         { L["Keywords"], L["The set of keywords you answer to. Each leader can use their own (+1 for one group, +2 for another), or all the same one. Edit them in Settings."] })
     setChoice:SetPoint("LEFT", setLabel, "RIGHT", 10, 0)
 
-    -- Row 2: where to listen.
+    -- Row 2: where to listen. Guild chat, the allied guilds (only with an alliance), whispers.
     local listenLabel = K.NewLabel(p, L["Listen to"])
-    listenLabel:SetPoint("TOPLEFT", 8, -98)
+    listenLabel:SetPoint("TOPLEFT", 8, -78)
     local guild = K.NewCheckbox(p, L["Guild chat"], function(self)
         ns.db.invites.guild = self:GetChecked() and true or false
         Changed()
     end)
     guild:SetPoint("LEFT", listenLabel, "RIGHT", 10, 0)
-    local whispers = K.NewCheckbox(p, L["Whispers"], function(self)
-        ns.db.invites.whispers = self:GetChecked() and true or false
-        Changed()
-    end)
-    whispers:SetPoint("LEFT", guild.Text or guild, "RIGHT", 24, 0)
-    -- Only with a Guild Alliance.
     local allied = K.NewCheckbox(p, L["Allied guilds"], function(self)
         ns.db.invites.allied = self:GetChecked() and true or false
         Changed()
     end)
-    allied:SetPoint("LEFT", whispers.Text or whispers, "RIGHT", 24, 0)
+    allied:SetPoint("LEFT", guild.Text or guild, "RIGHT", 24, 0)
+    local whispers = K.NewCheckbox(p, L["Whispers"], function(self)
+        ns.db.invites.whispers = self:GetChecked() and true or false
+        Changed()
+    end)
     allied:SetScript("OnEnter", function(self)
         K.ShowTooltip(self, { L["Allied guilds"],
             L["A keyword typed by an allied player in the shared guild chat puts them in the queue. Off: only your guild (their +1 may answer someone in their own guild)."] })
@@ -512,7 +498,7 @@ function ns.BuildInvitesPanel()
     allied:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local blocked = K.NewLabel(p, "", "GameFontRedSmall")
-    blocked:SetPoint("TOPLEFT", 8, -124)
+    blocked:SetPoint("TOPLEFT", 8, -104)
     blocked:SetPoint("RIGHT", p, "RIGHT", -8, 0)
     blocked:SetJustifyH("LEFT")
 
@@ -520,10 +506,10 @@ function ns.BuildInvitesPanel()
     -- results on the right.
     local SPLIT = 0.6 -- share of the width for the queue
     local left = CreateFrame("Frame", nil, p)
-    left:SetPoint("TOPLEFT", 0, -142)
+    left:SetPoint("TOPLEFT", 0, -122)
     left:SetPoint("BOTTOM", p, "BOTTOM", 0, 0)
     local right = CreateFrame("Frame", nil, p)
-    right:SetPoint("TOPRIGHT", 0, -142)
+    right:SetPoint("TOPRIGHT", 0, -122)
     right:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT", 16, 0)
     p:SetScript("OnSizeChanged", function(self, w) if w and w > 0 then left:SetWidth(w * SPLIT) end end)
     left:SetWidth(440)
@@ -606,13 +592,9 @@ function ns.BuildInvitesPanel()
         local queued = 0
         for _, entry in ipairs(queue) do if entry.status == "queued" then queued = queued + 1 end end
         if active then
-            toggle:SetText(L["Stop"])
-            state:SetText("|cff40ff40" .. L["On"] .. "|r  \194\183  " .. L["turns itself off in %d min"]:format(Invites:MinutesLeft())
-                .. "  \194\183  " .. L["keywords:"] .. " |cffffffff" .. KeywordsText() .. "|r")
+            toggle:SetText("|cff20ff20" .. format(L["Stop (%d min)"], Invites:MinutesLeft()) .. "|r")
         else
             toggle:SetText(L["Start"])
-            state:SetText("|cff808080" .. L["Off"] .. "|r  \194\183  " .. L["always off when you log in"]
-                .. (CountInvited() > 0 and ("  \194\183  " .. L["waiting for the last answers"]) or ""))
         end
         auto:SetChecked(s.auto)
         if setChoice.GenerateMenu then setChoice:GenerateMenu() end
@@ -624,6 +606,10 @@ function ns.BuildInvitesPanel()
         whispers:SetChecked(s.whispers)
         allied:SetShown(ns.Alliance:IsActive())
         allied:SetChecked(s.allied == true)
+        -- Whispers last: after the allied guilds, or after guild chat without an alliance.
+        local before = allied:IsShown() and allied or guild
+        whispers:ClearAllPoints()
+        whispers:SetPoint("LEFT", before.Text or before, "RIGHT", 24, 0)
         -- Listening to nothing: say so (it's on, but nobody can get in).
         local deaf = s.guild == false and not s.whispers and not (s.allied and ns.Alliance:IsActive())
         local why = Invites.blocked or (deaf and L["Not listening anywhere: tick guild chat, whispers or allied guilds."]) or ""
