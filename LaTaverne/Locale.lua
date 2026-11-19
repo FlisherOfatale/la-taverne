@@ -483,7 +483,6 @@ if GetLocale() == "frFR" then
 
 
     -- Navigation and layout pass (0.10)
-    L["Browse"] = "Parcourir"
 
     L["Invited, no answer yet"] = "Invité, sans réponse"
     L["Accepted, on the way"] = "Accepté, en route"
@@ -564,7 +563,7 @@ if GetLocale() == "frFR" then
     -- Availability dialog
     L["Roles"] = "Rôles"
     L["Duration"] = "Durée"
-    L["The same as the roles bar of Browse."] = "Les mêmes que la barre de rôles de Parcourir."
+    L["The same as the roles bar of the Groups tab."] = "Les mêmes que la barre de rôles de l'onglet Groupes."
     L["Leaders will see:"] = "Les chefs de groupe verront :"
     L["+%d more"] = "+%d autres"
     L["No time limit"] = "Sans limite"
@@ -616,7 +615,7 @@ if GetLocale() == "frFR" then
     L["Tell the guild you want a group: leaders see your roles and the dungeons you want, and can invite you."] = "Dites à la guilde que vous cherchez un groupe : les chefs voient vos rôles et les donjons que vous voulez, et peuvent vous inviter."
     L["Choose at least one dungeon, or any dungeon at my level."] = "Choisissez au moins un donjon, ou n'importe quel donjon à mon niveau."
     L["Announce in chat"] = "Annoncer dans le chat"
-    L["Group posted: the guild sees it in Browse."] = "Groupe publié : la guilde le voit dans Parcourir."
+    L["Group posted: the guild sees it in Groups."] = "Groupe publié : la guilde le voit dans Groupes."
     L["Members (%d/%d)"] = "Membres (%d/%d)"
     L["Requests"] = "Demandes"
     L["Requests (%d)"] = "Demandes (%d)"

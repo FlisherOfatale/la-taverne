@@ -1645,7 +1645,7 @@ local function BuildAvailabilityForm(parent, onDone)
         button:SetPoint("TOPLEFT", LEFT + 6 + (i - 1) * 52, TOP - 6)
         f.roleButtons[role] = button
     end
-    local rolesHint = NewLabel(inner, L["The same as the roles bar of Browse."], "GameFontDisableSmall")
+    local rolesHint = NewLabel(inner, L["The same as the roles bar of the Groups tab."], "GameFontDisableSmall")
     rolesHint:SetPoint("TOPLEFT", LEFT + 6 + 3 * 52 + 8, TOP - 20)
 
     -- Dungeons: any at my level, or the ones ticked in the list (ticking one picks "chosen").
@@ -2674,7 +2674,7 @@ local function BuildManageView(parent)
         elseif self.errorText and GetTime() - self.errorAt < 6 then
             self.message:SetText("|cffff4040" .. self.errorText .. "|r")
         elseif UI.justPosted and GetTime() - UI.justPosted < 8 then
-            self.message:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff40ff40" .. L["Group posted: the guild sees it in Browse."] .. "|r")
+            self.message:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff40ff40" .. L["Group posted: the guild sees it in Groups."] .. "|r")
             if not self.postedTimer then
                 self.postedTimer = true
                 C_Timer.After(8.1, function() self.postedTimer = nil UI:Refresh() end)
