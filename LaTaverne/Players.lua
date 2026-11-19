@@ -23,6 +23,8 @@ local HEARTBEAT = 60
 local EXPIRE = 150           -- someone else's availability without heartbeat for this long is gone
 local WARN_BEFORE = 300      -- popup this long before the end
 local PRESENCE_AGE = 20 * 60 -- "has La Taverne": heard from in the last 20 minutes
+local REMEMBER = 14 * 24 * 3600 -- guild members with La Taverne are remembered this long
+local WHO_WAIT = 8            -- after asking who's there: online members who didn't answer
 local NOTE_MAX = 80
 
 Players.DURATIONS = { 900, 1800, 3600, 7200, 0 } -- 0: until I log out
@@ -334,6 +336,17 @@ function Players:GetOnline()
 end
 
 -- Any guild message from a player: they run La Taverne.
+-- Guild members seen with La Taverne, saved so the Alliance page lists them while they're
+-- offline too. Per guild of mine (test guilds apart): [nameKey] = { name, class, level, seen }.
+local function Memory()
+    local mine = ns.Guild:GetName()
+    if not mine or mine == "" then return nil end
+    local key = (ns.Guild:IsSandbox() and "test:" or "") .. mine:lower()
+    ns.db.guildSeen = ns.db.guildSeen or {}
+    ns.db.guildSeen[key] = ns.db.guildSeen[key] or {}
+    return ns.db.guildSeen[key]
+end
+
 function Players:NoteAddon(name, class, level)
     if not name or ns.IsMe(name) then return end
     local key = ns.NameKey(name)
@@ -342,6 +355,31 @@ function Players:NoteAddon(name, class, level)
     p.seen = GetServerTime()
     if type(class) == "string" then p.class = class end
     if tonumber(level) then p.level = tonumber(level) end
+    local memory = Memory()
+    if memory then
+        local item = memory[key]
+        if item then
+            item.name, item.class, item.level, item.seen = name, p.class, p.level, p.seen
+        else
+            memory[key] = { name = name, class = p.class, level = p.level, seen = p.seen }
+        end
+    end
+end
+
+-- After asking who's there: forget the remembered members who left the guild, and the ones
+-- online (the roster says so) who didn't answer: they don't run La Taverne any more.
+local function ForgetSilent(asked)
+    local memory = Memory()
+    if not memory or ns.Guild:GetRosterCount() == 0 then return end
+    local changed = false
+    for key, item in pairs(memory) do
+        local member = ns.Guild:GetMember(item.name)
+        if not member or (member.online and (item.seen or 0) < asked) then
+            memory[key] = nil
+            changed = true
+        end
+    end
+    if changed then Changed() end
 end
 
 local lastWho = 0
@@ -349,6 +387,37 @@ function Players:AskWho()
     if GetTime() - lastWho < 30 then return end
     lastWho = GetTime()
     ns.Comm:Send("WHO", {})
+    local asked = GetServerTime()
+    C_Timer.After(WHO_WAIT, function() ForgetSilent(asked) end)
+end
+
+-- Guild members with La Taverne, online first then most recent: { name, class, level, seen,
+-- online }. Online: in the roster as online and heard from lately.
+function Players:GetGuildAddonUsers()
+    local out, now = {}, GetServerTime()
+    local memory = Memory() or {}
+    -- Heard from before my guild's name was known (just after login): not saved yet.
+    for key, p in pairs(present) do
+        if not memory[key] and ns.Guild:IsMember(p.name) then
+            local member = ns.Guild:GetMember(p.name)
+            out[#out + 1] = { name = p.name, class = member.class or p.class, level = member.level or p.level,
+                seen = p.seen, online = member.online and now - p.seen < PRESENCE_AGE or false }
+        end
+    end
+    for key, item in pairs(memory) do
+        local member = ns.Guild:GetMember(item.name)
+        if member then
+            local p = present[key]
+            local seen = math.max(item.seen or 0, p and p.seen or 0)
+            out[#out + 1] = { name = item.name, class = member.class or item.class, level = member.level or item.level,
+                seen = seen, online = member.online and now - seen < PRESENCE_AGE or false }
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.online ~= b.online then return a.online end
+        return (a.seen or 0) > (b.seen or 0)
+    end)
+    return out
 end
 
 -- Messages ------------------------------------------------------------------------------------
@@ -508,6 +577,13 @@ local function Tick()
 end
 
 function Players:OnLogin()
+    -- Drop guild members not seen with La Taverne for two weeks.
+    local now = GetServerTime()
+    for _, memory in pairs(ns.db.guildSeen or {}) do
+        for key, item in pairs(memory) do
+            if type(item) ~= "table" or not item.seen or now - item.seen > REMEMBER then memory[key] = nil end
+        end
+    end
     C_Timer.NewTicker(5, Tick)
     C_Timer.NewTicker(HEARTBEAT, function() if state.active then Players:Broadcast() end end)
     -- Joining any party ends it: in a party, post a group for the party instead.

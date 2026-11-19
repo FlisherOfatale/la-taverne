@@ -3536,6 +3536,11 @@ local VOUCH_SHORT = {
 
 local CARD_HEADER, CARD_ROW, CARD_GAP = 34, 24, 12
 
+local FOLD_OPEN = "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
+local FOLD_CLOSED = "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t "
+
+-- Rows: a guild's card header (folds the card), a player, the "n offline" line that folds the
+-- players not heard from lately, a note, or the gap between two cards.
 local function InitAllianceRow(row, item)
     if not row.built then
         row.card = CreateFrame("Frame", nil, row, "BackdropTemplate")
@@ -3551,7 +3556,7 @@ local function InitAllianceRow(row, item)
             row.card:SetBackdropBorderColor(1, 0.82, 0, 0.7)
         end
         row.title = NewLabel(row, nil, "GameFontNormalLarge")
-        row.title:SetPoint("LEFT", 12, 1)
+        row.title:SetPoint("LEFT", 10, 1)
         row.side = NewLabel(row, nil, "GameFontHighlightSmall")
         row.side:SetPoint("RIGHT", -12, 1)
         row.name = NewLabel(row)
@@ -3565,14 +3570,15 @@ local function InitAllianceRow(row, item)
         row.state:SetWordWrap(false)
         row.note = NewLabel(row, nil, "GameFontDisable")
         row.note:SetPoint("LEFT", 26, 0)
-        row.hit = CreateFrame("Frame", nil, row)
+        row.hit = CreateFrame("Button", nil, row)
         row.hit:SetAllPoints()
-        row.hit:EnableMouse(true)
         row.hit:SetScript("OnEnter", function(self) if self.tooltip then ShowTooltip(self, self.tooltip) end end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.hit:SetScript("OnClick", function(self) if self.onClick then self.onClick() end end)
         row.built = true
     end
-    local header, player, note = item.kind == "guild", item.kind == "player", item.kind == "note"
+    local header, player = item.kind == "guild", item.kind == "player"
+    local note = item.kind == "note" or item.kind == "fold"
     row.card:SetShown(header)
     row.title:SetShown(header)
     row.side:SetShown(header)
@@ -3580,27 +3586,44 @@ local function InitAllianceRow(row, item)
     row.state:SetShown(player)
     row.seen:SetShown(player)
     row.note:SetShown(note)
-    row.hit:EnableMouse(player)
+    row.hit:EnableMouse(header or player or item.kind == "fold")
     row.hit.tooltip = nil
+    row.hit.onClick = item.onClick
     if header then
-        row.title:SetText(item.name .. "  |cff8fb8e8[" .. (item.tag or "?") .. "]|r"
+        row.title:SetText((item.open and FOLD_OPEN or FOLD_CLOSED) .. item.name
+            .. "  |cff8fb8e8[" .. (item.tag or "?") .. "]|r"
             .. (item.mine and ("  |cff808080" .. L["your guild"] .. "|r") or ""))
         row.side:SetText(item.side or "")
+        row.hit.tooltip = item.tooltip
     elseif player then
         local p = item.player
-        local short = VOUCH_SHORT[p.state]
         -- Not heard from lately (or only seen before this session): greyed.
-        row.name:SetText(p.online and p.name or ("|cff9d9d9d" .. p.name .. "|r"))
-        if p.remembered then
-            row.state:SetText("|cff808080" .. L["Not heard since you logged in"] .. "|r")
+        if item.mine then
+            row.name:SetText(p.online and NameText(p.name, p.class) or ("|cff9d9d9d" .. p.name .. "|r"))
+            local ver = ns.Comm:GetVersion(p.name)
+            local old = ver and ns.version ~= "?" and ns.CompareVersions(ver, ns.version) < 0
+            row.state:SetText(not p.online and ("|cff808080" .. L["offline"] .. "|r")
+                or old and ("|cffff9900" .. L["(old version)"] .. "|r")
+                or ("|cff808080" .. (ver and ("La Taverne v" .. ver) or "La Taverne") .. "|r"))
+            row.hit.tooltip = { NameText(p.name, p.class),
+                ver and ("La Taverne v" .. ver) or "La Taverne",
+                p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
         else
-            row.state:SetText(short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
-                or ("|cff808080" .. (p.state and L["Checking..."] or L["online, not checked yet"]) .. "|r"))
+            local short = VOUCH_SHORT[p.state]
+            row.name:SetText(p.online and p.name or ("|cff9d9d9d" .. p.name .. "|r"))
+            if p.remembered then
+                row.state:SetText("|cff808080" .. L["Not heard since you logged in"] .. "|r")
+            else
+                row.state:SetText(short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
+                    or ("|cff808080" .. (p.state and L["Checking..."] or L["online, not checked yet"]) .. "|r"))
+            end
+            row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",
+                p.remembered and L["Seen before, not heard from since you logged in."] or ns.Vouch.StateText(p),
+                p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
         end
         row.seen:SetText(p.seen and Ago(p.seen) or "")
-        row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",
-            p.remembered and L["Seen before, not heard from since you logged in."] or ns.Vouch.StateText(p),
-            p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
+    elseif item.kind == "fold" then
+        row.note:SetText((item.open and FOLD_OPEN or FOLD_CLOSED) .. format(L["%d offline"], item.count))
     else
         row.note:SetText(item.text)
     end
@@ -3630,6 +3653,8 @@ local function BuildNetworkPanel()
     end)
     statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Folded cards and "n offline" lines, per guild (lowercased name).
+    p.open, p.offlineOpen = {}, {}
     local list = NewScrollList(p, AllianceRowHeight, InitAllianceRow)
     list:SetPoint("TOPLEFT", 0, -44)
     list:SetPoint("BOTTOMRIGHT", -20, 0)
@@ -3663,14 +3688,33 @@ local function BuildNetworkPanel()
         if not active then return end
 
         status:SetText(L["Channel:"] .. " " .. ns.Comm:AllyStatusText())
+        ns.Players:AskWho() -- my guild's members with La Taverne (at most every 30 s)
 
-        -- Players heard from, by guild.
+        -- Players heard from, by guild (mine: my guild's members with La Taverne).
         local byGuild = {}
         for _, pl in ipairs(ns.Vouch:GetPlayers()) do
             local key = (pl.guild or ""):lower()
             byGuild[key] = byGuild[key] or {}
             table.insert(byGuild[key], pl)
         end
+        -- Activity per guild: open groups and available players (mine: no tag).
+        local byTag = {}
+        for _, entry in ipairs(ns.Alliance:GetGuilds()) do
+            if entry.tag then byTag[entry.tag:lower()] = entry.name:lower() end
+        end
+        local mineKey = (ns.Guild:GetName() or ""):lower()
+        local activity = {}
+        local function Count(tag, field)
+            local key = tag and byTag[tag:lower()] or mineKey
+            activity[key] = activity[key] or { groups = 0, available = 0 }
+            activity[key][field] = activity[key][field] + 1
+        end
+        for _, l in ipairs(ns.Groups:GetListings()) do
+            if ns.Groups:IsOpen(l) then Count(l.tag, "groups") end
+        end
+        for _, a in ipairs(ns.Players:GetAvailable()) do Count(a.tag, "available") end
+        if ns.Players:IsActive() then Count(nil, "available") end
+
         -- My guild first, then the others in the setup's order.
         local guilds = {}
         for _, entry in ipairs(ns.Alliance:GetGuilds()) do
@@ -3680,20 +3724,45 @@ local function BuildNetworkPanel()
         local rows = {}
         for i, g in ipairs(guilds) do
             if i > 1 then rows[#rows + 1] = { kind = "gap" } end
-            local seen = byGuild[g.name:lower()] or {}
-            if g.mine then
-                g.side = ""
-                rows[#rows + 1] = g
-                rows[#rows + 1] = { kind = "note", text = L["Allied players see you with this tag."] }
-            else
-                local online = 0
-                for _, pl in ipairs(seen) do if pl.online then online = online + 1 end end
-                g.side = #seen > 0 and format(L["%d online, %d known"], online, #seen) or ""
-                rows[#rows + 1] = g
+            local key = g.name:lower()
+            local seen = g.mine and ns.Players:GetGuildAddonUsers() or byGuild[key] or {}
+            local online, offline = {}, {}
+            for _, pl in ipairs(seen) do
+                if pl.online then online[#online + 1] = pl else offline[#offline + 1] = pl end
+            end
+            -- Header: what's going on (groups, available), then who's there.
+            local parts = {}
+            local act = activity[key]
+            if act and act.groups > 0 then
+                parts[#parts + 1] = "|cff20ff20" .. (act.groups == 1 and L["1 group"] or format(L["%d groups"], act.groups)) .. "|r"
+            end
+            if act and act.available > 0 then
+                parts[#parts + 1] = "|cff20ff20" .. (act.available == 1 and L["1 available"] or format(L["%d available"], act.available)) .. "|r"
+            end
+            if #seen > 0 then parts[#parts + 1] = format(L["%d online, %d known"], #online, #seen) end
+            g.side = table.concat(parts, "  ·  ")
+            -- Folded: my guild by default (its members are on Availability too), the others open.
+            if self.open[key] == nil then self.open[key] = not g.mine end
+            g.open = self.open[key]
+            g.onClick = function() self.open[key] = not self.open[key] self:Refresh() end
+            g.tooltip = { g.name .. "  |cff8fb8e8[" .. (g.tag or "?") .. "]|r",
+                g.mine and L["Allied players see you with this tag."] or nil }
+            rows[#rows + 1] = g
+            if g.open then
                 if #seen == 0 then
-                    rows[#rows + 1] = { kind = "note", text = L["Nobody from this guild heard from yet."] }
+                    rows[#rows + 1] = { kind = "note", text = g.mine and L["Nobody else from your guild with La Taverne heard from yet."]
+                        or L["Nobody from this guild heard from yet."] }
                 end
-                for _, pl in ipairs(seen) do rows[#rows + 1] = { kind = "player", player = pl } end
+                for _, pl in ipairs(online) do rows[#rows + 1] = { kind = "player", player = pl, mine = g.mine } end
+                -- The others (not heard from lately, or only before this session): folded.
+                if #offline > 0 then
+                    local showOffline = self.offlineOpen[key] == true
+                    rows[#rows + 1] = { kind = "fold", count = #offline, open = showOffline,
+                        onClick = function() self.offlineOpen[key] = not showOffline self:Refresh() end }
+                    if showOffline then
+                        for _, pl in ipairs(offline) do rows[#rows + 1] = { kind = "player", player = pl, mine = g.mine } end
+                    end
+                end
             end
         end
         SetListData(list, rows)
