@@ -69,6 +69,7 @@ if GetLocale() == "frFR" then
 
     -- My group tab: manage
     L["Remove group"] = "Retirer le groupe"
+    L["Remove my availability"] = "Retirer ma disponibilité"
     L["Reset"] = "Réinitialiser"
     L["View"] = "Voir"
     L["Members"] = "Membres"

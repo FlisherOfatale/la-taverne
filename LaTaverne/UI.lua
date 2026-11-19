@@ -1726,7 +1726,7 @@ local function BuildAvailabilityForm(parent, onDone)
     -- create form).
     f.confirm = NewButton(inner, "", 180, 26)
     f.confirm:SetPoint("BOTTOMRIGHT", -2, 6)
-    f.second = NewButton(inner, "", 120, 26)
+    f.second = NewButton(inner, "", 200, 26)
     f.second:SetPoint("RIGHT", f.confirm, "LEFT", -8, 0)
     f.message = NewLabel(inner, "", "GameFontHighlightSmall")
     f.message:SetPoint("LEFT", inner, "BOTTOMLEFT", 8, 19)
@@ -1786,7 +1786,7 @@ local function BuildAvailabilityForm(parent, onDone)
         self.message:SetText(why and ("|cffff4040" .. why .. "|r") or "")
         self.confirm:SetText(active and L["Save"] or L["I'm available"])
         self.confirm:SetEnabled(why == nil)
-        self.second:SetText(L["Stop"])
+        self.second:SetText(L["Remove my availability"]) -- like "Remove group" on My group
         self.second:SetShown(active)
     end
 
@@ -3000,13 +3000,10 @@ local function BuildPlayersPanel()
     p.avail:SetScript("OnEnter", function(self) AvailabilityTooltip(self) end)
     p.avail:SetScript("OnLeave", function() GameTooltip:Hide() end)
     -- Available: "My availability" in green at the top right (the form, like My group on the
-    -- Groups tab), and Stop under the note in my section.
+    -- Groups tab); stopping is done from there ("Remove my availability").
     p.change = NewButton(p, "|cff20ff20" .. L["My availability"] .. "|r", 160)
     p.change:SetPoint("TOPRIGHT", -2, -4)
     p.change:SetScript("OnClick", function() OpenAvailability() end)
-    p.stop = NewButton(p, L["Stop"], 100)
-    p.stop:SetPoint("TOPLEFT", 76, -122)
-    p.stop:SetScript("OnClick", function() ns.Players:Stop(L["You're no longer available."]) end)
 
     -- While available: a "My availability" section (status line, note). In a group: the status
     -- line alone. Otherwise nothing: the page starts with the lists.
@@ -3045,7 +3042,7 @@ local function BuildPlayersPanel()
         self.status:ClearAllPoints()
         self.status:SetPoint("TOPLEFT", 8, available and -68 or -40)
         self.status:SetPoint("RIGHT", self, "RIGHT", -8, 0)
-        local y = available and -160 or ((self.status:GetText() or "") ~= "" and -72 or -40)
+        local y = available and -132 or ((self.status:GetText() or "") ~= "" and -72 or -40)
         ShowSection(self.demandHeader, showDemand)
         self.anyLine:SetShown(showDemand)
         self.demand:SetShown(showDemand and demandRows > 0)
@@ -3074,7 +3071,6 @@ local function BuildPlayersPanel()
         local active = P:IsActive()
         self.avail:SetShown(not active)
         self.avail:SetEnabled(not IsInGroup() and not ns.Groups:GetMine())
-        self.stop:SetShown(active)
         self.change:SetShown(active)
         local s = P.Settings()
         local forText = DungeonsShort(s.dungeons, L["any dungeon at my level"])
