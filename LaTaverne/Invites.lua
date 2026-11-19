@@ -580,7 +580,8 @@ function ns.BuildInvitesPanel()
     -- Two columns, both the full height: the queue on the left (its buttons under it), the last
     -- results on the right.
     local SPLIT = 0.6 -- share of the width for the queue
-    -- A dark box with a border around a list (and its scroll bar): two clear columns, even empty.
+    -- A dark box with a border around a list (and its scroll bar): two clear columns, left blank
+    -- when empty.
     local function Framed(column, list)
         local frame = CreateFrame("Frame", nil, column, "BackdropTemplate")
         frame:SetPoint("TOPLEFT", list, "TOPLEFT", -4, 4)
@@ -641,10 +642,6 @@ function ns.BuildInvitesPanel()
     box:SetPoint("TOPLEFT", 4, -22)
     box:SetPoint("BOTTOMRIGHT", -20, 40)
     Framed(left, box)
-    local empty = K.NewLabel(left, "", "GameFontDisable")
-    empty:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -16)
-    empty:SetPoint("RIGHT", box, "RIGHT", -10, 0)
-    empty:SetJustifyH("LEFT")
 
     local nextButton = K.NewButton(left, L["Invite next"], 160)
     nextButton:SetPoint("BOTTOMLEFT", 2, 4)
@@ -680,8 +677,6 @@ function ns.BuildInvitesPanel()
     local clearResults = K.NewButton(right, L["Clear the results"], 160)
     clearResults:SetPoint("BOTTOMLEFT", 2, 4)
     clearResults:SetScript("OnClick", function() Invites:ClearResults() end)
-    local nothing = K.NewLabel(right, "|cff808080" .. L["Nothing yet"] .. "|r", "GameFontDisable")
-    nothing:SetPoint("TOPLEFT", recentBox, "TOPLEFT", 10, -16)
 
     function p:Refresh()
         local s = ns.db.invites
@@ -708,12 +703,9 @@ function ns.BuildInvitesPanel()
         blocked:SetText(why)
         queueHeader:SetText(#queue > 0 and format(L["Queue (%d)"], #queue) or L["Queue"])
         K.SetListData(box, queue)
-        empty:SetShown(#queue == 0)
-        empty:SetText(active and L["Nobody yet."] or L["Start auto-invite: players who type a keyword show up here."])
         nextButton:SetEnabled(queued > 0)
         clear:SetEnabled(#queue > 0)
         K.SetListData(recentBox, recent)
-        nothing:SetShown(#recent == 0)
         clearResults:SetEnabled(#recent > 0)
     end
     Invites:OnChange(function() if p:IsShown() then p:Refresh() end end)

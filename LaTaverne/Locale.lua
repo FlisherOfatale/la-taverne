@@ -370,7 +370,6 @@ if GetLocale() == "frFR" then
     L["guild chat"] = "chat de guilde"
     L["allied guild"] = "guilde alliée"
     L["whisper"] = "chuchotement"
-    L["Nobody yet."] = "Personne pour l'instant."
     L["Invite next"] = "Inviter le suivant"
     L["Clear the queue"] = "Vider la file"
     L["Last results"] = "Derniers résultats"
@@ -380,7 +379,6 @@ if GetLocale() == "frFR" then
     L["offline or not found"] = "hors ligne ou introuvable"
     L["no answer"] = "pas de réponse"
     L["removed"] = "retiré"
-    L["Nothing yet"] = "Rien pour l'instant"
 
     L["Auto-invite settings"] = "Réglages de l'invitation automatique"
     L["queue: %d, invited: %d"] = "file : %d, invités : %d"
@@ -703,7 +701,6 @@ if GetLocale() == "frFR" then
     L["Invite right away"] = "Inviter tout de suite"
     L["Ticked: the queue sends the invites on its own. Unticked: they wait for you to click Invite."] = "Coché : la file envoie les invitations toute seule. Décoché : elles attendent votre clic sur Inviter."
     L["Always off when you log in, and it turns itself off after a while (Settings)."] = "Toujours désactivée à la connexion, et elle s'arrête d'elle-même au bout d'un moment (Réglages)."
-    L["Start auto-invite: players who type a keyword show up here."] = "Lancez l'invitation automatique : les joueurs qui tapent un mot-clé apparaissent ici."
     L["Remove from the queue"] = "Retirer de la file"
     L["%s wants an invite (queue: %d)."] = "%s veut une invitation (file : %d)."
     -- Options
