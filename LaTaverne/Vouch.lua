@@ -27,6 +27,9 @@ local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 
 -- Messages that are part of vouching itself are never held.
 Vouch.EXEMPT = { VQ = true, VA = true }
+-- A hello only says someone is online: it never starts a question (every login would send one
+-- from each online ally). They're checked once they post or talk.
+Vouch.PASSIVE = { HI = true }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer }
 -- state: "checking", "confirmed", "unverified", "denied"; source: "answer", "game", "timeout"
@@ -142,10 +145,16 @@ end
 
 -- Let a message from an allied player through (fn), hold it until we know, or drop it.
 -- Returns true (passed now), nil (held) or false (dropped).
-function Vouch:Gate(sender, guild, fn)
+-- passive (a hello): never asks; passes unless they were denied.
+function Vouch:Gate(sender, guild, fn, passive)
     local entry = Entry(sender, guild)
     entry.seen = GetServerTime()
     Remember(entry)
+    if passive and entry.state ~= "denied" then
+        Changed()
+        fn()
+        return true
+    end
 
     local real = GameGuild(sender)
     if real then
@@ -192,7 +201,7 @@ end
 -- The allied guild a player belongs to, as far as we know (never for a denied player).
 function Vouch:GetGuild(name)
     local entry = players[ns.NameKey(name) or ""]
-    if not entry or not entry.state or entry.state == "denied" then return nil end
+    if not entry or entry.state == "denied" then return nil end
     return entry.guild
 end
 
@@ -269,6 +278,9 @@ function Vouch.StateText(item)
         return "|cffff4040" .. L["Not in [%s]"]:format(tag) .. "|r"
     elseif item.state == "unverified" then
         return "|cffff9900" .. L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."]:format(tag, tag) .. "|r"
+    elseif not item.state then
+        -- Only said hello so far.
+        return "|cff808080" .. L["Online. Checked once they post a group or talk."] .. "|r"
     end
     return "|cff808080" .. L["Checking..."] .. "|r"
 end

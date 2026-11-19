@@ -444,6 +444,8 @@ if GetLocale() == "frFR" then
     L["Not in [%s]"] = "Pas dans [%s]"
     L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."] = "Pas encore vérifié : personne de [%s] n'était en ligne pour confirmer qu'il en fait partie. Ses messages passent quand même ; c'est revérifié dès que quelqu'un de [%s] est en ligne."
     L["Checking..."] = "Vérification..."
+    L["online, not checked yet"] = "en ligne, pas encore vérifié"
+    L["Online. Checked once they post a group or talk."] = "En ligne. Vérifié dès qu'il publie un groupe ou parle."
     L["not checked yet"] = "pas encore vérifié"
     L["Allied players seen"] = "Joueurs alliés vus"
     L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."] = "Les membres de leur guilde confirment qui ils sont. Les joueurs que leur guilde ne connaît pas sont ignorés."

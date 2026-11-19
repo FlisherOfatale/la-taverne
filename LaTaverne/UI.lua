@@ -3595,7 +3595,7 @@ local function InitAllianceRow(row, item)
             row.state:SetText("|cff808080" .. L["Not heard since you logged in"] .. "|r")
         else
             row.state:SetText(short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
-                or ("|cff808080" .. L["Checking..."] .. "|r"))
+                or ("|cff808080" .. (p.state and L["Checking..."] or L["online, not checked yet"]) .. "|r"))
         end
         row.seen:SetText(p.seen and Ago(p.seen) or "")
         row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",

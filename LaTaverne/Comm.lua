@@ -406,7 +406,8 @@ local function OnAllyMessage(text, sender)
     Comm.stats.received = Comm.stats.received + 1
     -- Vouching: is the sender really in that guild? Held until we know, dropped if not.
     if ns.Vouch and not ns.Vouch.EXEMPT[msgType] then
-        ns.Vouch:Gate(sender, guild, function() Dispatch("ally", msgType, sender, payload, protocol) end)
+        ns.Vouch:Gate(sender, guild, function() Dispatch("ally", msgType, sender, payload, protocol) end,
+            ns.Vouch.PASSIVE[msgType])
         return
     end
     Dispatch("ally", msgType, sender, payload, protocol)
