@@ -3191,6 +3191,15 @@ local function BuildOfficerPanel()
     local draft
     local dirty = false
     local imported = false -- the list shows an imported setup, not saved yet
+    -- After Save: the lines we're waiting to read back from the Guild Info (pasted by the
+    -- officer). The page stays "not saved" until then.
+    local pending
+    local function LinesSig(lines)
+        local copy = {}
+        for i, line in ipairs(lines) do copy[i] = line end
+        table.sort(copy)
+        return table.concat(copy, "\n")
+    end
 
     local CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t "
     -- A part of a section: gold, or green with a check once done.
@@ -3230,9 +3239,10 @@ local function BuildOfficerPanel()
     ally:SetPoint("RIGHT", p, "RIGHT", 0, 0)
     local allyHeader = NewSectionHeader(p, L["Guild Alliance"])
     allyHeader:SetPoint("TOPLEFT", ally, "TOPLEFT", 8, 0)
-    -- Import / Export, on the section's line: only the alliance's lines (not auto-invite).
+    -- Import / Export, right under the section's line: only the alliance's lines (not
+    -- auto-invite).
     local exportButton = NewButton(p, L["Export"], 100)
-    exportButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, 4)
+    exportButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, -28)
     -- Import: a window to paste a setup in (or fill it from GuildUnion).
     local importButton = NewButton(p, L["Import..."], 110)
     importButton:SetPoint("RIGHT", exportButton, "LEFT", -6, 0)
@@ -3244,17 +3254,21 @@ local function BuildOfficerPanel()
 
     Changed = function()
         dirty = true
+        pending = nil -- changed again after Save: Save again
         p:RefreshDraft()
     end
 
     -- The guilds
     local step1 = NewLabel(p, "", "GameFontNormal")
-    step1:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -32)
-    local status = NewLabel(p, "", "GameFontHighlightSmall")
-    status:SetPoint("LEFT", step1, "RIGHT", 16, 0)
-    status:SetPoint("RIGHT", p, "RIGHT", -26, 0)
-    status:SetWordWrap(false)
-    status:SetJustifyH("LEFT")
+    step1:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -64)
+    -- Right of it: Active (the guilds allied with in its tooltip) or Not set up.
+    local status = NewLabel(p, "", "GameFontHighlight")
+    status:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -28, -64)
+    local statusHit = CreateFrame("Frame", nil, p)
+    statusHit:SetAllPoints(status)
+    statusHit:EnableMouse(true)
+    statusHit:SetScript("OnEnter", function(self) if self.tooltip then ShowTooltip(self, self.tooltip) end end)
+    statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local list = NewScrollList(p, 26, function(row, data)
         if not row.init then
@@ -3288,22 +3302,24 @@ local function BuildOfficerPanel()
         if not row.tag:HasFocus() then row.tag:SetText(data.tag or "") end
         row.remove:SetShown(not data.mine)
     end)
-    list:SetPoint("TOPLEFT", ally, "TOPLEFT", 20, -52)
+    list:SetPoint("TOPLEFT", ally, "TOPLEFT", 20, -84)
     list:SetPoint("RIGHT", -20, 0)
     list:SetHeight(26 * 3)
 
     -- Add a guild: an empty row under the list, same columns (name, tag, button).
     local addName = NewInput(p, 300, 60)
-    addName:SetPoint("TOPLEFT", ally, "TOPLEFT", 32, -138)
+    addName:SetPoint("TOPLEFT", ally, "TOPLEFT", 32, -170)
     SetPlaceholder(addName, L["Add a guild..."])
     NewLabel(p, L["Tag"], "GameFontNormalSmall"):SetPoint("LEFT", addName, "LEFT", 20 + TAG_X - 32, 0)
     local addTag = NewInput(p, 70, 6)
     addTag:SetPoint("LEFT", addName, "LEFT", 20 + TAG_X + 35 - 32, 0)
     local addButton = NewButton(p, L["Add"], 90)
-    addButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, -138)
-    local addHint = NewInfoIcon(p, { L["Add a guild..."],
-        L["Exact guild name, as the game writes it. Tag: up to 6 letters, shown in chat."] })
-    addHint:SetPoint("RIGHT", addButton, "LEFT", -8, 0)
+    addButton:SetPoint("TOPRIGHT", ally, "TOPRIGHT", -26, -170)
+    -- An ⓘ right of each field: what the name must be, what the tag is.
+    local nameHint = NewInfoIcon(p, { L["Guild name"], L["Exact guild name, as the game writes it (capitals and accents included)."] })
+    nameHint:SetPoint("LEFT", addName, "RIGHT", 6, 0)
+    local tagHint = NewInfoIcon(p, { L["Tag"], L["Up to 6 letters, no spaces. Shown in front of allied players' names in chat."] })
+    tagHint:SetPoint("LEFT", addTag, "RIGHT", 6, 0)
     addButton:SetScript("OnClick", function()
         local name, tag = strtrim(addName:GetText()), strtrim(addTag:GetText())
         if not ns.Alliance.ValidName(name) then Say(L["Type the guild's name."], true) return end
@@ -3341,9 +3357,9 @@ local function BuildOfficerPanel()
 
     -- The shared key (small, last before saving: the one officers come back for)
     local step2 = NewLabel(p, "", "GameFontNormal")
-    step2:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -178)
+    step2:SetPoint("TOPLEFT", ally, "TOPLEFT", 16, -210)
     local keyText = NewLabel(p, "", "GameFontHighlight")
-    keyText:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -202)
+    keyText:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -234)
     local keyButton = NewButton(p, "", 170)
     keyButton:SetPoint("LEFT", keyText, "RIGHT", 24, 0)
     keyButton:SetScript("OnClick", function()
@@ -3356,13 +3372,13 @@ local function BuildOfficerPanel()
 
     -- Save both to the Guild Info, with a preview of La Taverne's lines ---------------------
     local saveHeader = NewSectionHeader(p, L["Save to your Guild Info"])
-    saveHeader:SetPoint("TOPLEFT", ally, "TOPLEFT", 8, -246)
+    saveHeader:SetPoint("TOPLEFT", ally, "TOPLEFT", 8, -278)
     local previewLabel = NewLabel(p, "", "GameFontDisableSmall")
-    previewLabel:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -274)
+    previewLabel:SetPoint("TOPLEFT", ally, "TOPLEFT", 26, -306)
     previewLabel:SetPoint("RIGHT", -8, 0)
     previewLabel:SetJustifyH("LEFT")
     local preview = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    preview:SetPoint("TOPLEFT", ally, "TOPLEFT", 24, -290)
+    preview:SetPoint("TOPLEFT", ally, "TOPLEFT", 24, -322)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
     if preview.SetBackdrop then
@@ -3413,15 +3429,18 @@ local function BuildOfficerPanel()
             Say(err, true)
         elseif paste then
             -- Real guild: the game won't let addons write the Guild Info, the officer pastes it.
-            -- The page follows on its own once the new lines are in the Guild Info.
+            -- The page stays unsaved until the Guild Info is read back with the new lines.
             -- Test mode: the same window, pasted in the test guild window's Guild Info instead.
-            dirty, imported = false, false
-            Say(L["Paste the text into the Guild Info: La Taverne reads it on its own a few seconds later."])
+            imported = false
+            pending = LinesSig(ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule()))
+            Say(nil)
             ns.TextDialog({
                 title = L["Paste into the Guild Info"],
-                hint = ns.Guild:IsSandbox()
-                    and L["Test mode: the same steps as in a real guild. Press Ctrl+C to copy this text, then in the test guild window (button above the window), select all of its Guild Info (Ctrl+A), paste (Ctrl+V) and click Save."]
-                    or L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info, select all of it (Ctrl+A), paste (Ctrl+V) and accept."],
+                hint = (ns.Guild:IsSandbox()
+                    and L["Test mode: the same steps as in a real guild. Press Ctrl+C to copy this text, then open the test guild window (button above the window)."]
+                    or L["The game doesn't let addons change the Guild Info. Press Ctrl+C to copy this text: it's your whole Guild Info with La Taverne's lines (LT:) updated, the rest unchanged. Then in the guild window, open the Guild Info."])
+                    .. " |cffff9900" .. L["Replace all of it: select everything (Ctrl+A), then paste (Ctrl+V). Don't add it at the end."] .. "|r "
+                    .. (ns.Guild:IsSandbox() and L["Then click Save there."] or L["Then accept."]),
                 text = paste,
                 selectAll = true,
             })
@@ -3431,7 +3450,7 @@ local function BuildOfficerPanel()
     cancelButton:SetScript("OnClick", function()
         draft = ns.Alliance:GetDraft()
         rule:Reset()
-        dirty, imported = false, false
+        dirty, imported, pending = false, false, nil
         Say(nil)
         p:Refresh()
     end)
@@ -3496,7 +3515,7 @@ local function BuildOfficerPanel()
         end
         local ruleSaved = ns.Alliance.AutoInviteLine(rule:GetRule()) == ns.Alliance.AutoInviteLine(ns.Alliance:GetAutoInvite())
         local saved = not dirty and (ns.Alliance:IsActive() and ns.Alliance:GetKey() == draft.key or others == 0) and ruleSaved
-        step1:SetText(PartTitle(L["Guilds of the Guild Alliance"], others > 0))
+        step1:SetText(PartTitle(L["Member guilds"], others > 0))
         -- The key only means something with an allied guild in the list: greyed until then.
         local needKey = others > 0
         step2:SetText(needKey and PartTitle(L["Shared key"], draft.key ~= nil)
@@ -3505,7 +3524,9 @@ local function BuildOfficerPanel()
         rule:Refresh()
         ally:SetPoint("TOPLEFT", 0, -34 - rule:GetHeight() - 30)
 
-        if imported then
+        if pending then
+            banner:SetText("|cffff9900" .. L["Waiting for the Guild Info: paste the text there and accept. This page follows once it's read."] .. "|r")
+        elseif imported then
             banner:SetText("|cffff9900" .. L["Imported setup shown below. It is not applied yet: click Save to apply it, or Cancel."] .. "|r")
         elseif dirty then
             banner:SetText("|cffff9900" .. L["Changes not saved yet: click Save to apply them, or Cancel."] .. "|r")
@@ -3554,10 +3575,18 @@ local function BuildOfficerPanel()
         cancelButton:SetEnabled(dirty)
         exportButton:SetEnabled(saved)
         -- The whole height, for the scroll: the steps down to the two lines under Save.
-        self:SetHeight(34 + rule:GetHeight() + 30 + 290 + preview:GetHeight() + 10 + 24 + 8 + 44)
+        self:SetHeight(34 + rule:GetHeight() + 30 + 322 + preview:GetHeight() + 10 + 24 + 8 + 44)
     end
 
     function p:Refresh()
+        -- The pasted lines are in the Guild Info: saved.
+        if pending then
+            local now = ns.Alliance:GetDraft()
+            if LinesSig(ns.Alliance.InfoLines(now.guilds, ns.Alliance:GetKey(), ns.Alliance:GetAutoInvite())) == pending then
+                pending, dirty = nil, false
+                Say(L["Saved: the Guild Info has the new lines."])
+            end
+        end
         if not draft or not dirty then
             draft = ns.Alliance:GetDraft()
             rule:Reset()
@@ -3569,9 +3598,11 @@ local function BuildOfficerPanel()
             if not ns.Guild:IsMyGuild(entry.name) then names[#names + 1] = entry.name end
         end
         if ns.Alliance:IsActive() then
-            status:SetText("|cff40ff40" .. L["Active"] .. "|r - " .. L["Allied with: %s"]:format(table.concat(names, ", ")))
+            status:SetText("|cff40ff40" .. L["Active"] .. "|r")
+            statusHit.tooltip = { L["Active"], L["Allied with: %s"]:format(table.concat(names, ", ")) }
         else
             status:SetText("|cff808080" .. L["Not set up"] .. "|r")
+            statusHit.tooltip = nil
         end
         SetListData(list, draft.guilds)
         self:RefreshDraft()
