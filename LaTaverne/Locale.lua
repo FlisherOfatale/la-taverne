@@ -601,6 +601,7 @@ if GetLocale() == "frFR" then
     L["not checked: nobody from their guild online"] = "pas vérifié : personne de sa guilde en ligne"
     L["not in this guild"] = "pas dans cette guilde"
     L["Channel:"] = "Canal :"
+    L["Alliance channel:"] = "Canal de l'alliance :"
     L["connecting"] = "connexion..."
     L["on"] = "activé"
     L["The hidden channel the allied guilds talk on. Ready: groups, availability and shared chat go through."] = "Le canal caché sur lequel les guildes alliées se parlent. Prêt : les groupes, les disponibilités et le chat partagé passent."
