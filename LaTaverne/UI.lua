@@ -2849,7 +2849,7 @@ local function InitPlayerRow(row, e)
 
         row.toggle = CreateFrame("Button", nil, row)
         row.toggle:SetAllPoints()
-        row.toggle.text = NewLabel(row.toggle, "", "GameFontNormal")
+        row.toggle.text = NewLabel(row.toggle, "", "GameFontNormalLarge") -- a header, like "Available players"
         row.toggle.text:SetPoint("LEFT", 8, 0)
         row.toggle:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
 
@@ -2862,8 +2862,8 @@ local function InitPlayerRow(row, e)
     row.message:SetShown(e.kind == "message")
     if e.kind == "toggle" then
         -- The game's own +/- icons (the font has no arrow characters).
-        row.toggle.text:SetText((e.open and "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
-            or "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t ")
+        row.toggle.text:SetText((e.open and "|TInterface\\Buttons\\UI-MinusButton-Up:18:18|t "
+            or "|TInterface\\Buttons\\UI-PlusButton-Up:18:18|t ")
             .. format(L["Other members online (%d)"], e.count))
         row.toggle:SetScript("OnClick", e.onClick)
         return
@@ -2991,7 +2991,7 @@ local function BuildPlayersPanel()
     p.demand = NewScrollList(p, 24, InitDemandRow)
 
     -- Players: available first, then the others (folded).
-    p.listHeader = NewLabel(p, "", "GameFontNormal")
+    p.listHeader = NewLabel(p, "", "GameFontNormalLarge")
     p.fitOnly = NewCheckbox(p, L["Only those who fit my group"], function(self)
         ns.db.playersFitOnly = self:GetChecked() and true or false
         p:Refresh()
@@ -3021,7 +3021,7 @@ local function BuildPlayersPanel()
         self.listHeader:ClearAllPoints()
         self.listHeader:SetPoint("TOPLEFT", 8, y)
         self.list:ClearAllPoints()
-        self.list:SetPoint("TOPLEFT", 0, y - 22)
+        self.list:SetPoint("TOPLEFT", 0, y - 26)
         self.list:SetPoint("BOTTOMRIGHT", -20, 0)
     end
 
