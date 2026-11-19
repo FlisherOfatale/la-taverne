@@ -3788,6 +3788,8 @@ local function BuildNetworkPanel()
 
     -- Folded cards and "n offline" lines, per guild (lowercased name).
     p.open, p.offlineOpen = {}, {}
+    -- My guild's members with La Taverne: asked once when the page opens.
+    p:SetScript("OnShow", function() ns.Players:AskWho() end)
     local list = NewScrollList(p, AllianceRowHeight, InitAllianceRow)
     list:SetPoint("TOPLEFT", 0, -44)
     list:SetPoint("BOTTOMRIGHT", -20, 0)
@@ -3825,7 +3827,6 @@ local function BuildNetworkPanel()
         if not active then return end
 
         status:SetText(L["Channel:"] .. " " .. ns.Comm:AllyStatusText())
-        ns.Players:AskWho() -- my guild's members with La Taverne (at most every 30 s)
 
         -- Players heard from, by guild (mine: my guild's members with La Taverne).
         local byGuild = {}

@@ -22,7 +22,7 @@ local ANSWER_MIN, ANSWER_MAX = 0.3, 2  -- random delay before answering
 local HOLD_MAX = 10                    -- messages held per player while waiting
 local ONLINE = 10 * 60                 -- heard from this recently: online
 local REMEMBER = 14 * 24 * 3600        -- allied players seen are remembered this long
-local HELLO_QUIET = 30                 -- no answer to a hello if I said hello this recently
+local BEAT = 240                       -- "still here" on the alliance channel, so idle players stay online
 local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 
 -- Messages that are part of vouching itself are never held.
@@ -207,7 +207,7 @@ end
 -- The allied guild a player belongs to, as far as we know (never for a denied player).
 function Vouch:GetGuild(name)
     local entry = players[ns.NameKey(name) or ""]
-    if not entry or entry.state == "denied" then return nil end
+    if not entry or not entry.state or entry.state == "denied" then return nil end
     return entry.guild
 end
 
@@ -217,7 +217,8 @@ function Vouch:Find(name)
     local key = ns.NameKey(name) or ""
     local entry = players[key]
     if entry and entry.state == "denied" then return nil end
-    if entry and entry.seen then return { name = entry.name, guild = entry.guild } end
+    -- Heard from and checked (a hello alone isn't): what they claim. Otherwise remembered ones.
+    if entry and entry.seen and entry.state then return { name = entry.name, guild = entry.guild } end
     local item = (Memory() or {})[key]
     if item and ns.Alliance:IsAllied(item.guild) then return { name = item.name, guild = item.guild } end
     return nil
@@ -390,21 +391,20 @@ ns.Comm:OnAlly("VA", function(sender, payload, isSelf)
 end)
 
 -- Hello: each addon says it's there when it joins the alliance channel, and the ones already
--- online answer once (spread out, and one answer covers everyone who just said hello). So the
--- Alliance page shows who's online within seconds, not only players who post or talk.
-local lastHello = 0
+-- online answer (spread out; one answer covers everyone who said hello while it waited). So the
+-- Alliance page shows who's online within seconds, not only players who post or talk. A
+-- newcomer missed every message sent before it joined, so a hello is always answered. Then a
+-- "still here" every few minutes keeps idle players online (online = heard in the last 10 min).
 local helloTimer
 local function SayHello(answer)
-    lastHello = GetServerTime()
     ns.Comm:SendAlly("HI", { r = answer or nil })
 end
 
 ns.Comm:OnAlly("HI", function(sender, payload, isSelf)
     if isSelf or payload.r or helloTimer then return end
-    if GetServerTime() - lastHello < HELLO_QUIET then return end
     helloTimer = C_Timer.NewTimer(HELLO_MIN + math.random() * (HELLO_MAX - HELLO_MIN), function()
         helloTimer = nil
-        if GetServerTime() - lastHello >= HELLO_QUIET then SayHello(true) end
+        SayHello(true)
     end)
 end)
 
@@ -412,6 +412,10 @@ end)
 function Vouch:OnLogin()
     ns.Comm:OnReady(function(role)
         if role == "ally" and ns.Alliance:IsActive() then SayHello(false) end
+    end)
+    -- Still here (an answer: nobody answers it), a little spread so clients don't sync up.
+    C_Timer.NewTicker(BEAT + math.random(0, 30), function()
+        if ns.Alliance:IsActive() and ns.Comm:IsAllyReady() then SayHello(true) end
     end)
     -- Drop players not seen for two weeks (left, changed guild, stopped playing).
     local now = GetServerTime()
