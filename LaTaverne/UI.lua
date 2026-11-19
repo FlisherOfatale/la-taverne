@@ -1726,6 +1726,12 @@ local function BuildAvailabilityForm(parent, onDone)
     -- create form).
     f.confirm = NewButton(inner, "", 180, 26)
     f.confirm:SetPoint("BOTTOMRIGHT", -2, 6)
+    -- Greyed out: why, in its tooltip.
+    f.confirm:SetMotionScriptsWhileDisabled(true)
+    f.confirm:SetScript("OnEnter", function(self)
+        if self.why then ShowTooltip(self, { self:GetText(), "|cffff4040" .. self.why .. "|r" }) end
+    end)
+    f.confirm:SetScript("OnLeave", function() GameTooltip:Hide() end)
     f.second = NewButton(inner, "", 200, 26)
     f.second:SetPoint("RIGHT", f.confirm, "LEFT", -8, 0)
     f.message = NewLabel(inner, "", "GameFontHighlightSmall")
@@ -1783,7 +1789,9 @@ local function BuildAvailabilityForm(parent, onDone)
         elseif not active and (IsInGroup() or ns.Groups:GetMine()) then
             why = InPartyText(false)
         end
-        self.message:SetText(why and ("|cffff4040" .. why .. "|r") or "")
+        -- Why the button is greyed out: in its tooltip. The bottom line is for errors only.
+        self.message:SetText("")
+        self.confirm.why = why
         self.confirm:SetText(active and L["Save"] or L["I'm available"])
         self.confirm:SetEnabled(why == nil)
         self.second:SetText(L["Remove my availability"]) -- like "Remove group" on My group
@@ -2197,6 +2205,12 @@ local function BuildCreateForm(parent)
     -- Bottom bar: what's still missing on the left, the main action on the right.
     local post = NewButton(f, L["Post group"], 180, 26)
     post:SetPoint("BOTTOMRIGHT", -2, 6)
+    -- Greyed out: what's still missing, in its tooltip.
+    post:SetMotionScriptsWhileDisabled(true)
+    post:SetScript("OnEnter", function(self)
+        if self.why then ShowTooltip(self, { L["Post group"], "|cffff4040" .. self.why .. "|r" }) end
+    end)
+    post:SetScript("OnLeave", function() GameTooltip:Hide() end)
     f.message = NewLabel(f, nil, "GameFontHighlightSmall")
     f.message:SetPoint("LEFT", f, "BOTTOMLEFT", 8, 19)
     f.message:SetPoint("RIGHT", post, "LEFT", -12, 0)
@@ -2315,12 +2329,10 @@ local function BuildCreateForm(parent)
                 end
             end
         end
-        -- What's left to do (or an error), in red next to the greyed button it unlocks.
-        if self.error then
-            self.message:SetText("|cffff4040" .. self.error .. "|r")
-        else
-            self.message:SetText(err and ("|cffff4040" .. err .. "|r") or "")
-        end
+        -- What's left to do: in the greyed button's tooltip. The bottom line only shows an
+        -- error (a player that can't be added).
+        self.message:SetText(self.error and ("|cffff4040" .. self.error .. "|r") or "")
+        post.why = err
         post:SetEnabled(err == nil)
     end
 
