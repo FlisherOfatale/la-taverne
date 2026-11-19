@@ -83,7 +83,9 @@ function ns.DungeonOtherNames(d)
     for _, lang in ipairs(ns.OtherDungeonLanguages()) do
         local name = lang.get(d)
         if shown[lang.key] and name then -- even when the same: no line would look like a bug
-            out[#out + 1] = format(ns.L["%s: %s"], "|cff808080" .. ns.L[lang.name] .. "|r", name)
+            -- "Anglais : ...": capitalized here, at the start of the line (lowercase mid-sentence).
+            local label = ns.L[lang.name]:gsub("^%l", string.upper)
+            out[#out + 1] = format(ns.L["%s: %s"], "|cff808080" .. label .. "|r", name)
         end
     end
     return out
