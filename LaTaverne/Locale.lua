@@ -240,6 +240,7 @@ if GetLocale() == "frFR" then
     L["Refresh"] = "Actualiser"
     L["Replacement wanted: %s in %s by %s"] = "Remplaçant recherché : %s dans %s par %s"
     L["a player"] = "un joueur"
+    L["by the Nation du Québec"] = "par la Nation du Québec"
     L["That group isn't listed any more."] = "Ce groupe n'est plus affiché."
     L["Start the message log"] = "Lancer le journal des messages"
     L["Stop the message log"] = "Arrêter le journal des messages"

@@ -72,7 +72,7 @@ end
 local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
     type = "launcher",
     text = "La Taverne",
-    icon = "Interface\\AddOns\\LaTaverne\\icon",
+    icon = "Interface\\AddOns\\LaTaverne\\media\\lynx_icon",
     OnClick = function(self, button)
         if button == "RightButton" then
             QuickMenu(self)
@@ -82,6 +82,7 @@ local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
     end,
     OnTooltipShow = function(tooltip)
         tooltip:AddLine("La Taverne")
+        tooltip:AddLine("Nation du Québec", 0.83, 0.63, 0.09)
         local G = ns.Groups
         -- Me first: my group, the group I'm in, my availability, auto-invite.
         local mine = G:GetMine()
@@ -220,8 +221,19 @@ function Minimap:RegisterSettings()
     local version = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     version:SetPoint("LEFT", title, "RIGHT", 8, -1)
     version:SetText(ns.version or "")
+    local by = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    by:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+    by:SetText(L["by the Nation du Québec"])
+    local logo = panel:CreateTexture(nil, "ARTWORK")
+    logo:SetSize(128, 128)
+    logo:SetPoint("TOPRIGHT", -16, -16)
+    logo:SetTexture("Interface\\AddOns\\LaTaverne\\media\\lynx_logo")
     local notes = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    notes:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    notes:SetPoint("TOPLEFT", by, "BOTTOMLEFT", 0, -10)
+    -- Wraps left of the logo instead of running under it.
+    notes:SetPoint("RIGHT", logo, "LEFT", -16, 0)
+    notes:SetJustifyH("LEFT")
+    notes:SetWordWrap(true)
     notes:SetText(L["Guild dungeon group finder. Its options are in the La Taverne window."])
     local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     open:SetSize(220, 24)

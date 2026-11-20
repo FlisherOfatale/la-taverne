@@ -7,6 +7,7 @@ move-folders:
   LaTaverne/LaTaverne: LaTaverne
 
 ignore:
+  - branding
   - README.md
   - CHANGELOG.md
   - LICENSE

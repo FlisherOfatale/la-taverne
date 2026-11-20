@@ -1,11 +1,11 @@
 ## Interface: 16001
 ## Title: La Taverne
-## Notes: Guild-only dungeon group finder
-## Notes-frFR: Recherche de groupes de donjon entre membres de la guilde
+## Notes: The Nation du Québec's tavern: dungeon groups, availability and shared guild chat with allied guilds
+## Notes-frFR: La taverne de la Nation du Québec : groupes de donjon, disponibilités et chat de guilde partagé avec les guildes alliées
 ## Version: 1.0.0
-## Author: Oylex
+## Author: Oylex, Nation du Québec
 ## X-Curse-Project-ID: 1814877
-## IconTexture: Interface\AddOns\LaTaverne\icon
+## IconTexture: Interface\AddOns\LaTaverne\media\lynx_icon
 ## SavedVariables: LaTaverneDB
 
 Libs\LibStub\LibStub.lua

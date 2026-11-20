@@ -1,5 +1,9 @@
 # La Taverne
 
+<p align="center"><img src="https://raw.githubusercontent.com/Oylex/la-taverne/main/branding/lynx_logo.png" alt="Nation du Québec lynx" width="200"></p>
+
+<p align="center"><b>The Nation du Québec's tavern</b> · <b>La taverne de la Nation du Québec</b></p>
+
 **La Taverne joins your guild and its allied guilds as if they were one: shared guild chat, plus a dungeon group finder where you post or join groups and show when you're available to play.**
 
 *Français plus bas.*
@@ -79,7 +83,7 @@ Please open an issue on GitHub, or leave a comment on CurseForge. If La Taverne 
 
 ### License
 
-MIT
+The code is under the MIT license. The names "La Taverne" and "Nation du Québec" and the logos (the `LaTaverne/media/` and `branding/` folders) are not: they belong to the Nation du Québec guild, all rights reserved. A fork must use its own name and artwork. Details in the LICENSE file.
 
 ---
 
@@ -158,4 +162,4 @@ Ouvrez une issue sur GitHub, ou laissez un commentaire sur CurseForge. Si La Tav
 
 ### Licence
 
-MIT
+Le code est sous licence MIT. Les noms « La Taverne » et « Nation du Québec » et les logos (dossiers `LaTaverne/media/` et `branding/`) ne le sont pas : ils appartiennent à la guilde Nation du Québec, tous droits réservés. Un fork doit utiliser son propre nom et ses propres images. Détails dans le fichier LICENSE.

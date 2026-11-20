@@ -16,7 +16,8 @@ end
 function ns.Print(...)
     local parts = {}
     for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
-    local text = "|cffd4a017La Taverne|r: " .. table.concat(parts, " ")
+    -- The Nation du Québec lynx, then the addon's name.
+    local text = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t |cffd4a017La Taverne|r: " .. table.concat(parts, " ")
     local f = ns.ChatWindow()
     if f then f:AddMessage(text) else print(text) end
 end

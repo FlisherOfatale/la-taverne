@@ -14,7 +14,6 @@ local ADDON, ns = ...
 local UI = ns.NewModule("UI")
 local L = ns.L
 
-local TITLE = "La Taverne"
 local BINDING = "LATAVERNE_TOGGLE"
 local frame
 local panels = {}
@@ -4176,8 +4175,13 @@ local function BuildOptionsPanel()
         ns.Errors:Clear()
         p:Refresh()
     end)
-    local version = NewLabel(p, "La Taverne " .. (ns.version or "?"), "GameFontDisableSmall")
-    version:SetPoint("BOTTOMRIGHT", -12, 12)
+    -- Bottom right: the lynx at its own size (32 px, sharp), then the name and version.
+    local version = NewLabel(p, "La Taverne " .. (ns.version or "?") .. "  ·  Nation du Québec", "GameFontDisableSmall")
+    version:SetPoint("BOTTOMRIGHT", -12, 20)
+    local lynx = p:CreateTexture(nil, "ARTWORK")
+    lynx:SetSize(32, 32)
+    lynx:SetPoint("RIGHT", version, "LEFT", -6, 0)
+    lynx:SetTexture("Interface\\AddOns\\LaTaverne\\media\\lynx_icon")
 
     function p:Refresh()
         if not bind.waiting then bind:SetText(BindingText()) end
@@ -4466,7 +4470,7 @@ end
 
 local function CreateMainFrame()
     frame = CreateFrame("Frame", "LaTaverneFrame", UIParent, "ButtonFrameTemplate")
-    frame:SetSize(780, 580)
+    frame:SetSize(780, 616) -- 36 more than before the portrait: the band beside it
     frame:SetPoint("CENTER", -20, 0)
     frame:SetScale(ns.db.scale or 1) -- window size, from Options
     frame:SetToplevel(true)
@@ -4478,20 +4482,26 @@ local function CreateMainFrame()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    if ButtonFrameTemplate_HidePortrait then ButtonFrameTemplate_HidePortrait(frame) end
     if ButtonFrameTemplate_HideButtonBar then ButtonFrameTemplate_HideButtonBar(frame) end
-    -- Remove the empty band under the title.
-    if ButtonFrameTemplate_HideAttic then
-        ButtonFrameTemplate_HideAttic(frame)
-    elseif frame.Inset then
-        frame.Inset:SetPoint("TOPLEFT", 4, -24)
+    -- The Nation du Québec lynx in the round portrait, top left, on every page. The pages start
+    -- under it (the template's band beside the portrait).
+    if ButtonFrameTemplate_ShowPortrait then ButtonFrameTemplate_ShowPortrait(frame) end
+    if ButtonFrameTemplate_ShowAttic then ButtonFrameTemplate_ShowAttic(frame) end
+    local portrait = frame.GetPortrait and frame:GetPortrait()
+        or frame.portrait or (frame.PortraitContainer and frame.PortraitContainer.portrait)
+    if portrait then
+        if SetPortraitToTexture then
+            SetPortraitToTexture(portrait, "Interface\\AddOns\\LaTaverne\\media\\lynx_logo")
+        else
+            portrait:SetTexture("Interface\\AddOns\\LaTaverne\\media\\lynx_logo")
+        end
     end
 
     local titleText = frame.TitleText or (frame.TitleContainer and frame.TitleContainer.TitleText)
     if frame.SetTitle then
-        frame:SetTitle(TITLE)
+        frame:SetTitle("La Taverne  ·  Nation du Québec")
     elseif titleText then
-        titleText:SetText(TITLE)
+        titleText:SetText("La Taverne  ·  Nation du Québec")
     end
     -- The template's close button goes through the panel manager, which may ignore addon frames.
     if frame.CloseButton then
@@ -4576,15 +4586,6 @@ function UI:Refresh()
     end
     LayoutSideTabs()
     frame.TestBadge:SetShown(ns.Guild:IsSandbox() and true or false)
-    -- Title bar: "La Taverne · Groups", the section I'm in.
-    local section = sectionOf[currentPage]
-    local title = TITLE .. (section and ("  \194\183  " .. L[section.label]) or "")
-    if frame.SetTitle then
-        frame:SetTitle(title)
-    else
-        local titleText = frame.TitleText or (frame.TitleContainer and frame.TitleContainer.TitleText)
-        if titleText then titleText:SetText(title) end
-    end
     local panel = panels[currentPage]
     if panel then panel:Refresh() end
     -- Looking at Browse: the invitations on top won't pull me there again.
@@ -4701,7 +4702,7 @@ function UI:Toggle()
 end
 
 -- Key binding (Bindings.xml): shown in the game's Key Bindings under AddOns, and set from the Options tab.
-BINDING_HEADER_LATAVERNE = TITLE
+BINDING_HEADER_LATAVERNE = "La Taverne"
 BINDING_NAME_LATAVERNE_TOGGLE = L["Open / close La Taverne"]
 function LaTaverne_Toggle()
     UI:Toggle()
