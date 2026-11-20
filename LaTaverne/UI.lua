@@ -5006,6 +5006,21 @@ function UI:ShowSection(key)
     end
 end
 
+-- LB / RB (Gamepad.lua): the previous or next section with a side tab, round the end. Not the
+-- test mode tools.
+function UI:CycleSection(delta)
+    local shown, at = {}, nil
+    for _, section in ipairs(SECTIONS) do
+        if not section.tool and #VisiblePages(section) > 0 then
+            shown[#shown + 1] = section
+            if section == sectionOf[currentPage] then at = #shown end
+        end
+    end
+    if #shown == 0 then return end
+    local i = at and (at - 1 + delta) % #shown + 1 or (delta > 0 and 1 or #shown)
+    self:ShowSection(shown[i].key)
+end
+
 -- From the chat's [View] link: Browse, scrolled to that group (My group when it's mine).
 function UI:ShowGroup(id)
     if not frame then CreateMainFrame() end

@@ -4,6 +4,7 @@
 -- Not the game's gamepad navigation: registering an addon window with the gamepad manager makes
 -- its protected calls run from addon code (ADDON_ACTION_FORBIDDEN).
 local ADDON, ns = ...
+local L = ns.L
 
 local Gamepad = {}
 ns.Gamepad = Gamepad
@@ -170,7 +171,7 @@ end
 Gamepad.KEYS = { "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT", "PAD1", "PAD4", "PADLSHOULDER", "PADRSHOULDER" }
 
 local owner = CreateFrame("Frame", "LaTavernePadOwner", UIParent)
-local mainFrame
+local mainFrame, hints
 local bound, pendingClear, fighting = false, false, false
 
 -- Highlight and layers -------------------------------------------------------------------------
@@ -186,6 +187,11 @@ highlight:Hide()
 
 local layer, focus, focusRect, focusData
 local remembered = {} -- [layer] = element
+-- The first-press guard: set only where the highlight jumps (new top layer, element gone or out
+-- of view). Found by the follow-up or at the start of a press, the jump arms it: the next d-pad
+-- or A press only confirms the highlight. Caused by the press's own action (A opened a menu, Y
+-- closed a window), it disarms it: the player expects the new place.
+local armed = false
 
 local TOP_LAYERS = { "LaTaverneMenu", "LaTaverneDungeonPicker" }
 local UNDER_CONFIRM = { "LaTaverneTextDialog", "LaTaverneCopyFrame" }
@@ -269,39 +275,104 @@ local function Closest(from, frames, rects)
     return best
 end
 
+local function InList(f)
+    local p = f:GetParent()
+    while p and p ~= layer do
+        if IsScroller(p) then return true end
+        p = p:GetParent()
+    end
+    return false
+end
+
 -- Follow the window: a new top layer gets the highlight on its element from before (still
 -- shown) or its first one; a highlighted element gone (page refreshed, row hidden) passes it to
--- the nearest one shown. Returns true when the highlight moved.
-local function Sync()
+-- the nearest one shown. full: also check it's still among the elements in view (each press: a
+-- list scrolled with the mouse leaves it shown but out of its box). byPlayer: what changed was
+-- caused by the press's own action.
+local function FollowLayer(full, byPlayer)
+    local function Jumped()
+        armed = not byPlayer
+    end
     local top = Gamepad.ActiveLayer()
     if top ~= layer then
-        if focus then Focus(nil) end
         layer = top
         local frames = layer and Gamepad.Collect(layer) or {}
         local before = remembered[layer]
         Focus(before and Find(frames, before) and before or frames[1])
-        return true
+        Jumped()
+        return
     end
-    if not layer then return false end
+    if not layer then return end
+    -- Still shown, out of any list: nothing to look for (the window is walked only when needed).
+    if focus and not full and focus:IsVisible() and not InList(focus) then
+        focusRect = Rect(focus) or focusRect
+        -- A reused row now showing other data: its tooltip follows.
+        if DataOf(focus) ~= focusData then Focus(focus, true) end
+        return
+    end
     local frames, rects = Gamepad.Collect(layer)
     if focus and rects[focus] then
         focusRect = rects[focus]
-        return false
+        if DataOf(focus) ~= focusData then Focus(focus, true) end
+        return
     end
     local nearest = focusRect and Closest(focusRect, frames, rects) or frames[1]
-    if nearest == focus then return false end
+    if nearest == focus then return end
     Focus(nearest)
-    return true
+    Jumped()
 end
 
--- A text box of La Taverne has the keyboard.
+-- A text box of the top layer has the keyboard (not one under a window that opened on top).
 local function TypingIn()
     local box = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     local f = box
     while f do
-        if f == mainFrame or f == layer then return box end
+        if f == layer then return box end
         f = f:GetParent()
     end
+end
+
+-- A text box showing its suggestions (a list of its own under it, moved with the arrow keys:
+-- the guild name boxes). The pad goes through them with the box's own keys.
+local function Suggesting(box)
+    if not (box and Script(box, "OnArrowPressed")) then return false end
+    for _, child in ipairs({ box:GetChildren() }) do
+        -- Its list, shown with at least one suggestion (not the highlight, put on the box).
+        if child ~= highlight and child:IsVisible() then
+            for _, row in ipairs({ child:GetChildren() }) do
+                if row:IsVisible() then return true end
+            end
+        end
+    end
+    return false
+end
+
+-- Button hints under the window: the game's icons for the pad in use, else the button's name.
+local icons = {}
+
+local function Icon(key, name)
+    local ok, atlas = pcall(function() return InputIconTextureSetUtility.GetNormalActiveInputIconButtonTexture(key) end)
+    if ok and type(atlas) == "string" and atlas ~= "" then return "|A:" .. atlas .. ":20:20|a" end
+    return "[" .. name .. "]"
+end
+
+local function OnPage()
+    return ns.UI and ns.UI.CurrentPanel and layer == ns.UI:CurrentPanel()
+end
+
+local function ShowHints()
+    if not hints then return end
+    local page = OnPage()
+    local back = (page and not TypingIn()) and L["Close"] or L["Back"]
+    local text = icons.PAD1 .. " " .. L["Choose"] .. "     " .. icons.PAD4 .. " " .. back
+        .. "     " .. icons.PADLSHOULDER .. icons.PADRSHOULDER .. " " .. L["Sections"]
+    if hints.text:GetText() ~= text then hints.text:SetText(text) end
+    hints:Show()
+end
+
+local function Sync(full, byPlayer)
+    FollowLayer(full, byPlayer)
+    ShowHints()
 end
 
 local function Inside(f, ancestor)
@@ -384,10 +455,35 @@ local function NextInArea(scroll, dir)
     end
 end
 
+-- A list that is itself the stop (nothing to click in it): a row (ScrollBox) or half its
+-- height at a time. false at its end.
+local function ScrollList(list, dir)
+    if IsScrollBox(list) then
+        if (dir == "DOWN" and list:IsAtEnd()) or (dir == "UP" and list:IsAtBegin()) then return false end
+        local step = list:CalculatePanExtentPercentage()
+        if not step or step <= 0 then step = 0.1 end
+        local target = list:GetScrollPercentage() + (dir == "DOWN" and step or -step)
+        list:SetScrollPercentage(math.max(0, math.min(1, target)), true)
+        return true
+    end
+    local current, range = list:GetVerticalScroll(), list:GetVerticalScrollRange() or 0
+    local step = math.max(20, (list:GetHeight() or 0) / 2)
+    local target = dir == "DOWN" and math.min(current + step, range) or math.max(current - step, 0)
+    if target == current then return false end
+    list:SetVerticalScroll(target)
+    return math.abs(list:GetVerticalScroll() - current) >= 1
+end
+
 local function Move(dir)
     local typing = TypingIn()
+    local vertical = dir == "UP" or dir == "DOWN"
+    if vertical and Suggesting(typing) then
+        Script(typing, "OnArrowPressed")(typing, dir)
+        return
+    end
     if typing then typing:ClearFocus() end
     if not focus then return end
+    if vertical and IsScroller(focus) and ScrollList(focus, dir) then return end
     -- In a list: its next element, scrolled into view; past its end, on to the rest of the page.
     local scroller = (dir == "UP" or dir == "DOWN") and ScrollerOf(focus)
     if scroller then
@@ -404,7 +500,10 @@ local function Move(dir)
 end
 
 -- A: like a click. A greyed button does nothing (its tooltip says why); a tooltip spot neither.
+-- A protected frame neither: clicked from addon code, its secure action is refused. A reaches it
+-- through PAD1 bound to it (see AimA).
 local function Activate(f)
+    if f:IsProtected() then return end
     if f:IsObjectType("EditBox") then
         f:SetFocus()
     elseif f:IsObjectType("Button") then
@@ -421,14 +520,32 @@ local function Back()
     local typing = TypingIn()
     if typing then
         typing:ClearFocus()
-    elseif layer and not (ns.UI and ns.UI.CurrentPanel and layer == ns.UI:CurrentPanel()) then
+    elseif layer and not OnPage() then
         layer:Hide()
     else
         mainFrame:Hide()
     end
 end
 
+-- LB / RB: on the page only (a menu or a window on top waits for its answer).
+local function Section(delta)
+    if OnPage() then ns.UI:CycleSection(delta) end
+end
+
+-- A: in a box showing suggestions, its Enter (picks the selected one); else a click.
+local function Use()
+    local typing = TypingIn()
+    local enter = Suggesting(typing) and Script(typing, "OnEnterPressed")
+    if enter then
+        enter(typing)
+    elseif focus then
+        Activate(focus)
+    end
+end
+
 local ACTIONS = {
+    PADLSHOULDER = function() Section(-1) end,
+    PADRSHOULDER = function() Section(1) end,
     PADDUP = function() Move("UP") end,
     PADDDOWN = function() Move("DOWN") end,
     PADDLEFT = function() Move("LEFT") end,
@@ -437,25 +554,49 @@ local ACTIONS = {
     PAD4 = Back,
 }
 
--- A press that only found the highlight a new place (the element gone or out of view, or a
--- layer that opened on its own since the last press) does nothing else: A never clicks what the
--- player hasn't seen highlighted.
+-- Armed (see armed), a d-pad or A press only confirms the highlight: A never clicks what the
+-- player hasn't seen highlighted. Y, LB and RB act as usual and don't lift the guard by
+-- themselves; only the layer change their action causes does (Y closing the window on top).
 local LANDING = { PADDUP = true, PADDDOWN = true, PADDLEFT = true, PADDRIGHT = true, PAD1 = true }
 local active = false -- navigating (in a fight, the game may keep the bindings a while longer)
-local landed = false -- the follow-up moved the highlight to a layer that opened on its own
+-- The highlight's first place after the window opened is set (see Start).
+local placed = false
+local opened = 0 -- counts the openings: a late first placement never lands on a newer one
+
+-- What PAD1 clicks: the hidden LaTavernePadPAD1, or the highlighted protected frame itself (the
+-- test mode's Reload button): a press of the pad is then the player's own click, which a secure
+-- action needs. Only with the buttons taken, out of combat, the guard down, on a named frame.
+local padA -- the button PAD1 is bound to now (nil: not bound)
+
+local function AimA()
+    if not bound or InCombatLockdown() then return end
+    local target = "LaTavernePadPAD1"
+    if not armed and focus and focus:IsProtected() and focus:GetName() then target = focus:GetName() end
+    if target ~= padA then
+        SetOverrideBindingClick(owner, true, "PAD1", target, "LeftButton")
+        padA = target
+    end
+end
+
+-- The first place after the player opened the window: the player's (disarms).
+local function Place()
+    placed = true
+    Sync(false, true)
+end
 
 function Gamepad.OnButton(key)
     if not active then return end
     if not Gamepad.CanTake() then Gamepad.Release() return end
-    local moved = Sync(true)
-    if LANDING[key] and (moved or landed) then
-        landed = false
+    if placed then Sync(true) else Place() end
+    if armed and LANDING[key] then
+        armed = false
+        AimA()
         return
     end
-    landed = false
     local action = ACTIONS[key]
     if action then action() end
-    if active then Sync() end
+    if active then Sync(false, true) end
+    AimA()
 end
 
 local elapsed = 0
@@ -463,19 +604,42 @@ local function OnUpdate(_, delta)
     elapsed = elapsed + delta
     if elapsed < 0.1 then return end
     elapsed = 0
-    Sync()
+    -- Window hidden, gamepad UI turned off: the buttons go back at once.
+    if not Gamepad.CanTake() then Gamepad.Release() return end
+    if placed then Sync() else Place() end
+    AimA()
 end
 
-local function Start()
-    layer, focus, focusRect, remembered = nil, nil, nil, {}
+-- cause: "open", the player showed the window: its first place is set once the code that opened
+-- it has picked its page (next frame; a press before sets it itself), as the player's. "resume",
+-- anything else (end of a fight, the interface shown again): the first place arms the guard, a
+-- window may have opened on its own meanwhile.
+local function Start(cause)
+    active, armed, placed = true, false, false
+    layer, focus, focusRect, focusData, remembered = nil, nil, nil, nil, {}
+    icons = { PAD1 = Icon("PAD1", "A"), PAD4 = Icon("PAD4", "Y"),
+        PADLSHOULDER = Icon("PADLSHOULDER", "LB"), PADRSHOULDER = Icon("PADRSHOULDER", "RB") }
+    elapsed = 0
     owner:SetScript("OnUpdate", OnUpdate)
-    Sync()
+    if cause == "open" then
+        opened = opened + 1
+        local this = opened
+        local nextFrame = RunNextFrame or function(fn) C_Timer.After(0, fn) end
+        nextFrame(function()
+            if active and not placed and this == opened then Place() end
+        end)
+    else
+        placed = true
+        Sync()
+    end
 end
 
 local function Stop()
+    active, armed = false, false
     owner:SetScript("OnUpdate", nil)
     Focus(nil)
-    layer, focusRect = nil, nil
+    layer, focusRect, focusData = nil, nil, nil
+    if hints then hints:Hide() end
 end
 
 for _, key in ipairs(Gamepad.KEYS) do
@@ -484,7 +648,7 @@ for _, key in ipairs(Gamepad.KEYS) do
     button:SetScript("OnClick", function() Gamepad.OnButton(key) end)
 end
 
-local function Bind(on)
+local function Bind(on, cause)
     -- Navigation stops at once, even when the game keeps the bindings until a fight ends.
     if not on and active then Stop() end
     if InCombatLockdown() then
@@ -497,14 +661,14 @@ local function Bind(on)
             for _, key in ipairs(Gamepad.KEYS) do
                 SetOverrideBindingClick(owner, true, key, "LaTavernePad" .. key)
             end
-            bound = true
+            bound, padA = true, "LaTavernePadPAD1"
         end
         pendingClear = false
-        if not active then Start() end
+        if not active then Start(cause) end
         return
     elseif bound or pendingClear then
         ClearOverrideBindings(owner)
-        bound = false
+        bound, padA = false, nil
     end
     pendingClear = false
 end
@@ -524,15 +688,37 @@ function Gamepad.CanTake()
     return mainFrame ~= nil and mainFrame:IsVisible() and not fighting and ns.GamepadUI()
 end
 
-local function Take()
-    if Gamepad.CanTake() then Bind(true) end
+local function Take(cause)
+    if Gamepad.CanTake() then Bind(true, cause) end
 end
 
 -- The main window (UI.lua): its buttons follow it.
 function Gamepad.Attach(frame)
     mainFrame = frame
-    frame:HookScript("OnShow", Take)
-    frame:HookScript("OnHide", function() Bind(false) end)
+    -- The hints line, under the window's bottom edge: nothing on the pages moves.
+    hints = CreateFrame("Frame", "LaTavernePadHints", frame, "BackdropTemplate")
+    hints:SetHeight(28)
+    hints:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -2)
+    hints:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -2)
+    if hints.SetBackdrop then
+        hints:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        hints:SetBackdropColor(0, 0, 0, 0.8)
+        hints:SetBackdropBorderColor(0.75, 0.6, 0.2, 1)
+    end
+    hints.text = hints:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    hints.text:SetPoint("CENTER")
+    hints:Hide()
+    -- Shown by the player, or again with the whole interface (hidden with it: still IsShown).
+    local hiddenWithParent = false
+    frame:HookScript("OnShow", function() Take(hiddenWithParent and "resume" or "open") end)
+    frame:HookScript("OnHide", function()
+        hiddenWithParent = frame:IsShown()
+        Bind(false)
+    end)
 end
 
 ns.On("PLAYER_REGEN_DISABLED", function()
@@ -543,5 +729,11 @@ end)
 ns.On("PLAYER_REGEN_ENABLED", function()
     fighting = false
     if pendingClear then Bind(false) end
-    Take()
+    Take("resume")
+end)
+
+-- The gamepad UI turned back on (InputUtil.lua listens to the same event) with the window open:
+-- a resume. Turned off, the follow-up gives the buttons back.
+ns.On("INPUT_DEVICE_INTERFACE_TRANSITION", function()
+    Take("resume")
 end)
