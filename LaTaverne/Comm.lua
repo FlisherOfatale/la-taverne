@@ -261,6 +261,28 @@ end
 
 local FlushQueue -- defined below
 
+-- A reload doesn't leave the game's channels: after switching test mode, I'm still in the side
+-- I left (the real alliance channel in test mode, the test ones back in the real guild), and
+-- its messages keep coming (rejected, but there). Once one of mine is ready, leave every
+-- La Taverne channel (LaTaverneA..., LaTaverneT...) that none of my roles uses.
+function Comm:LeaveStrayChannels()
+    for i = 1, (MAX_WOW_CHAT_CHANNELS or 20) do
+        local _, name = GetChannelName(i)
+        if type(name) == "string" and not ChannelByName(name) then
+            local lower = name:lower()
+            if lower:match("^latavernea%w+$") or lower:match("^latavernet%w+$") then
+                LeaveChannelByName(name)
+                self:LogNote("left " .. name .. " (not used any more)")
+            end
+        end
+    end
+end
+
+-- Switching test mode, right before the reload: leave the side I'm leaving.
+function Comm:LeaveAllChannels()
+    for role in pairs(channels) do self:LeaveChannel(role) end
+end
+
 ns.On("CHAT_MSG_CHANNEL_NOTICE", function(notice, _, _, _, _, _, _, _, baseName)
     local ch = ChannelByName(baseName)
     if not ch then return end
@@ -287,6 +309,7 @@ local function Probe(ch)
             ch.ready = true
             HideChannel(ch.name)
             FlushQueue()
+            Comm:LeaveStrayChannels()
             if Comm.onReady then Comm.onReady(ch.role) end
             for _, fn in ipairs(Comm.readyListeners) do fn(ch.role) end
             return

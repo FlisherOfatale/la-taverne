@@ -38,6 +38,7 @@ local function EndForSwitch()
     ns.Players:Stop()
     ns.Invites:Stop()
     if ns.AllyMap.StopSharing then ns.AllyMap:StopSharing() end
+    ns.Comm:LeaveAllChannels() -- a reload keeps them otherwise (after the messages above)
 end
 
 -- The game only lets a reload come from the player (ReloadUI is protected): the popup's Reload
