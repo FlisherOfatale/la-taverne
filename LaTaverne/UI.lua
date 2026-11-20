@@ -4115,10 +4115,15 @@ local function BuildOptionsPanel()
         L["No new group alerts and no sounds there. Join requests and invitations still show in the chat."] })
     EndSection()
 
-    -- Map: my position shared, guild and allied players shown (AllyMap.lua) ---------------
+    -- Map (AllyMap.lua): two columns, what I share on the left, who shows on my map on the
+    -- right ---------------------------------------------------------------------------------
     Section(L["Map"])
     rowY = Row()
-    local mapShare = NewCheckbox(c, L["Share my position on the map"], function(self)
+    NewLabel(c, L["Share"], "GameFontNormal"):SetPoint("TOPLEFT", 16, rowY - 2)
+    NewLabel(c, L["Show on my map"], "GameFontNormal"):SetPoint("TOPLEFT", CONTROL_X, rowY - 2)
+    y = y + 8 -- (column titles: a shorter row)
+    rowY = Row()
+    local mapShare = NewCheckbox(c, L["My position"], function(self)
         ns.db.allyMap.share = self:GetChecked() and true or false
         ns.AllyMap:SettingsChanged()
     end)
@@ -4126,18 +4131,22 @@ local function BuildOptionsPanel()
     WithTooltip(mapShare, { L["Share my position on the map"],
         L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 5 seconds while you move, every minute while you stand still."],
         L["Never from a dungeon, raid or battleground."] })
-    rowY = Row()
-    local mapGuild = NewCheckbox(c, L["Show my guild's members on the map"], function(self)
+    local mapGuild = NewCheckbox(c, L["My guild's members"], function(self)
         ns.AllyMap:SetShow("guild", self:GetChecked())
     end)
-    mapGuild:SetPoint("TOPLEFT", 12, rowY + 2)
+    mapGuild:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
     WithTooltip(mapGuild, { L["Show my guild's members on the map"],
         L["Those who run La Taverne and share their position. Those OpenMap already shows are left to it."] })
     rowY = Row()
-    local mapAllies = NewCheckbox(c, L["Show the allied guilds' members on the map"], function(self)
+    -- Under the share switch: where it never goes from (lined up with its label).
+    local mapNever = NewLabel(c, L["Never from a dungeon, raid or battleground."], "GameFontDisableSmall")
+    mapNever:SetPoint("TOPLEFT", 42, rowY - 2)
+    mapNever:SetWidth(CONTROL_X - 60)
+    mapNever:SetJustifyH("LEFT")
+    local mapAllies = NewCheckbox(c, L["The allied guilds' members"], function(self)
         ns.AllyMap:SetShow("ally", self:GetChecked())
     end)
-    mapAllies:SetPoint("TOPLEFT", 12, rowY + 2)
+    mapAllies:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
     WithTooltip(mapAllies, { L["Show the allied guilds' members on the map"],
         L["Those who run La Taverne and share their position, with their guild's tag."], L["Only with a Guild Alliance."] })
     EndSection()
