@@ -40,7 +40,10 @@ Comm.stats = { sent = 0, received = 0, rejected = 0 }
 -- The real guild's messages are ignored then: only counted.
 local LOG_MAX = 300
 local RATE_MAX = 30 -- messages in a minute from one sender: unusual
-local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, realIgnored = 0 }
+local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, realIgnored = 0, positions = { ["in"] = 0, out = 0 } }
+-- Positions on the map (AllyMap.lua) go every few seconds from everyone: only counted, never
+-- listed, or they'd push everything else out of the log.
+local QUIET_TYPES = { POS = true }
 
 function Comm:IsLogging() return msgLog.on end
 
@@ -79,6 +82,10 @@ end
 -- One message. dir: "in" or "out"; scope: "guild" or "ally"; what: what happened to it.
 local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
     if not msgLog.on then return end
+    if QUIET_TYPES[msgType] and not unusual then
+        msgLog.positions[dir] = (msgLog.positions[dir] or 0) + 1
+        return
+    end
     if scope == "guild" and ns.Guild:IsSandbox() then scope = "test" end
     local from = ""
     if dir == "in" then
@@ -112,6 +119,7 @@ function Comm:SetLogging(on)
         wipe(msgLog.order)
         wipe(msgLog.rate)
         msgLog.realIgnored = 0
+        msgLog.positions["in"], msgLog.positions.out = 0, 0
         msgLog.since = date("%H:%M:%S")
     end
     msgLog.on = on and true or false
@@ -132,6 +140,7 @@ function Comm:LogText()
         out[#out + 1] = format("Real guild: %d messages ignored (test mode)", msgLog.realIgnored)
     end
     out[#out + 1] = format("Queues: guild %d, alliance %d", #queues.guild, #queues.ally)
+    out[#out + 1] = format("Map positions (not listed): %d in, %d out", msgLog.positions["in"], msgLog.positions.out)
     if #msgLog.order == 0 then
         out[#out + 1] = "Unusual: none"
     else
