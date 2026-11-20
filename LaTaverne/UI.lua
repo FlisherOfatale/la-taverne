@@ -4025,7 +4025,6 @@ local function BuildOptionsPanel()
     local function StopWaiting()
         bind.waiting = false
         bind:EnableKeyboard(false)
-        if bind.SetPropagateKeyboardInput then bind:SetPropagateKeyboardInput(true) end
         bind:UnregisterEvent("GLOBAL_MOUSE_DOWN")
         if bind.waitTimer then bind.waitTimer:Cancel() bind.waitTimer = nil end
         bind:SetText(BindingText())
@@ -4063,6 +4062,10 @@ local function BuildOptionsPanel()
         StopWaiting()
     end)
     bind:SetScript("OnHide", StopWaiting)
+    -- Giving a frame an OnKeyDown script turns its keyboard on: without this, the box took every
+    -- key (movement, Enter, Escape) as soon as the Options page showed.
+    bind:EnableKeyboard(false)
+    bind:SetScript("OnShow", StopWaiting)
     bind:SetScript("OnEvent", function(self, event)
         if event == "GLOBAL_MOUSE_DOWN" and self.waiting and not self:IsMouseOver() then StopWaiting() end
     end)
