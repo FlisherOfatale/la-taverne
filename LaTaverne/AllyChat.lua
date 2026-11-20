@@ -78,10 +78,13 @@ end
 -- then the guild's tag if that option is on.
 local function TagText(tag)
     if not tag then return "" end
+    -- (also AllyChat.TagText, for the test guild window)
     local lynx = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
     if not ns.db.allyChat.showTag then return lynx end
     return lynx .. TAG_COLOR .. "[" .. tag .. "]|r "
 end
+
+AllyChat.TagText = TagText
 
 local function ClassColored(name, class)
     local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]

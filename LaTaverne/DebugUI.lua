@@ -27,11 +27,7 @@ local function FormatChat(line)
         return TimeText(line.t) .. "|cffffd100" .. line.system .. "|r"
     end
     -- Same as the real chat: the lynx, then the tag if that option is on (Options, Shared guild chat).
-    local tag = ""
-    if line.tag then
-        tag = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
-            .. (ns.db.allyChat.showTag and ("|cff8fb8e8[" .. line.tag .. "]|r ") or "")
-    end
+    local tag = ns.AllyChat.TagText(line.tag)
     return TimeText(line.t) .. tag .. "[" .. K.ClassColored(line.author, line.class) .. "]: " .. line.text
 end
 

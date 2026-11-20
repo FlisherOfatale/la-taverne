@@ -230,10 +230,13 @@ function Minimap:RegisterSettings()
     logo:SetTexture("Interface\\AddOns\\LaTaverne\\media\\lynx_logo")
     local notes = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     notes:SetPoint("TOPLEFT", by, "BOTTOMLEFT", 0, -10)
-    -- Wraps left of the logo instead of running under it.
-    notes:SetPoint("RIGHT", logo, "LEFT", -16, 0)
+    -- Wraps left of the logo instead of running under it: as wide as the page minus the logo.
     notes:SetJustifyH("LEFT")
     notes:SetWordWrap(true)
+    notes:SetWidth(360)
+    panel:SetScript("OnSizeChanged", function(_, width)
+        if width and width > 0 then notes:SetWidth(math.max(200, width - 16 - 16 - 128 - 16)) end
+    end)
     notes:SetText(L["Guild dungeon group finder. Its options are in the La Taverne window."])
     local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     open:SetSize(220, 24)
