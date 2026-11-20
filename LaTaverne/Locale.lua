@@ -588,6 +588,20 @@ if GetLocale() == "frFR" then
     L["Shared guild chat"] = "Chat de guilde partagé"
     L["Messages from the allied guilds show up in your guild chat, and yours in theirs."] = "Les messages des guildes alliées s'affichent dans votre chat de guilde, et les vôtres dans le leur."
 
+    -- Map (AllyMap.lua)
+    L["Map"] = "Carte"
+    L["Share my position on the map"] = "Partager ma position sur la carte"
+    L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 5 seconds while you move, every minute while you stand still."] = "Votre guilde et les guildes alliées vous voient comme un point sur leur carte du monde (les joueurs qui utilisent La Taverne). Envoyée toutes les 5 secondes quand vous bougez, toutes les minutes à l'arrêt."
+    L["Never from a dungeon, raid or battleground."] = "Jamais depuis un donjon, un raid ou un champ de bataille."
+    L["Show my guild's members on the map"] = "Afficher les membres de ma guilde sur la carte"
+    L["Those who run La Taverne and share their position. Those OpenMap already shows are left to it."] = "Ceux qui utilisent La Taverne et partagent leur position. Ceux qu'OpenMap affiche déjà lui sont laissés."
+    L["Show the allied guilds' members on the map"] = "Afficher les membres des guildes alliées sur la carte"
+    L["Those who run La Taverne and share their position, with their guild's tag."] = "Ceux qui utilisent La Taverne et partagent leur position, avec le tag de leur guilde."
+    L["Guild members (La Taverne)"] = "Membres de la guilde (La Taverne)"
+    L["Allied guilds (La Taverne)"] = "Guildes alliées (La Taverne)"
+    L["Updated %d s ago"] = "Mis à jour il y a %d s"
+    L["Your position is now shared on the map with your guild and the allied guilds (players who run La Taverne). Options, Map: to turn it off."] = "Votre position est maintenant partagée sur la carte avec votre guilde et les guildes alliées (les joueurs qui utilisent La Taverne). Options, Carte : pour la désactiver."
+
     -- Chat messages
     L["Your group is full."] = "Votre groupe est complet."
     L["New group: %s by %s"] = "Nouveau groupe : %s par %s"

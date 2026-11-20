@@ -3899,7 +3899,7 @@ local function SaveKeyBindings()
     if SaveBindings and GetCurrentBindingSet then SaveBindings(GetCurrentBindingSet()) end
 end
 
--- Options: one column of sections (General, Minimap, Alerts, Shared guild chat), labels on the
+-- Options: one column of sections (General, Minimap, Alerts, Map, Shared guild chat), labels on the
 -- left and their control at CONTROL_X; the error report and the version on the bottom line.
 local CONTROL_X = 280
 local OPTION_ROW, OPTION_GAP = 30, 56 -- between two rows; between a section's last row and the next header (room to breathe: the page scrolls)
@@ -4115,6 +4115,33 @@ local function BuildOptionsPanel()
         L["No new group alerts and no sounds there. Join requests and invitations still show in the chat."] })
     EndSection()
 
+    -- Map: my position shared, guild and allied players shown (AllyMap.lua) ---------------
+    Section(L["Map"])
+    rowY = Row()
+    local mapShare = NewCheckbox(c, L["Share my position on the map"], function(self)
+        ns.db.allyMap.share = self:GetChecked() and true or false
+        ns.AllyMap:SettingsChanged()
+    end)
+    mapShare:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(mapShare, { L["Share my position on the map"],
+        L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 5 seconds while you move, every minute while you stand still."],
+        L["Never from a dungeon, raid or battleground."] })
+    rowY = Row()
+    local mapGuild = NewCheckbox(c, L["Show my guild's members on the map"], function(self)
+        ns.AllyMap:SetShow("guild", self:GetChecked())
+    end)
+    mapGuild:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(mapGuild, { L["Show my guild's members on the map"],
+        L["Those who run La Taverne and share their position. Those OpenMap already shows are left to it."] })
+    rowY = Row()
+    local mapAllies = NewCheckbox(c, L["Show the allied guilds' members on the map"], function(self)
+        ns.AllyMap:SetShow("ally", self:GetChecked())
+    end)
+    mapAllies:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(mapAllies, { L["Show the allied guilds' members on the map"],
+        L["Those who run La Taverne and share their position, with their guild's tag."], L["Only with a Guild Alliance."] })
+    EndSection()
+
     -- Shared guild chat: always on. The tag option, and (only while GuildUnion is loaded too)
     -- a switch to stop it, so allied lines don't show twice --------------------------------
     local chatHeader = Section(L["Shared guild chat"])
@@ -4168,6 +4195,9 @@ local function BuildOptionsPanel()
         alertSound:SetChecked(ns.db.alertSound == true)
         requestSound:SetChecked(ns.db.requestSound ~= false)
         quiet:SetChecked(ns.db.quiet == true)
+        mapShare:SetChecked(ns.db.allyMap.share)
+        mapGuild:SetChecked(ns.db.allyMap.showGuild)
+        mapAllies:SetChecked(ns.db.allyMap.showAllies)
         for _, cb in ipairs(langChecks) do cb:SetChecked((ns.db.dungeonLanguages or {})[cb.key] == true) end
 
         local active = ns.Alliance:IsActive()

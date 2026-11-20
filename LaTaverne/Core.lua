@@ -158,6 +158,12 @@ local DEFAULTS = {
         showTag = true,  -- allied guild's tag in front of the name
     },
     allyLog = {},
+    allyMap = {       -- guild and allied players on the world map (AllyMap.lua)
+        share = true,      -- my position goes to my guild and the allied guilds
+        showGuild = true,  -- dots for my guild's members
+        showAllies = true, -- dots for the allied guilds' members
+        told = false,      -- the "your position is shared" line was shown once
+    },
     invites = {       -- keyword auto-invite (always off at login)
         auto = true,      -- invite right away, or wait for a click
         whispers = false, -- also listen to whispers
@@ -413,6 +419,7 @@ SlashCmdList.LATAVERNE = function(msg)
         ns.Print("/taverne dev - test mode (sandbox) status and settings")
         ns.Print("/taverne ally - allied guilds: what was read from the guild info")
         ns.Print("/taverne g <text> - fake guild chat (test mode)")
+        ns.Print("/taverne map - positions on the map: what's shared and shown")
         ns.Print("/taverne test [all|env|api|names|guild|chan] - run diagnostics")
         ns.Print("/taverne who <name> - look a name up in the guild roster")
         ns.Print("/taverne autoinvite - turn keyword auto-invite on or off")

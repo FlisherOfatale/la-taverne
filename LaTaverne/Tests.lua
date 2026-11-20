@@ -35,6 +35,15 @@ local function TestAPI()
         "ChatFrame1.OnEvent script", has(cf and cf:GetScript("OnEvent")),
         "ChatFrame_OnEvent", has(ChatFrame_OnEvent), "ChatFrameMixin", has(ChatFrameMixin),
         "ChatFrameUtil.DisplayChatMessage", has(ChatFrameUtil and ChatFrameUtil.DisplayChatMessage))
+    -- Positions on the map (AllyMap.lua)
+    L("map:", "GetBestMapForUnit", has(C_Map and C_Map.GetBestMapForUnit),
+        "GetPlayerMapPosition", has(C_Map and C_Map.GetPlayerMapPosition),
+        "GetWorldPosFromMapPos", has(C_Map and C_Map.GetWorldPosFromMapPos),
+        "GetMapPosFromWorldPos", has(C_Map and C_Map.GetMapPosFromWorldPos),
+        "map pins", has(WorldMapFrame and WorldMapFrame.pinPools and MapCanvasDataProviderMixin and MapCanvasPinMixin),
+        "OpenMapAPI", OpenMapAPI and ("v" .. tostring(OpenMapAPI.version)) or "absent")
+    local m, x, y = ns.AllyMap and ns.AllyMap.Here()
+    L("map: my position", m and format("map %d, %.1f, %.1f", m, x * 100, y * 100) or "unknown (instance, secret, or the game won't say)")
 end
 
 local function TestNames()

@@ -381,13 +381,18 @@ end
 
 -- Broadcast a message to the guild (or the sandbox channel).
 -- priority: "BULK", "NORMAL" (default) or "ALERT" (chat).
-function Comm:Send(msgType, payload, priority)
+-- noQueue: dropped instead of queued when it can't go now (a position: an old one is worth nothing).
+function Comm:Send(msgType, payload, priority, noQueue)
     payload = payload or {}
     payload.ver = ns.version
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
     if SendGuildText(text, priority) then
         Trace("out", "guild", msgType, nil, #text, "sent", payload)
         return true
+    end
+    if noQueue then
+        Trace("out", "guild", msgType, nil, #text, "not sent: not ready (not queued)", payload)
+        return false
     end
     if #queues.guild < MAX_QUEUE then
         queues.guild[#queues.guild + 1] = { text = text, priority = priority, msgType = msgType }
@@ -477,7 +482,8 @@ end
 local allySerial = 0
 
 -- Send to the allied guilds. Payload always gets the sender's guild name.
-function Comm:SendAlly(msgType, payload, priority)
+-- noQueue: as for Comm:Send.
+function Comm:SendAlly(msgType, payload, priority, noQueue)
     payload = payload or {}
     payload.g = ns.Guild:GetName()
     payload.ver = ns.version
@@ -487,6 +493,10 @@ function Comm:SendAlly(msgType, payload, priority)
     if SendAllyText(text, priority) then
         Trace("out", "ally", msgType, nil, #text, "sent", payload)
         return true
+    end
+    if noQueue then
+        Trace("out", "ally", msgType, nil, #text, "not sent: channel not ready (not queued)", payload)
+        return false
     end
     if #queues.ally < MAX_QUEUE then
         queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType }
