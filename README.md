@@ -4,7 +4,7 @@
 
 <p align="center"><b>The Nation du Québec's tavern</b> · <b>La taverne de la Nation du Québec</b></p>
 
-**La Taverne joins your guild and its allied guilds as if they were one: shared guild chat, plus a dungeon group finder where you post or join groups and show when you're available to play.**
+**La Taverne joins your guild and its allied guilds as if they were one: shared guild chat, a dungeon group finder, who's available to play, who's online, and where everyone is on the map.**
 
 *Français plus bas.*
 
@@ -12,59 +12,87 @@
 
 ## English
 
-### Features
+### At a glance
 
-**Shared guild chat with allied guilds**
-- What you type in guild chat also reaches the allied guilds, and theirs reaches you, in your usual guild chat (same colors, timestamps, clickable names) and in the guild window.
-- The allied guild's tag shows in front of the name (optional).
-- Allied players are checked: their own guild confirms they really belong to it. A player who isn't confirmed is marked, and an impostor's messages are dropped.
-- The **Alliance** tab shows each guild of the alliance: who is online with La Taverne, the players seen in the last two weeks, and how many groups and available players each guild has right now.
+- **Groups:** post a dungeon group or join one, from your guild and the allied guilds. La Taverne sends the party invites.
+- **Availability:** say you're free to play, for which roles and dungeons. Leaders see you and invite you in one click.
+- **Shared guild chat:** your guild chat and the allied guilds' are one, with real item and spell links.
+- **Alliance:** who is online with La Taverne in each guild, and what each guild has going on.
+- **World map:** your guildmates and allies as dots on the map, moving as they go.
+- **Auto-invite:** members who type `+1` (or your own keywords) in guild chat get a party invite.
 
-**Dungeon group finder**
-- Post a group in a few clicks: dungeon, the roles you're looking for, a note, and options like "New players welcome" or "Discord required".
-- Browse the open groups of your guild and allied guilds, filtered by your roles, your level and the dungeons you want. Dungeon level ranges use the game's difficulty colors.
-- Ask to join with every role you can play. The leader accepts you as one of them, and La Taverne sends the party invite.
-- Invite players by name, follow requests and members in "My group", and look for replacements once the run has started.
-- Get a chat alert (with a sound if you want) when a new group fits you, in the chat window you choose.
-
-**"I'm available"**
-- Tell your guild and allied guilds you're free to play: your roles, the dungeons you want, for how long, and a note.
-- Group leaders see you right away and can invite you in one click.
-
-**Auto-invite**
-- Turn it on, and guild members who type a keyword like `+1` or `inv` in guild chat get a party invite, right away or when you click. Allied guilds and whispers can be listened to as well.
-- Keyword sets: several leaders can invite at once, each with their own words (`+1` for one group, `+2` for another). The queue page shows who else is inviting and warns when someone uses your words.
-- Officers choose who may use it: everyone, only some ranks, or nobody.
-- It's always off when you log in, and turns itself off after the time you set.
-
-**Also**
-- Dungeon names in the other language (English / French) in tooltips, handy when your guild mixes game languages.
-- Minimap button (and an entry in the game's add-on menu), key binding, and a status tooltip.
-- Quiet in dungeons, raids and combat if you want: no new group alerts and no sounds there.
-- English and French.
+Everything works inside your own guild right away. Linking allied guilds is done once by an officer of each guild.
 
 ### Getting started
 
 1. Install La Taverne and log in. Everyone who wants to use it needs the addon.
-2. Open it with the minimap button, `/taverne`, or a key binding (Options > Key Bindings > AddOns).
-3. That's it inside your guild: groups, availability and auto-invite work right away, with no setup.
+2. Open it with the minimap button (right-click for a quick menu), the game's add-on menu, `/taverne`, or a key binding (Options > Key Bindings > AddOns).
+3. The tabs on the side: **Groups**, **Availability**, **Alliance**, **Auto-invite**, then **Setup** (only for players who can edit the Guild Info) and **Options**. A green dot on a tab means something of yours is running there.
 
-The side tabs: **Groups** (the open groups, and your own group while you're in one), **Availability**, **Alliance**, **Auto-invite**, then **Setup** (only for players who can edit the Guild Info) and **Options**.
+### Groups
+
+- **Post a group** in a few clicks: the dungeon, your role and the roles you're looking for, a note, and options like "New players welcome" or "Discord required". Ten-player dungeons are supported.
+- **Browse** the open groups of your guild and the allied guilds, filtered by the roles you can play, your level and the dungeons you want. Level ranges use the game's difficulty colors.
+- **Ask to join** with every role you can play. The leader accepts you as one of them, and La Taverne sends the party invite. Requests wait while the leader is offline and are sent again when they're back.
+- **My group:** invite players by name (with autocomplete), follow requests and members, and change roles. If someone leaves during the run, **Find a replacement** opens the group to requests again.
+- **Alerts** in the chat window you choose, with a sound if you want: a new group that fits you, or a group in progress looking for a replacement. **[View]** opens the list on that group and makes it glow for a moment.
+- **Announce in chat** posts one short line in guild chat ("LFM 1 Tank - ...") for players without the addon.
+- Passing the party lead hands your group over to the new leader if they run La Taverne.
+
+### Availability
+
+- **I'm available:** your roles, any dungeon at your level or the ones you choose, for how long, and a note.
+- Leaders see you right away and can invite you in one click.
+- Shortly before it ends, a window offers **+15 min**, **+1 h** or **Stop**.
+
+### Shared guild chat
+
+- What you type in guild chat also reaches the allied guilds, and theirs reaches you, in your usual guild chat (same colors, timestamps, clickable names) and in the guild window.
+- Allied lines start with the lynx and the guild's tag (the tag can be turned off).
+- Item, spell and quest links stay real links. A line that arrives late says when it was typed.
+- Allied players are checked: their own guild confirms they belong to it. A player who isn't confirmed yet is marked, and an impostor's messages are dropped.
+
+### Alliance
+
+The **Alliance** tab has one card per guild: who is online with La Taverne (with their version), the players seen in the last two weeks, and how many open groups and available players each guild has right now.
+
+### World map
+
+- Your guildmates and allied players who run La Taverne show as class-colored dots on the world map: a green ring for your guild, a blue ring for allies. Hover a dot for the name, guild, level and place.
+- Positions go out every 10 seconds while you move (every minute while you stand still), and the dots glide in between. Your party and raid keep the game's own dots.
+- **Sharing is on**, from the first notice in chat. It never shares from inside a dungeon, raid or battleground. To turn it off, or to hide your guild's or the allies' dots: **Options > Map**.
+
+### Auto-invite
+
+- Turn it on, and guild members who type a keyword alone in guild chat (`+1`, `inv`...) get a party invite, right away or when you click. Allied guilds and whispers can be listened to as well. The party becomes a raid when it fills up.
+- **Keyword sets:** several leaders can invite at once, each with their own words (`+1` for one group, `+2` for another). The queue page shows who else is inviting and warns when someone uses your words.
+- Officers choose who may use it: everyone, only some ranks, or nobody.
+- It's always off when you log in, and turns itself off after the time you set.
 
 ### Setup (officers)
 
 The **Setup** tab only shows for players who can edit the Guild Info. It holds the guild's La Taverne settings, kept in the Guild Info so every member's addon reads them:
 
-- **Auto-invite:** who may use it (everyone, only some ranks, or nobody).
+- **Auto-invite:** who may use it.
 - **Guild Alliance:** the member guilds with a short tag for each, and the shared key.
 
 Linking guilds is done once by an officer of each guild:
 
 1. **Setup** tab: add the allied guilds and a tag for each, create the key, then **Save**. The game doesn't let addons change the Guild Info, so La Taverne shows the new Guild Info text to copy and paste: your current text with a few short lines starting with `LT:` added, the rest left alone.
 2. **Export**, and send the text to an officer of each allied guild. They paste it with **Import**, then **Save**.
-3. Every member's addon reads the Guild Info and connects on its own.
+3. Every member's addon reads the Guild Info and connects on its own. Members who leave the guild lose access by themselves.
 
-Already using GuildUnion? **Import > From GuildUnion** copies its guilds and tags. Both addons' lines fit side by side in the Guild Info. While both are installed, keep only one of them sharing guild chat, or allied lines show twice. In La Taverne it's in **Options**.
+### Options
+
+Window size, the chat window for La Taverne's lines, the minimap button and its glow, which new groups to be told about, sounds, **Quiet in dungeons, raids and combat** (no alerts and no sounds there), dungeon names in the other language (English / French) in tooltips, the map, and the shared chat's tag. **Error report** is at the bottom.
+
+### Works with
+
+- **OpenMap:** the dots also show on OpenMap's map, at any zoom. Its menu gets La Taverne's two map switches, and a player who already shares through OpenMap doesn't get a second dot.
+- **Chattynator:** allied guild chat shows in Chattynator's windows like your own guild's.
+- **GuildUnion:** **Import > From GuildUnion** copies its guilds and tags, and both addons' lines fit side by side in the Guild Info. While both are installed, keep only one of them sharing guild chat (in La Taverne: **Options**), or allied lines show twice.
+- **Controller (gamepad) interface:** La Taverne's menus and confirmation windows work with it, without "action blocked" errors.
+- **BugSack / BugGrabber:** La Taverne's errors also go to its own error report.
 
 ### Commands
 
@@ -78,6 +106,7 @@ Please open an issue on GitHub, or leave a comment on CurseForge. If La Taverne 
 
 ### Credits
 
+- World map dots and OpenMap support: FlisherOfatale. Controller interface support: NuCl34R.
 - Allied guild chat in the guild window follows GuildUnion's approach (MIT, by Sadance).
 - Uses Ace3 (AceComm, AceSerializer, CallbackHandler), ChatThrottleLib, LibStub, LibDataBroker and LibDBIcon.
 
@@ -89,61 +118,89 @@ The code is under the MIT license. The names "La Taverne" and "Nation du Québec
 
 ## Français
 
-**La Taverne réunit votre guilde et ses guildes alliées comme une seule : chat de guilde partagé, et une recherche de groupes de donjon pour publier ou rejoindre des groupes et indiquer quand vous êtes disponible.**
+**La Taverne réunit votre guilde et ses guildes alliées comme une seule : chat de guilde partagé, recherche de groupes de donjon, qui est disponible pour jouer, qui est en ligne, et où chacun se trouve sur la carte.**
 
-### Fonctionnalités
+### En bref
 
-**Chat de guilde partagé avec les guildes alliées**
-- Ce que vous écrivez dans le chat de guilde arrive aussi aux guildes alliées, et le leur vous arrive, dans votre chat de guilde habituel (mêmes couleurs, horodatage, noms cliquables) et dans la fenêtre de guilde.
-- Le tag de la guilde alliée s'affiche devant le nom (au choix).
-- Les joueurs alliés sont vérifiés : leur propre guilde confirme qu'ils en font bien partie. Un joueur non confirmé est signalé, et les messages d'un imposteur sont ignorés.
-- L'onglet **Alliance** montre chaque guilde de l'alliance : qui est en ligne avec La Taverne, les joueurs vus ces deux dernières semaines, et combien de groupes et de joueurs disponibles chaque guilde a en ce moment.
+- **Groupes :** publiez un groupe de donjon ou rejoignez-en un, dans votre guilde et les guildes alliées. La Taverne envoie les invitations de groupe.
+- **Disponibilités :** indiquez que vous êtes libre pour jouer, pour quels rôles et quels donjons. Les chefs vous voient et vous invitent en un clic.
+- **Chat de guilde partagé :** votre chat de guilde et celui des guildes alliées n'en font qu'un, avec de vrais liens d'objets et de sorts.
+- **Alliance :** qui est en ligne avec La Taverne dans chaque guilde, et ce qui se passe dans chacune.
+- **Carte du monde :** les membres de votre guilde et les alliés en points sur la carte, qui bougent avec eux.
+- **Invitation automatique :** les membres qui tapent `+1` (ou vos propres mots-clés) dans le chat de guilde reçoivent une invitation de groupe.
 
-**Recherche de groupes de donjon**
-- Publiez un groupe en quelques clics : le donjon, les rôles recherchés, une note, et des options comme « Nouveaux joueurs bienvenus » ou « Discord requis ».
-- Parcourez les groupes ouverts de votre guilde et des guildes alliées, filtrés selon vos rôles, votre niveau et les donjons voulus. Les tranches de niveau prennent les couleurs de difficulté du jeu.
-- Demandez à rejoindre avec tous les rôles que vous pouvez jouer. Le chef vous accepte dans l'un d'eux, et La Taverne envoie l'invitation de groupe.
-- Invitez des joueurs par leur nom, suivez demandes et membres dans « Mon groupe », et cherchez des remplaçants une fois le donjon commencé.
-- Recevez une alerte dans le chat (avec un son si vous voulez) quand un nouveau groupe vous convient, dans la fenêtre de chat de votre choix.
-
-**« Je suis disponible »**
-- Indiquez à votre guilde et aux guildes alliées que vous êtes libre pour jouer : vos rôles, les donjons voulus, pour combien de temps, et une note.
-- Les chefs de groupe vous voient tout de suite et peuvent vous inviter en un clic.
-
-**Invitation automatique**
-- Activez-la, et les membres de la guilde qui tapent un mot-clé comme `+1` ou `inv` dans le chat de guilde reçoivent une invitation de groupe, tout de suite ou quand vous cliquez. Les guildes alliées et les chuchotements peuvent aussi être écoutés.
-- Jeux de mots-clés : plusieurs chefs peuvent inviter en même temps, chacun avec ses mots (`+1` pour un groupe, `+2` pour un autre). La page de la file montre qui d'autre invite et prévient quand quelqu'un utilise vos mots.
-- Les officiers choisissent qui peut l'utiliser : tout le monde, certains rangs seulement, ou personne.
-- Elle est toujours désactivée à la connexion, et s'arrête d'elle-même après la durée choisie.
-
-**Et aussi**
-- Le nom des donjons dans l'autre langue (anglais / français) dans les infobulles, pratique quand votre guilde mélange les langues du jeu.
-- Bouton de minicarte (et une entrée dans le menu des addons du jeu), raccourci clavier et infobulle d'état.
-- Silencieux en donjon, en raid et en combat si vous voulez : ni alerte de nouveau groupe ni son.
-- En anglais et en français.
+Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées se fait une fois, par un officier de chaque guilde.
 
 ### Pour commencer
 
 1. Installez La Taverne et connectez-vous. Chaque joueur qui veut l'utiliser a besoin de l'addon.
-2. Ouvrez-la avec le bouton de la minicarte, `/taverne`, ou un raccourci clavier (Options > Raccourcis > AddOns).
-3. C'est tout dans votre guilde : groupes, disponibilité et invitation automatique marchent tout de suite, sans configuration.
+2. Ouvrez-la avec le bouton de la minicarte (clic droit pour un menu rapide), le menu des addons du jeu, `/taverne`, ou un raccourci clavier (Options > Raccourcis > AddOns).
+3. Les onglets sur le côté : **Groupes**, **Disponibilités**, **Alliance**, **Invitation automatique**, puis **Configuration** (seulement pour qui peut modifier les infos de guilde) et **Options**. Un point vert sur un onglet veut dire que quelque chose à vous y est en cours.
 
-Les onglets sur le côté : **Groupes** (les groupes ouverts, et votre groupe quand vous en avez un), **Disponibilités**, **Alliance**, **Invitation automatique**, puis **Configuration** (seulement pour qui peut modifier les infos de guilde) et **Options**.
+### Groupes
+
+- **Publiez un groupe** en quelques clics : le donjon, votre rôle et les rôles recherchés, une note, et des options comme « Nouveaux joueurs bienvenus » ou « Discord requis ». Les donjons à dix joueurs sont pris en charge.
+- **Parcourez** les groupes ouverts de votre guilde et des guildes alliées, filtrés selon les rôles que vous pouvez jouer, votre niveau et les donjons voulus. Les tranches de niveau prennent les couleurs de difficulté du jeu.
+- **Demandez à rejoindre** avec tous les rôles que vous pouvez jouer. Le chef vous accepte dans l'un d'eux, et La Taverne envoie l'invitation de groupe. Les demandes attendent si le chef est hors ligne, et repartent à son retour.
+- **Mon groupe :** invitez des joueurs par leur nom (avec autocomplétion), suivez demandes et membres, et changez les rôles. Si quelqu'un part en cours de route, **Chercher un remplaçant** rouvre le groupe aux demandes.
+- **Alertes** dans la fenêtre de chat de votre choix, avec un son si vous voulez : un nouveau groupe qui vous convient, ou un groupe en cours qui cherche un remplaçant. **[Voir]** ouvre la liste sur ce groupe et le fait briller un instant.
+- **Annoncer dans le chat** publie une courte ligne dans le chat de guilde (« LFM 1 Tank - ... ») pour les joueurs sans l'addon.
+- En passant le chef du groupe, votre groupe passe au nouveau chef s'il utilise La Taverne.
+
+### Disponibilités
+
+- **Je suis disponible :** vos rôles, n'importe quel donjon à votre niveau ou ceux que vous choisissez, pour combien de temps, et une note.
+- Les chefs vous voient tout de suite et peuvent vous inviter en un clic.
+- Peu avant la fin, une fenêtre propose **+15 min**, **+1 h** ou **Arrêter**.
+
+### Chat de guilde partagé
+
+- Ce que vous écrivez dans le chat de guilde arrive aussi aux guildes alliées, et le leur vous arrive, dans votre chat de guilde habituel (mêmes couleurs, horodatage, noms cliquables) et dans la fenêtre de guilde.
+- Les lignes des alliés commencent par le lynx et le tag de leur guilde (le tag peut être retiré).
+- Les liens d'objets, de sorts et de quêtes restent de vrais liens. Une ligne qui arrive en retard indique quand elle a été écrite.
+- Les joueurs alliés sont vérifiés : leur propre guilde confirme qu'ils en font partie. Un joueur pas encore confirmé est signalé, et les messages d'un imposteur sont ignorés.
+
+### Alliance
+
+L'onglet **Alliance** a une carte par guilde : qui est en ligne avec La Taverne (avec sa version), les joueurs vus ces deux dernières semaines, et combien de groupes ouverts et de joueurs disponibles chaque guilde a en ce moment.
+
+### Carte du monde
+
+- Les membres de votre guilde et les joueurs alliés qui utilisent La Taverne s'affichent en points de la couleur de leur classe sur la carte du monde : un anneau vert pour votre guilde, bleu pour les alliés. Survolez un point pour le nom, la guilde, le niveau et l'endroit.
+- Les positions partent toutes les 10 secondes quand vous bougez (toutes les minutes à l'arrêt), et les points glissent entre les deux. Votre groupe et votre raid gardent les points du jeu.
+- **Le partage est actif**, à partir du premier avis dans le chat. Il ne partage jamais depuis un donjon, un raid ou un champ de bataille. Pour le désactiver, ou pour cacher les points de votre guilde ou des alliés : **Options > Carte**.
+
+### Invitation automatique
+
+- Activez-la, et les membres de la guilde qui tapent un mot-clé seul dans le chat de guilde (`+1`, `inv`...) reçoivent une invitation de groupe, tout de suite ou quand vous cliquez. Les guildes alliées et les chuchotements peuvent aussi être écoutés. Le groupe devient un raid quand il est plein.
+- **Jeux de mots-clés :** plusieurs chefs peuvent inviter en même temps, chacun avec ses mots (`+1` pour un groupe, `+2` pour un autre). La page de la file montre qui d'autre invite et prévient quand quelqu'un utilise vos mots.
+- Les officiers choisissent qui peut l'utiliser : tout le monde, certains rangs seulement, ou personne.
+- Elle est toujours désactivée à la connexion, et s'arrête d'elle-même après la durée choisie.
 
 ### Configuration (officiers)
 
 L'onglet **Configuration** n'apparaît que pour les joueurs qui peuvent modifier les infos de guilde. Il regroupe les réglages de La Taverne pour la guilde, gardés dans les infos de guilde pour que l'addon de chaque membre les lise :
 
-- **Invitation automatique :** qui peut l'utiliser (tout le monde, certains rangs seulement, ou personne).
+- **Invitation automatique :** qui peut l'utiliser.
 - **Alliance de guildes :** les guildes membres avec un tag court pour chacune, et la clé partagée.
 
 Le lien entre les guildes se fait une fois, par un officier de chaque guilde :
 
 1. Onglet **Configuration** : ajoutez les guildes alliées avec un tag pour chacune, créez la clé, puis **Enregistrer**. Le jeu ne permet pas aux addons de modifier les infos de guilde : La Taverne affiche donc le nouveau texte à copier-coller, c'est-à-dire votre texte actuel avec quelques lignes courtes commençant par `LT:` en plus, le reste tel quel.
 2. **Exporter**, et envoyez le texte à un officier de chaque guilde alliée. Il le colle avec **Importer**, puis **Enregistrer**.
-3. L'addon de chaque membre lit les infos de guilde et se connecte tout seul.
+3. L'addon de chaque membre lit les infos de guilde et se connecte tout seul. Les membres qui quittent la guilde perdent l'accès d'eux-mêmes.
 
-Vous utilisez déjà GuildUnion ? **Importer > Depuis GuildUnion** reprend ses guildes et ses tags. Les lignes des deux addons tiennent ensemble dans les infos de guilde. Tant que les deux sont installés, ne laissez qu'un seul des deux partager le chat de guilde, sinon les lignes alliées s'affichent deux fois. Dans La Taverne, c'est dans **Options**.
+### Options
+
+Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de la minicarte et son halo, les nouveaux groupes à signaler, les sons, **Silencieux en donjon, en raid et en combat** (ni alerte ni son), le nom des donjons dans l'autre langue (anglais / français) dans les infobulles, la carte, et le tag du chat partagé. Le **Rapport d'erreurs** est en bas.
+
+### Compatible avec
+
+- **OpenMap :** les points s'affichent aussi sur la carte d'OpenMap, à tous les niveaux de zoom. Son menu reçoit les deux options de carte de La Taverne, et un joueur qui partage déjà sa position par OpenMap n'a pas de deuxième point.
+- **Chattynator :** le chat des guildes alliées s'affiche dans les fenêtres de Chattynator comme celui de votre guilde.
+- **GuildUnion :** **Importer > Depuis GuildUnion** reprend ses guildes et ses tags, et les lignes des deux addons tiennent ensemble dans les infos de guilde. Tant que les deux sont installés, ne laissez qu'un seul des deux partager le chat de guilde (dans La Taverne : **Options**), sinon les lignes alliées s'affichent deux fois.
+- **Interface manette :** les menus et les fenêtres de confirmation de La Taverne fonctionnent avec elle, sans erreurs « action bloquée ».
+- **BugSack / BugGrabber :** les erreurs de La Taverne vont aussi dans son propre rapport d'erreurs.
 
 ### Commandes
 
@@ -157,6 +214,7 @@ Ouvrez une issue sur GitHub, ou laissez un commentaire sur CurseForge. Si La Tav
 
 ### Remerciements
 
+- Points sur la carte du monde et compatibilité OpenMap : FlisherOfatale. Compatibilité avec l'interface manette : NuCl34R.
 - Le chat allié dans la fenêtre de guilde reprend l'approche de GuildUnion (MIT, par Sadance).
 - Utilise Ace3 (AceComm, AceSerializer, CallbackHandler), ChatThrottleLib, LibStub, LibDataBroker et LibDBIcon.
 
