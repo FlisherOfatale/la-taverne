@@ -398,6 +398,7 @@ end
 -- priority: "BULK", "NORMAL" (default) or "ALERT" (chat).
 -- noQueue: dropped instead of queued when it can't go now (a position: an old one is worth nothing).
 function Comm:Send(msgType, payload, priority, noQueue)
+    if ns.reloadPending then return false end -- test mode switched, the reload comes next
     payload = payload or {}
     payload.ver = ns.version
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
@@ -499,6 +500,7 @@ local allySerial = 0
 -- Send to the allied guilds. Payload always gets the sender's guild name.
 -- noQueue: as for Comm:Send.
 function Comm:SendAlly(msgType, payload, priority, noQueue)
+    if ns.reloadPending then return false end
     payload = payload or {}
     payload.g = ns.Guild:GetName()
     payload.ver = ns.version

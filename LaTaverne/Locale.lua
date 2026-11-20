@@ -235,6 +235,8 @@ if GetLocale() == "frFR" then
     L["Switch to test mode? La Taverne will reload and use the test guild. Your group, your availability and auto-invite end first, so they don't follow you there."] = "Passer en mode test ? La Taverne va se recharger et utiliser la guilde de test. Votre groupe, votre disponibilité et l'invitation automatique s'arrêtent d'abord, pour ne pas vous y suivre."
     L["Leave test mode? La Taverne will reload and use your REAL guild. Your test group, your availability and auto-invite end first, so they don't reach your real guild."] = "Quitter le mode test ? La Taverne va se recharger et utiliser votre VRAIE guilde. Votre groupe de test, votre disponibilité et l'invitation automatique s'arrêtent d'abord, pour ne pas atteindre votre vraie guilde."
     L["Reload"] = "Recharger"
+    L["Type /reload to finish switching test mode."] = "Tapez /reload pour terminer le changement de mode test."
+    L["Test mode can't be switched during combat."] = "Le mode test ne peut pas être changé en combat."
     L["Stop the chat watch"] = "Arrêter la surveillance du chat"
     L["Start the chat watch"] = "Surveiller le chat"
     L["Chat watch"] = "Surveillance du chat"

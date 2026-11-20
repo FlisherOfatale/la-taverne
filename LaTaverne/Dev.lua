@@ -40,10 +40,46 @@ local function EndForSwitch()
     if ns.AllyMap.StopSharing then ns.AllyMap:StopSharing() end
 end
 
+-- The game only lets a reload come from the player (ReloadUI is protected): the popup's Reload
+-- is a secure button running the /reload macro, laid over the popup's first button. Its
+-- PreClick ends my things and saves the new mode, then the macro reloads. Secure buttons can't
+-- be shown or hidden during combat: the popup doesn't open then, and closes when combat starts.
+local DIALOG = "LaTaverneConfirm_switchTestMode"
+local switchTo                   -- the mode Reload switches to, while the popup is open
+local reloadButton
+
+local function ReloadButton()
+    if reloadButton then return reloadButton end
+    local b = CreateFrame("Button", "LaTaverneReloadButton", UIParent, "SecureActionButtonTemplate, UIPanelButtonTemplate")
+    b:SetSize(120, 24)
+    b:SetFrameStrata("FULLSCREEN_DIALOG") -- above the popup, even once a click raises it
+    b:SetAttribute("type", "macro")
+    b:SetAttribute("macrotext", "/reload")
+    b:RegisterForClicks("AnyUp", "AnyDown") -- the secure action picks the one the game uses
+    b:SetText(ns.L["Reload"])
+    b:Hide()
+    b:SetScript("PreClick", function()
+        if switchTo == nil then return end
+        local on = switchTo
+        switchTo = nil
+        EndForSwitch()
+        ns.db.dev.sandbox = on
+        ns.reloadPending = true -- nothing more goes out before the reload
+        -- If the reload didn't happen, say how to finish.
+        C_Timer.After(2, function() ns.Print(ns.L["Type /reload to finish switching test mode."]) end)
+    end)
+    reloadButton = b
+    return b
+end
+
 local function SetSandbox(on)
     on = on and true or false
     if (ns.db.dev.sandbox and true or false) == on then
         ns.Print(on and "test mode is already on." or "test mode is already off.")
+        return
+    end
+    if InCombatLockdown() then
+        ns.Print(ns.L["Test mode can't be switched during combat."])
         return
     end
     local T = ns.L
@@ -51,17 +87,33 @@ local function SetSandbox(on)
         kind = "switchTestMode",
         text = on and T["Switch to test mode? La Taverne will reload and use the test guild. Your group, your availability and auto-invite end first, so they don't follow you there."]
             or T["Leave test mode? La Taverne will reload and use your REAL guild. Your test group, your availability and auto-invite end first, so they don't reach your real guild."],
-        buttons = {
-            { text = T["Reload"], onClick = function()
-                EndForSwitch()
-                ns.db.dev.sandbox = on
-                ReloadUI()
-            end },
-            { text = CANCEL },
-        },
+        buttons = { { text = T["Reload"] }, { text = CANCEL } },
     })
+    local dialog = _G[DIALOG]
+    local slot = dialog and dialog.buttons and dialog.buttons[1]
+    if not slot then return end
+    switchTo = on
+    local b = ReloadButton()
+    slot:Hide()
+    b:ClearAllPoints()
+    b:SetPoint("CENTER", slot, "CENTER")
+    b:SetFrameLevel(dialog:GetFrameLevel() + 20)
+    b:Show()
+    if not dialog.reloadHooked then
+        dialog.reloadHooked = true
+        dialog:HookScript("OnHide", function()
+            switchTo = nil
+            if reloadButton and not InCombatLockdown() then reloadButton:Hide() end
+        end)
+    end
 end
 ns.SetSandbox = SetSandbox
+
+-- Combat starting: close the popup while the secure button can still be hidden.
+ns.On("PLAYER_REGEN_DISABLED", function()
+    local dialog = _G[DIALOG]
+    if dialog and dialog:IsShown() then dialog:Hide() end
+end)
 
 
 local subcommands = {}
