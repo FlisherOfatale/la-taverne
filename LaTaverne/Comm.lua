@@ -689,11 +689,6 @@ function Comm:JoinSandbox()
     self:JoinChannel("sandbox", name, key)
 end
 
-function Comm:LeaveSandbox()
-    wipe(queues.guild)
-    self:LeaveChannel("sandbox")
-end
-
 -- Other listeners for "a channel is ready" (the window shows the alliance channel's state).
 Comm.readyListeners = {}
 function Comm:OnReady(fn) self.readyListeners[#self.readyListeners + 1] = fn end

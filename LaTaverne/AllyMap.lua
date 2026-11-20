@@ -581,6 +581,15 @@ local function AddOpenMapToggles()
     end
 end
 
+-- Before a reload that changes the guild (test mode on or off): "off" now, on the side I'm
+-- leaving, so my dot goes away there instead of after GONE_AFTER.
+function AllyMap:StopSharing()
+    if sharing then
+        Broadcast(function() return { off = true } end, "ALERT")
+        sharing = false
+    end
+end
+
 function AllyMap:OnLogin()
     Register()
     if not registered then

@@ -527,13 +527,7 @@ function ns.BuildDebugPanel()
     -- Leaving test mode
     local leave = K.NewButton(p, L["Leave test mode"], 160, 24)
     leave:SetPoint("BOTTOMLEFT", 8, 8)
-    leave:SetScript("OnClick", function()
-        ns.ConfirmDialog({
-            kind = "leaveTestMode",
-            text = L["Leave test mode? La Taverne will then use your REAL guild: your groups become visible to its members."],
-            buttons = { { text = YES, onClick = function() ns.SetSandbox(false) end }, { text = CANCEL } },
-        })
-    end)
+    leave:SetScript("OnClick", function() ns.SetSandbox(false) end)
     local leaveHint = K.NewLabel(p, L["To come back: /taverne dev on"], "GameFontDisableSmall")
     leaveHint:SetPoint("LEFT", leave, "RIGHT", 10, 0)
 

@@ -28,19 +28,38 @@ local function Status()
     ns.ShowCopyWindow()
 end
 
+-- Switching test mode on or off: asked first, then La Taverne reloads. My group, availability,
+-- auto-invite and map position are saved per character, not per mode: they would follow me to
+-- the other side (a test group answered to the real guild at the next login there). So they're
+-- ended first, on the side I'm leaving, so that side stops showing them. The reload clears
+-- the rest: other players' groups and dots, the queues, the channels.
+local function EndForSwitch()
+    if ns.Groups:GetMine() then ns.Groups:Delist() end
+    ns.Players:Stop()
+    ns.Invites:Stop()
+    if ns.AllyMap.StopSharing then ns.AllyMap:StopSharing() end
+end
+
 local function SetSandbox(on)
-    ns.db.dev.sandbox = on
-    if on then
-        ns.Comm:JoinSandbox()
-        ns.Print("sandbox ON: traffic goes to the private test channel, guild is simulated")
-    else
-        ns.Comm:LeaveSandbox()
-        ns.Print("sandbox OFF: LaTaverne now uses your real guild")
+    on = on and true or false
+    if (ns.db.dev.sandbox and true or false) == on then
+        ns.Print(on and "test mode is already on." or "test mode is already off.")
+        return
     end
-    if ns.Vouch then ns.Vouch:Forget() end -- answers about test guilds mean nothing for real ones
-    ns.Alliance:Refresh()
-    if ns.MockGuild then ns.MockGuild:Refresh() end
-    ns.UI:Refresh()
+    local T = ns.L
+    ns.ConfirmDialog({
+        kind = "switchTestMode",
+        text = on and T["Switch to test mode? La Taverne will reload and use the test guild. Your group, your availability and auto-invite end first, so they don't follow you there."]
+            or T["Leave test mode? La Taverne will reload and use your REAL guild. Your test group, your availability and auto-invite end first, so they don't reach your real guild."],
+        buttons = {
+            { text = T["Reload"], onClick = function()
+                EndForSwitch()
+                ns.db.dev.sandbox = on
+                ReloadUI()
+            end },
+            { text = CANCEL },
+        },
+    })
 end
 ns.SetSandbox = SetSandbox
 
@@ -54,11 +73,7 @@ subcommands.on = function()
     SetSandbox(true)
 end
 
-subcommands.off = function(arg)
-    if arg ~= "confirm" then
-        ns.Print("this switches LaTaverne to your REAL guild. Type /taverne dev off confirm to do it.")
-        return
-    end
+subcommands.off = function()
     SetSandbox(false)
 end
 
