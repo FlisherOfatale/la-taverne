@@ -52,6 +52,14 @@ local function OpenMapStitched()
     return ok and on and true or false
 end
 
+-- OpenMap here, for Options: "on" (loaded, its map on), "off" (loaded, its map turned off in
+-- its options), nil (not loaded).
+function AllyMap:OpenMapState()
+    if not OpenMapAPI then return nil end
+    local db = OpenMapSettings()
+    return (db and db.enabled == false) and "off" or "on"
+end
+
 -- Is my own OpenMap sharing my place too (to my guild and my friends who use it)?
 local function OpenMapShares()
     local db = OpenMapSettings()

@@ -590,9 +590,15 @@ if GetLocale() == "frFR" then
 
     -- Map (AllyMap.lua)
     L["Map"] = "Carte"
-    L["Share"] = "Partager"
+    L["Share my location"] = "Partager ma position"
+    L["With my guild and allies"] = "Avec ma guilde et les alliés"
     L["Show on my map"] = "Afficher sur ma carte"
-    L["My position"] = "Ma position"
+    L["Detected, on"] = "Détecté, actif"
+    L["Detected, turned off"] = "Détecté, désactivé"
+    L["Not detected"] = "Non détecté"
+    L["The dots show on its map too."] = "Les points s'affichent aussi sur sa carte."
+    L["Its map is off in its options: the dots show on the game's map."] = "Sa carte est désactivée dans ses options : les points s'affichent sur la carte du jeu."
+    L["The dots show on the game's map."] = "Les points s'affichent sur la carte du jeu."
     L["My guild's members"] = "Les membres de ma guilde"
     L["The allied guilds' members"] = "Les membres des guildes alliées"
     L["Share my position on the map"] = "Partager ma position sur la carte"

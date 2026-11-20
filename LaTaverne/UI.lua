@@ -4115,15 +4115,24 @@ local function BuildOptionsPanel()
         L["No new group alerts and no sounds there. Join requests and invitations still show in the chat."] })
     EndSection()
 
-    -- Map (AllyMap.lua): two columns, what I share on the left, who shows on my map on the
-    -- right ---------------------------------------------------------------------------------
+    -- Map (AllyMap.lua): three columns, what I share, who shows on my map, and whether OpenMap
+    -- is there (its stitched map gets the dots too) ------------------------------------------
+    local MAP_COL3 = CONTROL_X + 240
     Section(L["Map"])
     rowY = Row()
-    NewLabel(c, L["Share"], "GameFontNormal"):SetPoint("TOPLEFT", 16, rowY - 2)
+    NewLabel(c, L["Share my location"], "GameFontNormal"):SetPoint("TOPLEFT", 16, rowY - 2)
     NewLabel(c, L["Show on my map"], "GameFontNormal"):SetPoint("TOPLEFT", CONTROL_X, rowY - 2)
+    NewLabel(c, "OpenMap", "GameFontNormal"):SetPoint("TOPLEFT", MAP_COL3, rowY - 2)
     y = y + 8 -- (column titles: a shorter row)
     rowY = Row()
-    local mapShare = NewCheckbox(c, L["My position"], function(self)
+    -- OpenMap: detected and on, detected but its map turned off, or not there (Refresh).
+    local openMapState = NewLabel(c, "")
+    openMapState:SetPoint("TOPLEFT", MAP_COL3, rowY - 4)
+    local openMapNote = NewLabel(c, "", "GameFontDisableSmall")
+    openMapNote:SetPoint("TOPLEFT", openMapState, "BOTTOMLEFT", 0, -6)
+    openMapNote:SetWidth(200)
+    openMapNote:SetJustifyH("LEFT")
+    local mapShare = NewCheckbox(c, L["With my guild and allies"], function(self)
         ns.db.allyMap.share = self:GetChecked() and true or false
         ns.AllyMap:SettingsChanged()
     end)
@@ -4207,6 +4216,17 @@ local function BuildOptionsPanel()
         mapShare:SetChecked(ns.db.allyMap.share)
         mapGuild:SetChecked(ns.db.allyMap.showGuild)
         mapAllies:SetChecked(ns.db.allyMap.showAllies)
+        local omState = ns.AllyMap:OpenMapState()
+        if omState == "on" then
+            openMapState:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff20ff20" .. L["Detected, on"] .. "|r")
+            openMapNote:SetText(L["The dots show on its map too."])
+        elseif omState == "off" then
+            openMapState:SetText("|TInterface\\RaidFrame\\ReadyCheck-Waiting:14:14|t |cffff9900" .. L["Detected, turned off"] .. "|r")
+            openMapNote:SetText(L["Its map is off in its options: the dots show on the game's map."])
+        else
+            openMapState:SetText("|cff808080" .. L["Not detected"] .. "|r")
+            openMapNote:SetText(L["The dots show on the game's map."])
+        end
         for _, cb in ipairs(langChecks) do cb:SetChecked((ns.db.dungeonLanguages or {})[cb.key] == true) end
 
         local active = ns.Alliance:IsActive()
