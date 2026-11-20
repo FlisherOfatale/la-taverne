@@ -4231,12 +4231,12 @@ local function BuildOptionsPanel()
     end)
     -- Bottom right: the lynx at its own size (32 px, sharp), then the name and version.
     local version = NewLabel(p, "La Taverne " .. (ns.version or "?") .. "  ·  Nation du Québec", "GameFontDisableSmall")
-    version:SetPoint("BOTTOMRIGHT", -12, 6) -- (under the scrolling area, which ends 40 px up)
+    version:SetPoint("BOTTOMRIGHT", -12, 8) -- (under the scrolling area, which ends 40 px up)
     -- The text sits on the lynx's bottom line, a few pixels up (its ear tips are dark on dark,
     -- so centering on the picture looks low).
     local lynx = p:CreateTexture(nil, "ARTWORK")
     lynx:SetSize(32, 32)
-    lynx:SetPoint("BOTTOMRIGHT", version, "BOTTOMLEFT", -6, -4)
+    lynx:SetPoint("BOTTOMRIGHT", version, "BOTTOMLEFT", -6, -6)
     lynx:SetTexture("Interface\\AddOns\\LaTaverne\\media\\lynx_icon")
 
     function p:Refresh()
