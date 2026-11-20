@@ -436,6 +436,7 @@ if GetLocale() == "frFR" then
     L["No answer from %s: your request expired. You can ask again."] = "Pas de réponse de %s : votre demande a expiré. Vous pouvez redemander."
     L["No answer"] = "Pas de réponse"
     L["A newer La Taverne (%s) is in use. You have %s: ask for the new version, so everything keeps working together."] = "Une version plus récente de La Taverne (%s) est utilisée. Vous avez la %s : demandez la nouvelle version, pour que tout continue de fonctionner ensemble."
+    L["Close the password window with Cancel (B)."] = "Fermez la fenêtre du mot de passe avec Annuler (B)."
     L["(old version)"] = "(ancienne version)"
 
     -- Available players, Players page (0.17)
@@ -466,6 +467,7 @@ if GetLocale() == "frFR" then
     L["Chosen dungeons"] = "Donjons choisis"
     L["Create this group"] = "Créer ce groupe"
     L["Not at the tavern: whisper them"] = "Pas à la taverne : chuchotez-lui"
+    L["Click %s to whisper them."] = "Cliquez sur %s pour lui chuchoter."
     L["For how long"] = "Pour combien de temps"
     L["For how long (from now)"] = "Pour combien de temps (à partir de maintenant)"
     L["At the tavern, but not looking for a group right now"] = "À la taverne, mais ne cherche pas de groupe pour le moment"

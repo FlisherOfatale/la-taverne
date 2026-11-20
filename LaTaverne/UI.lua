@@ -437,7 +437,7 @@ end
 -- Role pickers --------------------------------------------------------------------------
 
 local function RoleMenu(owner, title, roles, onPick)
-    MenuUtil.CreateContextMenu(owner, function(_, root)
+    ns.ContextMenu(owner, function(_, root)
         root:CreateTitle(title)
         for _, role in ipairs(roles) do
             root:CreateButton(RoleText(role), function() onPick(role) end)
@@ -464,7 +464,7 @@ end
 -- Role picker for a player. getClass returns their class: roles it can't take are disabled.
 -- canPlay(role), when given, decides instead (e.g. only the roles the player offered).
 local function NewRoleDropdown(parent, width, getRole, setRole, getClass, canPlay)
-    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    local dd = ns.NewDropdown(parent)
     dd:SetWidth(width)
     if dd.SetDefaultText then dd:SetDefaultText(L["Choose a role"]) end
     dd:SetupMenu(function(_, root)
@@ -1194,7 +1194,7 @@ end
 
 local function AcceptMenu(owner, p)
     local offered, missing = SortedOffer(p)
-    MenuUtil.CreateContextMenu(owner, function(_, root)
+    ns.ContextMenu(owner, function(_, root)
         root:CreateTitle(format(L["Accept %s as..."], ClassColored(p.name, p.class)))
         for _, role in ipairs(offered) do
             local n = missing[role] or 0
@@ -2831,7 +2831,16 @@ end
 -- Who can I ask: my availability, the dungeons available players want, and the online guild
 -- members: available players first, the others folded away, with Invite and Whisper.
 
+-- With the gamepad UI on, opening the chat from addon code makes the gamepad manager call
+-- protected functions (ADDON_ACTION_FORBIDDEN): a chat line with the player's name instead, a
+-- click on it opens the whisper the game's way.
 local function Whisper(name)
+    if ns.GamepadUI() then
+        local text = "|cff71d5ff[" .. name .. "]|r" -- like La Taverne's other chat links
+        local link = GetPlayerLink and GetPlayerLink(name, text) or ("|Hplayer:" .. name .. "|h" .. text .. "|h")
+        ns.Print(format(L["Click %s to whisper them."], link))
+        return
+    end
     local tell = (ChatFrameUtil and ChatFrameUtil.SendTell) or ChatFrame_SendTell
     if tell then tell(name) end
 end
@@ -3928,7 +3937,7 @@ local OPTION_ROW, OPTION_GAP = 30, 56 -- between two rows; between a section's l
 
 -- A dropdown of the game's style: choices = { { text, value } }, get() and set(value).
 local function NewChoice(parent, width, choices, get, set, tooltip)
-    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    local dd = ns.NewDropdown(parent)
     dd:SetWidth(width)
     dd:SetupMenu(function(_, root)
         for _, choice in ipairs(type(choices) == "function" and choices() or choices) do
@@ -4615,6 +4624,13 @@ local function CreateMainFrame()
     end
 
     frame:SetScript("OnShow", function() UI:Refresh() end)
+    -- Raised above the game's Settings (UI:OpenOverSettings) only until closed.
+    frame:SetScript("OnHide", function()
+        if frame.normalStrata then
+            frame:SetFrameStrata(frame.normalStrata)
+            frame.normalStrata = nil
+        end
+    end)
     frame:HookScript("OnHide", function() UI.focusGroup = nil end)
     frame:Hide()
 end
@@ -4716,6 +4732,17 @@ end
 function UI:Open()
     if not frame then CreateMainFrame() end
     frame:Show()
+end
+
+-- From the button in the game's Settings: its window is on the HIGH strata, so this one goes
+-- there too, on top, until closed (then back where it was). The Settings stay open.
+function UI:OpenOverSettings(page)
+    if not frame then CreateMainFrame() end
+    frame.normalStrata = frame.normalStrata or frame:GetFrameStrata()
+    frame:SetFrameStrata("HIGH")
+    frame:Show()
+    frame:Raise()
+    self:ShowPage(page)
 end
 
 -- Window size (Options): the scale, kept. The window stays centered on the same point.

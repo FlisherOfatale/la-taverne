@@ -250,9 +250,11 @@ local function HideChannel(name)
 end
 
 -- The game asks for a password with a popup when the channel's password doesn't match.
--- Never leave that popup to the player: close it and report the problem instead.
+-- Never leave that popup to the player: close it and report the problem instead. Not with the
+-- gamepad UI on: closed by an addon, it makes the gamepad manager call protected functions
+-- (ADDON_ACTION_FORBIDDEN). The chat line then says to close it with Cancel.
 local function HidePasswordPopup()
-    if StaticPopup_Hide then
+    if StaticPopup_Hide and not ns.GamepadUI() then
         StaticPopup_Hide("CHAT_CHANNEL_PASSWORD")
     end
 end
@@ -267,7 +269,8 @@ ns.On("CHAT_MSG_CHANNEL_NOTICE", function(notice, _, _, _, _, _, _, _, baseName)
         ch.ready = false
         HidePasswordPopup()
         C_Timer.After(0.1, HidePasswordPopup)
-        ns.Print("could not join the hidden channel " .. ch.name .. " (" .. notice .. "). Messages there are disabled until the next reload.")
+        ns.Print("could not join the hidden channel " .. ch.name .. " (" .. notice .. "). Messages there are disabled until the next reload."
+            .. (ns.GamepadUI() and (" " .. ns.L["Close the password window with Cancel (B)."]) or ""))
     elseif notice == "YOU_LEFT" then
         ch.ready = false
     end

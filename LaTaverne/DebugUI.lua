@@ -190,7 +190,7 @@ local function BuildWindow()
         { key = "yes", text = L["Answer: yes, in my guild"] },
         { key = "no", text = L["Answer: no, not in my guild"] },
     }
-    local vouchSelf = CreateFrame("DropdownButton", nil, p, "WowStyle1DropdownTemplate")
+    local vouchSelf = ns.NewDropdown(p)
     vouchSelf:SetPoint("TOPLEFT", 250, -412)
     vouchSelf:SetWidth(150)
     vouchSelf:SetupMenu(function(_, root)
@@ -399,17 +399,6 @@ end
 
 -- Debug tab ----------------------------------------------------------------------------------
 
-StaticPopupDialogs["LATAVERNE_LEAVE_TEST_MODE"] = {
-    text = "%s",
-    button1 = YES,
-    button2 = CANCEL,
-    OnAccept = function() ns.SetSandbox(false) end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
 function ns.BuildDebugPanel()
     K = ns.UIKit
     local p = K.NewPanel()
@@ -539,8 +528,11 @@ function ns.BuildDebugPanel()
     local leave = K.NewButton(p, L["Leave test mode"], 160, 24)
     leave:SetPoint("BOTTOMLEFT", 8, 8)
     leave:SetScript("OnClick", function()
-        StaticPopup_Show("LATAVERNE_LEAVE_TEST_MODE",
-            L["Leave test mode? La Taverne will then use your REAL guild: your groups become visible to its members."])
+        ns.ConfirmDialog({
+            kind = "leaveTestMode",
+            text = L["Leave test mode? La Taverne will then use your REAL guild: your groups become visible to its members."],
+            buttons = { { text = YES, onClick = function() ns.SetSandbox(false) end }, { text = CANCEL } },
+        })
     end)
     local leaveHint = K.NewLabel(p, L["To come back: /taverne dev on"], "GameFontDisableSmall")
     leaveHint:SetPoint("LEFT", leave, "RIGHT", 10, 0)

@@ -8,6 +8,7 @@ local L = ns.L
 local MAX = 30
 local pending = {}   -- errors caught before the saved variables are loaded
 local warned = false -- one chat notice per session
+local gamepadSkipped = false -- gamepad UI and the game's error window on at load: its handler left alone (below)
 
 local function IsSecret(v) return issecretvalue ~= nil and issecretvalue(v) end
 
@@ -58,6 +59,9 @@ function Errors:Report()
         "Debug mode: " .. ((ns.Guild and ns.Guild:IsSandbox()) and "on" or "off"),
         "",
     }
+    if gamepadSkipped then
+        table.insert(lines, 4, "Gamepad UI and Lua error display on: Lua errors not kept (the game shows them), blocked actions only")
+    end
     local list = List()
     if #list == 0 then
         lines[#lines + 1] = "No errors."
@@ -97,6 +101,17 @@ if _G.BugGrabber and EventRegistry and EventRegistry.RegisterCallback then
         local ok, e = pcall(BugGrabber.GetErrorByID, BugGrabber, id)
         if ok and type(e) == "table" then pcall(Record, e.message, e.stack) end
     end, Errors)
+-- Not with the gamepad UI and the game's error window (scriptErrors) both on. The game's handler
+-- runs on the erroring code's stack: an error from an addon's code opens that window from the
+-- addon's code anyway, with or without our handler, but ours would also taint the errors from the
+-- game's own code (the gamepad manager follows the window: protected calls blocked). The window
+-- only opens with scriptErrors on (Blizzard_ScriptErrorsFrame.lua, ShouldHideErrorFrame); with
+-- it off (the default), the report keeps Lua errors, gamepad or not. Blocked actions are always
+-- kept. Decided once, when this file loads: the sources don't prove the style is already known
+-- then (C_InputInterfaceStyle), and changing the style or scriptErrors needs a /reload.
+elseif geterrorhandler and seterrorhandler and ns.GamepadUI()
+    and GetCVarBool and GetCVarBool("scriptErrors") then
+    gamepadSkipped = true
 elseif geterrorhandler and seterrorhandler then
     local previous = geterrorhandler()
     seterrorhandler(function(message, ...)

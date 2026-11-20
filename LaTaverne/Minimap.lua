@@ -24,8 +24,7 @@ local function OpenPage(page)
 end
 
 local function QuickMenu(owner)
-    if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
-    MenuUtil.CreateContextMenu(owner, function(_, root)
+    ns.ContextMenu(owner, function(_, root)
         root:CreateTitle("La Taverne")
         local available = ns.Players:IsActive()
         local inGroup = ns.Groups:GetMine() or ns.Groups:GetJoined()
@@ -242,11 +241,7 @@ function Minimap:RegisterSettings()
     open:SetSize(220, 24)
     open:SetPoint("TOPLEFT", notes, "BOTTOMLEFT", 0, -16)
     open:SetText(L["Open La Taverne options"])
-    open:SetScript("OnClick", function()
-        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
-        if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then HideUIPanel(InterfaceOptionsFrame) end
-        OpenPage("options")
-    end)
+    open:SetScript("OnClick", function() ns.UI:OpenOverSettings("options") end)
     if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
         local category = Settings.RegisterCanvasLayoutCategory(panel, "La Taverne")
         Settings.RegisterAddOnCategory(category)
