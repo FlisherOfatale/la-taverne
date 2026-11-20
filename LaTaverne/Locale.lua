@@ -608,7 +608,7 @@ if GetLocale() == "frFR" then
     L["My guild's members"] = "Les membres de ma guilde"
     L["The allied guilds' members"] = "Les membres des guildes alliées"
     L["Share my position on the map"] = "Partager ma position sur la carte"
-    L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 5 seconds while you move, every minute while you stand still."] = "Votre guilde et les guildes alliées vous voient comme un point sur leur carte du monde (les joueurs qui utilisent La Taverne). Envoyée toutes les 5 secondes quand vous bougez, toutes les minutes à l'arrêt."
+    L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 10 seconds while you move (the dot glides in between), every minute while you stand still."] = "Votre guilde et les guildes alliées vous voient comme un point sur leur carte du monde (les joueurs qui utilisent La Taverne). Envoyée toutes les 10 secondes quand vous bougez (le point glisse entre les deux), toutes les minutes à l'arrêt."
     L["Never from a dungeon, raid or battleground."] = "Jamais depuis un donjon, un raid ou un champ de bataille."
     L["Show my guild's members on the map"] = "Afficher les membres de ma guilde sur la carte"
     L["Those who run La Taverne and share their position. Those OpenMap already shows are left to it."] = "Ceux qui utilisent La Taverne et partagent leur position. Ceux qu'OpenMap affiche déjà lui sont laissés."

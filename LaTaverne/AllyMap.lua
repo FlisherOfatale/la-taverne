@@ -16,14 +16,17 @@ local ADDON, ns = ...
 local AllyMap = ns.NewModule("AllyMap")
 local L = ns.L
 
-local TICK = 5          -- seconds between looks at where I am
-local SEND_EVERY = 5    -- seconds between places sent while I move
+local TICK = 2          -- seconds between looks at where I am
+local SEND_EVERY = 10   -- seconds between places sent while I move (OpenMap's pace; dots glide in between)
 local STILL_EVERY = 60  -- ... and while I stand still (a dot that's heard from stays)
 local SLACK = 0.5       -- (timers aren't exact: 4.99 s is 5 s)
 local GONE_AFTER = 150  -- seconds without news before a dot goes
 local PRUNE_EVERY = 10  -- seconds between looks for dots gone stale
 local MOVED = 0.002     -- a move this small on a zone's map isn't one
 local DOT_SIZE = 14
+local GLIDE = SEND_EVERY -- seconds a dot takes to slide to its new place
+local JUMP = 0.1        -- a move this big on the shown map (a flight, a portal): placed at once, no slide
+local FULL_EVERY = 60   -- seconds between messages that also carry class, level and character ID
 local PIN = "LaTaverneAllyMapPin"
 local TAG_COLOR = { 0.56, 0.72, 0.91 } -- allied guild ring (the tag's colour in allied chat)
 
@@ -98,31 +101,32 @@ AllyMap.Here = Here
 
 -- Sending -----------------------------------------------------------------------------------
 
-local function Round(v) return math.floor(v * 10000 + 0.5) / 10000 end
-
-local function MyPayload(m, x, y)
-    local _, class = UnitClass("player")
-    local level = UnitLevel("player")
-    local guid = UnitGUID("player")
-    return {
-        m = m, x = Round(x), y = Round(y),
-        c = (not IsSecret(class) and type(class) == "string") and class or nil,
-        l = (not IsSecret(level) and type(level) == "number") and level or nil,
-        id = (not IsSecret(guid) and type(guid) == "string") and guid or nil,
-        om = OpenMapShares() or nil,
-    }
+-- Small: the place as one short text, "map x y" (x and y in 1/10000 of the map). Class, level,
+-- character ID and the OpenMap flag don't change while I walk: only in a full one (the first,
+-- then once a minute); receivers keep them from the last full one.
+local function MyPayload(m, x, y, full)
+    local payload = { p = format("%d %d %d", m, math.floor(x * 10000 + 0.5), math.floor(y * 10000 + 0.5)) }
+    if full then
+        local _, class = UnitClass("player")
+        local level = UnitLevel("player")
+        local guid = UnitGUID("player")
+        payload.c = (not IsSecret(class) and type(class) == "string") and class or nil
+        payload.l = (not IsSecret(level) and type(level) == "number") and level or nil
+        payload.id = (not IsSecret(guid) and type(guid) == "string") and guid or nil
+        payload.om = OpenMapShares() or nil
+    end
+    return payload
 end
 
--- To my guild and to the allied guilds. make() builds a fresh payload for each (Comm adds to it).
--- Never queued. True if it went at least one way.
+-- One message for everyone: with a Guild Alliance, on the alliance channel only (my own guild
+-- reads it there too, Comm lets my guild's positions through); without one, on the guild channel.
+-- If the alliance channel isn't ready yet, the guild channel. Never queued. True if it went.
 local function Broadcast(make, priority)
-    local sent = false
-    if ns.Guild:InGuild() and ns.Comm:Send("POS", make(), priority, true) then sent = true end
-    if ns.Alliance:IsActive() and ns.Comm:SendAlly("POS", make(), priority, true) then sent = true end
-    return sent
+    if ns.Alliance:IsActive() and ns.Comm:SendAlly("POS", make(), priority, true) then return true end
+    return ns.Guild:InGuild() and ns.Comm:Send("POS", make(), priority, true) or false
 end
 
-local last = { at = -math.huge } -- my place as last sent: m, x, y, at
+local last = { at = -math.huge, full = -math.huge } -- my place as last sent: m, x, y, at; full: last full one
 local sharing = false            -- a place went out since sharing (re)started: "off" is owed when it stops
 
 local function Tick()
@@ -130,7 +134,7 @@ local function Tick()
     if not Settings().share or InInstance() then
         if sharing then
             sharing = false
-            last.m, last.at = nil, -math.huge
+            last.m, last.at, last.full = nil, -math.huge, -math.huge
             if Broadcast(function() return { off = true } end, "NORMAL") then
                 AllyMap.stats.offSent = AllyMap.stats.offSent + 1
             end
@@ -141,8 +145,10 @@ local function Tick()
     if not m then return end
     local moved = m ~= last.m or math.abs(x - last.x) > MOVED or math.abs(y - last.y) > MOVED
     if GetTime() - last.at < (moved and SEND_EVERY or STILL_EVERY) - SLACK then return end
-    if Broadcast(function() return MyPayload(m, x, y) end, "BULK") then
+    local full = GetTime() - last.full >= FULL_EVERY - SLACK
+    if Broadcast(function() return MyPayload(m, x, y, full) end, "BULK") then
         last.m, last.x, last.y, last.at = m, x, y, GetTime()
+        if full then last.full = GetTime() end
         sharing = true
         AllyMap.stats.sent = AllyMap.stats.sent + 1
     end
@@ -321,14 +327,44 @@ function PinMixin:Look()
     end
 end
 
+-- Sliding to a new place over GLIDE seconds, so a dot moves smoothly between two messages.
+local function GlideUpdate(self)
+    local t = (GetTime() - self.glideStart) / GLIDE
+    if t >= 1 then
+        self:SetScript("OnUpdate", nil)
+        self.curX, self.curY = self.toX, self.toY
+    else
+        self.curX = self.fromX + (self.toX - self.fromX) * t
+        self.curY = self.fromY + (self.toY - self.fromY) * t
+    end
+    self:SetPosition(self.curX, self.curY)
+end
+
+function PinMixin:PlaceAt(x, y)
+    self:SetScript("OnUpdate", nil)
+    self.curX, self.curY = x, y
+    self:SetPosition(x, y)
+end
+
+function PinMixin:MoveTo(x, y)
+    if not self.curX or math.abs(x - self.curX) > JUMP or math.abs(y - self.curY) > JUMP then
+        self:PlaceAt(x, y)
+        return
+    end
+    self.fromX, self.fromY, self.toX, self.toY = self.curX, self.curY, x, y
+    self.glideStart = GetTime()
+    self:SetScript("OnUpdate", GlideUpdate)
+end
+
 function PinMixin:OnAcquired(entry, x, y)
     self.entry = entry
-    self:SetPosition(x, y)
+    self:PlaceAt(x, y)
     self:Look()
 end
 
 function PinMixin:OnReleased()
-    self.entry = nil
+    self:SetScript("OnUpdate", nil)
+    self.entry, self.curX, self.curY = nil, nil, nil
 end
 
 local provider = CreateFromMixins(MapCanvasDataProviderMixin)
@@ -375,7 +411,7 @@ function provider:UpdateOne(e)
         if pin then map:RemovePin(pin) end
     elseif pin then
         pin.entry = e
-        pin:SetPosition(x, y)
+        pin:MoveTo(x, y)
         pin:Look()
         if GameTooltip:GetOwner() == pin then ShowTooltip(pin) end
     else
@@ -422,7 +458,18 @@ local function Between(v, lo, hi)
     return type(v) == "number" and v >= lo and v <= hi
 end
 
+-- The place in a message: "map x y" (p), or m, x, y (the first version). Fills p.m, p.x, p.y.
+local function ReadPlace(p)
+    if type(p.p) == "string" and #p.p <= 32 then
+        local m, x, y = p.p:match("^(%d+) (%d+) (%d+)$")
+        if not m then return false end
+        p.m, p.x, p.y = tonumber(m), tonumber(x) / 10000, tonumber(y) / 10000
+    end
+    return true
+end
+
 local function ValidPayload(p)
+    if not ReadPlace(p) then return false end
     if not Between(p.m, 1, 1000000) or p.m ~= math.floor(p.m) then return false end
     if not Between(p.x, 0, 1) or not Between(p.y, 0, 1) then return false end
     if p.c ~= nil and (type(p.c) ~= "string" or #p.c > 20 or not p.c:match("^%u+$")) then return false end
@@ -448,6 +495,20 @@ local function OnPosition(sender, p, isSelf, scope)
         return
     end
     AllyMap.stats.received = AllyMap.stats.received + 1
+    -- Class, level, ID and OpenMap only come in a full message: kept from the last one. Until
+    -- one arrives, the class from the guild roster when it's a guildmate.
+    local old = live[key]
+    local isFull = p.p == nil or p.c ~= nil or p.l ~= nil or p.id ~= nil
+    if p.c == nil then
+        p.c = old and old.c
+        if not p.c and scope == "guild" then
+            local member = ns.Guild:GetMember(sender)
+            p.c = member and member.class or nil
+        end
+    end
+    if p.l == nil then p.l = old and old.l end
+    if p.id == nil then p.id = old and old.guid end
+    if not isFull and old then p.om = old.om end
     local e = {
         -- (the guild's name is checked allied by Comm; shown as text, no "|" codes)
         key = key, name = sender, scope = scope,

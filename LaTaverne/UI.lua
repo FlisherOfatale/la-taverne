@@ -4160,7 +4160,7 @@ local function BuildOptionsPanel()
     end)
     mapShare:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(mapShare, { L["Share my position on the map"],
-        L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 5 seconds while you move, every minute while you stand still."],
+        L["Your guild and the allied guilds see you as a dot on their world map (players who run La Taverne). Sent every 10 seconds while you move (the dot glides in between), every minute while you stand still."],
         L["Never from a dungeon, raid or battleground."] })
     local mapGuild = NewCheckbox(c, L["My guild's members"], function(self)
         ns.AllyMap:SetShow("guild", self:GetChecked())

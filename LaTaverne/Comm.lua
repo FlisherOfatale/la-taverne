@@ -555,6 +555,8 @@ local function FromAllyChannel(target, localID, channelName)
 end
 
 local partial = {} -- [sender#channel] = { text, time }
+-- Sent by my guild's members on the alliance channel only (no guild copy): AllyMap.lua's positions.
+local OWN_GUILD_ON_ALLY = { POS = true }
 local seen = {}    -- [sender .. "#" .. n] = time, to drop copies sent on two channels
 
 local function AlreadySeen(sender, n)
@@ -581,7 +583,14 @@ local function OnAllyMessage(text, sender)
     -- The sender's guild must be one of ours, and a member of our own guild can't pose as another one.
     local guild = payload.g
     -- My guild's copy (allied guilds get it here, I got it on the guild channel): not logged.
+    -- Except what my guild sends only here (map positions): read as my guild's, from a member.
     if ns.Guild:IsMyGuild(guild) then
+        if OWN_GUILD_ON_ALLY[msgType] and ns.Guild:IsMember(sender) then
+            if AlreadySeen(sender, payload.n) then return end
+            Comm.stats.received = Comm.stats.received + 1
+            Dispatch("guild", msgType, sender, payload, protocol, #text)
+            return
+        end
         Comm.stats.rejected = Comm.stats.rejected + 1
         return
     end
