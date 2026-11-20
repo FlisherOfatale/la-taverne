@@ -17,6 +17,7 @@ local L = ns.L
 
 local LOG_MAX = 200
 local LOG_AGE = 48 * 3600
+local LATE = 20 -- seconds: a line arriving this long after it was typed says when it was typed
 local TAG_COLOR = "|cff8fb8e8"
 
 local function IsSecret(value)
@@ -272,6 +273,42 @@ local function ShowLine(author, class, guid, text, tag)
     ShowInChat(author, class, guid, text, tag)
 end
 
+-- Links typed in chat (items, spells, quests...). Unlike real chat, the server never checked
+-- this text, so links are rebuilt from their numbers only: the game's own link (its name and
+-- color) for an item it knows, otherwise a plain link with the name as typed. Clicking it shows
+-- the real thing either way.
+local LINK_TYPES = { item = true, spell = true, enchant = true, quest = true, achievement = true, talent = true }
+local LINK_COLORS = { item = "ffffffff", quest = "ffffff00" }
+
+local function SafeLink(kind, data, name)
+    if not LINK_TYPES[kind] or #data > 150 then return nil end
+    name = name:gsub("|", "")
+    if name == "" or #name > 100 then return nil end
+    if kind == "item" then
+        local getInfo = C_Item and C_Item.GetItemInfo or GetItemInfo
+        local ok, _, link = pcall(getInfo, "item:" .. data)
+        if ok and type(link) == "string" and not IsSecret(link) and link:find("|Hitem:", 1, true) then return link end
+    end
+    return "|c" .. (LINK_COLORS[kind] or "ff71d5ff") .. "|H" .. kind .. ":" .. data .. "|h[" .. name .. "]|h|r"
+end
+
+-- The text as typed: no colors, icons or other "|" codes slipped in, except rebuilt links.
+local function SafeText(text)
+    local links = {}
+    local function keep(kind, data, name)
+        local link = SafeLink(kind, data, name)
+        if not link then return nil end -- left as typed, shown as plain text below
+        links[#links + 1] = link
+        return "\1" .. #links .. "\2"
+    end
+    text = text:gsub("[\1\2]", "")
+    text = text:gsub("|c[^|]*|H(%a+):([%d:%-]*)|h%[([^%]|]*)%]|h|r", keep)
+    text = text:gsub("|H(%a+):([%d:%-]*)|h%[([^%]|]*)%]|h", keep)
+    text = text:gsub("|", "||")
+    return (text:gsub("\1(%d+)\2", function(i) return links[tonumber(i)] end))
+end
+AllyChat.SafeText = SafeText
+
 local function Receive(author, payload, tag)
     local text = payload.m
     if type(text) ~= "string" or text == "" or IsSecret(text) then return end
@@ -279,9 +316,14 @@ local function Receive(author, payload, tag)
         -- Cut, without leaving half a letter (UTF-8) at the end.
         text = text:sub(1, 255):gsub("[\192-\255][\128-\191]*$", "")
     end
-    -- Shown as typed: no links, colors or icons slipped in ("|" codes), unlike real chat the
-    -- server never checked this text.
-    local shown = text:gsub("|", "||")
+    local shown = SafeText(text)
+    -- Held on the way (the sender was in a fight, where the game holds addon messages): say
+    -- when it was typed. t: when they typed it (server time, same clock for everyone).
+    local typed = tonumber(payload.t)
+    if typed and GetServerTime() - typed >= LATE then
+        local note = payload.f and L["(typed at %s, in combat)"] or L["(typed at %s)"]
+        shown = shown .. " |cff808080" .. note:format(date("%H:%M", typed)) .. "|r"
+    end
     local class = type(payload.c) == "string" and payload.c or nil
     local guid = type(payload.id) == "string" and payload.id or nil
     ShowLine(author, class, guid, shown, tag)
@@ -310,9 +352,11 @@ end)
 
 -- Sending ----------------------------------------------------------------------------------
 
+-- t: when I typed it, f: I was in a fight (the line may arrive late, see Receive).
 local function MyPayload(text)
     local _, class = UnitClass("player")
-    return { m = text, c = class, id = UnitGUID("player") }
+    local fighting = (UnitAffectingCombat and UnitAffectingCombat("player")) or ns.Guild:Restricted()
+    return { m = text, c = class, id = UnitGUID("player"), t = GetServerTime(), f = fighting and true or nil }
 end
 
 local function Relay(text)

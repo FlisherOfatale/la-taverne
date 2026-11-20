@@ -133,6 +133,8 @@ if GetLocale() == "frFR" then
     L["Allied with: %s"] = "Alliée avec : %s"
     L["No allied guild set up. Officers set it up in the Officers tab."] = "Aucune guilde alliée configurée. Les officiers la configurent dans l'onglet Officiers."
     L["Guild Alliance: off."] = "Alliance de guildes : désactivée."
+    L["(typed at %s)"] = "(écrit à %s)"
+    L["(typed at %s, in combat)"] = "(écrit à %s, en combat)"
     L["Guild Alliance: the key changed, switching channel."] = "Alliance de guildes : la clé a changé, changement de canal."
 
     -- Officers tab
