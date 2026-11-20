@@ -29,7 +29,9 @@ local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 Vouch.EXEMPT = { VQ = true, VA = true }
 -- A hello only says someone is online: it never starts a question (every login would send one
 -- from each online ally). They're checked once they post or talk. Same for "who's inviting?".
-Vouch.PASSIVE = { HI = true, INVITING_Q = true }
+-- Map positions (every few seconds from each ally) too, and without refreshing the window for
+-- each one ("quiet": only when the player is new).
+Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet" }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer }
 -- state: "checking", "confirmed", "unverified", "denied"; source: "answer", "game", "timeout"
@@ -171,10 +173,11 @@ end
 -- passive (a hello): never asks; passes unless they were denied.
 function Vouch:Gate(sender, guild, fn, passive)
     local entry = Entry(sender, guild)
+    local isNew = entry.seen == nil
     entry.seen = GetServerTime()
     Remember(entry)
     if passive and entry.state ~= "denied" then
-        Changed()
+        if passive ~= "quiet" or isNew then Changed() end
         fn()
         return true
     end

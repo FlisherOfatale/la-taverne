@@ -83,7 +83,7 @@ end
 local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
     if not msgLog.on then return end
     if QUIET_TYPES[msgType] and not unusual then
-        msgLog.positions[dir] = (msgLog.positions[dir] or 0) + 1
+        if dir == "in" or what == "sent" then msgLog.positions[dir] = (msgLog.positions[dir] or 0) + 1 end
         return
     end
     if scope == "guild" and ns.Guild:IsSandbox() then scope = "test" end
@@ -588,6 +588,8 @@ local function OnAllyMessage(text, sender)
         if OWN_GUILD_ON_ALLY[msgType] and ns.Guild:IsMember(sender) then
             if AlreadySeen(sender, payload.n) then return end
             Comm.stats.received = Comm.stats.received + 1
+            ns.Guild:NoteSeen(sender)
+            if ns.Players then ns.Players:NoteAddon(sender) end -- they run La Taverne
             Dispatch("guild", msgType, sender, payload, protocol, #text)
             return
         end

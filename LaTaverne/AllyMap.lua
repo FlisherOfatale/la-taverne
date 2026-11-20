@@ -133,15 +133,16 @@ local sharing = false            -- a place went out since sharing (re)started: 
 local function Tick()
     if not ns.db or not ns.Comm:IsLoggedIn() then return end
     if not Settings().share or InInstance() then
-        if sharing then
+        -- "off" is owed until it goes out (a channel not ready: tried again next tick).
+        if sharing and Broadcast(function() return { off = true } end, "NORMAL") then
             sharing = false
             last.m, last.at, last.full = nil, -math.huge, -math.huge
-            if Broadcast(function() return { off = true } end, "NORMAL") then
-                AllyMap.stats.offSent = AllyMap.stats.offSent + 1
-            end
+            AllyMap.stats.offSent = AllyMap.stats.offSent + 1
         end
         return
     end
+    -- Nothing goes out before the player was told it's shared (the notice, OnLogin).
+    if not Settings().told then return end
     local m, x, y = Here()
     if not m then return end
     local moved = m ~= last.m or math.abs(x - last.x) > MOVED or math.abs(y - last.y) > MOVED
@@ -246,7 +247,7 @@ local function PinPosition(e, shown)
         if ok and u then
             local ok2, x, y = pcall(OpenMapAPI.MapFromWorld, shown, u, v)
             if ok2 and x and x > -2 and x < 3 and y > -2 and y < 3 then return x, y end
-            return nil
+            -- (OpenMap couldn't place it on this map: the game's own placement below)
         end
     end
     return GamePosition(e, shown)
@@ -295,6 +296,7 @@ end
 local PinMixin = {}
 
 function PinMixin:OnLoad()
+    if self.dot then return end -- (already set up)
     if self.UseFrameLevelType then self:UseFrameLevelType("PIN_FRAME_LEVEL_AREA_POI") end
     if self.SetScalingLimits then self:SetScalingLimits(1, 1.0, 1.2) end
     self:SetSize(DOT_SIZE, DOT_SIZE)
@@ -437,7 +439,9 @@ local function Register()
     pool.createFunc = function()
         local frame = CreateFrame("Frame", nil, WorldMapFrame:GetCanvas())
         frame:SetSize(1, 1)
-        return Mixin(frame, MapCanvasPinMixin, PinMixin)
+        local pin = Mixin(frame, MapCanvasPinMixin, PinMixin)
+        pin:OnLoad() -- (made in code: no XML template calls it)
+        return pin
     end
     pool.resetFunc = function(_, pin)
         pin:Hide()
@@ -558,8 +562,10 @@ function AllyMap:Count()
 end
 
 -- OpenMap's menu: the two "show" switches, under a "La Taverne" heading (its public API).
+local openMapHooked = false
 local function AddOpenMapToggles()
-    if not (OpenMapAPI and OpenMapAPI.RegisterMenuToggle) then return end
+    if openMapHooked or not (OpenMapAPI and OpenMapAPI.RegisterMenuToggle) then return end
+    openMapHooked = true
     pcall(OpenMapAPI.RegisterMenuToggle, "LaTaverne", {
         id = "guild", label = L["Guild members (La Taverne)"], section = "La Taverne",
         get = function() return Settings().showGuild end,
@@ -583,6 +589,9 @@ function AllyMap:OnLogin()
         end)
     end
     AddOpenMapToggles()
+    ns.On("ADDON_LOADED", function(name)
+        if name == "OpenMap" then AddOpenMapToggles() end
+    end)
     ns.On("PLAYER_REGEN_ENABLED", Refresh)                -- (dots lifted over OpenMap's art again)
     ns.On("GROUP_ROSTER_UPDATE", Refresh)                 -- (my group's own dots are the game's)
     C_Timer.NewTicker(TICK, Tick)
