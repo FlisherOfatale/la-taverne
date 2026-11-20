@@ -4523,6 +4523,13 @@ local function CreateMainFrame()
     end
 
     frame:SetScript("OnShow", function() UI:Refresh() end)
+    -- Raised above the game's Settings (UI:OpenOverSettings) only until closed.
+    frame:SetScript("OnHide", function()
+        if frame.normalStrata then
+            frame:SetFrameStrata(frame.normalStrata)
+            frame.normalStrata = nil
+        end
+    end)
     frame:Hide()
 end
 
@@ -4614,6 +4621,17 @@ end
 function UI:Open()
     if not frame then CreateMainFrame() end
     frame:Show()
+end
+
+-- From the button in the game's Settings: its window is on the HIGH strata, so this one goes
+-- there too, on top, until closed (then back where it was). The Settings stay open.
+function UI:OpenOverSettings(page)
+    if not frame then CreateMainFrame() end
+    frame.normalStrata = frame.normalStrata or frame:GetFrameStrata()
+    frame:SetFrameStrata("HIGH")
+    frame:Show()
+    frame:Raise()
+    self:ShowPage(page)
 end
 
 -- Window size (Options): the scale, kept. The window stays centered on the same point.
