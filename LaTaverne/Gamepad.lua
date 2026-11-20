@@ -39,7 +39,8 @@ local function Gap(aMin, aMax, bMin, bMax)
 end
 
 -- The nearest rectangle whose center lies in that direction ("UP", "DOWN", "LEFT", "RIGHT"),
--- within a cone around it. Distance: the gap between the edges along the direction, plus twice
+-- within a cone around it or in the same column / row (a wide list row under a small button).
+-- Distance: the gap between the edges along the direction, plus twice
 -- the gap off its axis (0 for one in the same column or row); the smallest wins. nil: nothing
 -- that way.
 function Gamepad.Nearest(from, rects, dir)
@@ -55,7 +56,7 @@ function Gamepad.Nearest(from, rects, dir)
             along, across = dir == "RIGHT" and x - fx or fx - x, math.abs(y - fy)
             gapAlong, gapAcross = Gap(from.left, from.right, r.left, r.right), Gap(from.bottom, from.top, r.bottom, r.top)
         end
-        if along > 1 and across <= 2 * along then
+        if along > 1 and (gapAcross == 0 or across <= 2 * along) then
             -- Centers break ties (a row and the button in it).
             local score = gapAlong + 2 * gapAcross + 0.01 * (along + across)
             if not bestScore or score < bestScore then best, bestScore = i, score end
@@ -96,6 +97,13 @@ local function Usable(f)
     return false
 end
 
+-- A list with more than it shows. Not a text box's own scroll frame.
+local function CanScroll(f)
+    if IsScrollBox(f) then return f.HasScrollableExtent ~= nil and f:HasScrollableExtent() end
+    local child = f:GetScrollChild()
+    return not (child and child:IsObjectType("EditBox")) and (f:GetVerticalScrollRange() or 0) > 0
+end
+
 local function Walk(parent, clip, frames, rects)
     for _, child in ipairs({ parent:GetChildren() }) do
         if child:IsVisible() and not IsScrollBar(child) then
@@ -105,7 +113,13 @@ local function Walk(parent, clip, frames, rects)
                 rects[child] = r
             end
             -- A list shows only what's inside its box: the rest is scrolled away.
+            local before = #frames
             Walk(child, (r and IsScroller(child)) and Intersect(clip, r) or clip, frames, rects)
+            -- A list with nothing to click in it (text rows): the list itself, so it can scroll.
+            if r and IsScroller(child) and #frames == before and CanScroll(child) and Contains(clip, Center(r)) then
+                frames[#frames + 1] = child
+                rects[child] = r
+            end
         end
     end
 end
@@ -203,19 +217,29 @@ function Gamepad.Highlight()
     return highlight
 end
 
-local function Focus(f)
-    if f == focus then return end
+-- The data a list row shows (ScrollBox rows), for an element or the row it's in.
+local function DataOf(f)
+    while f and f ~= layer do
+        if f.GetElementData then return f:GetElementData() end
+        f = f:GetParent()
+    end
+end
+
+-- again: the same frame shows other data (a list row reused after scrolling).
+local function Focus(f, again)
+    if f == focus and not again then return end
     if focus then
-        local leave = focus:GetScript("OnLeave")
+        local leave = Script(focus, "OnLeave")
         if leave then leave(focus) end
     end
     focus = f
-    if layer then remembered[layer] = f end
+    -- Leaving a layer keeps what it had: back from a menu, the highlight is where it was.
+    if layer and f then remembered[layer] = f end
     if not f then
         highlight:Hide()
         return
     end
-    focusRect = Rect(f)
+    focusRect, focusData = Rect(f), DataOf(f)
     -- On the element, above it: hidden with it.
     highlight:SetParent(f)
     highlight:ClearAllPoints()
@@ -280,14 +304,102 @@ local function TypingIn()
     end
 end
 
+local function Inside(f, ancestor)
+    f = f:GetParent()
+    while f do
+        if f == ancestor then return true end
+        f = f:GetParent()
+    end
+    return false
+end
+
+-- The list the element scrolls in: a list of rows (ScrollBox) or a scrolling area (Options,
+-- Setup). Not a text box's own scroll frame: up and down leave the text box.
+local function ScrollerOf(f)
+    local p = f:GetParent()
+    while p and p ~= layer do
+        if IsScrollBox(p) or (p:IsObjectType("ScrollFrame") and p:GetScrollChild() ~= f) then return p end
+        p = p:GetParent()
+    end
+end
+
+-- The nearest element of that list in view, that way.
+local function NearestIn(scroller, from, dir)
+    local frames, rects = Gamepad.Collect(layer)
+    local list, map = {}, {}
+    for _, f in ipairs(frames) do
+        if f ~= focus and Inside(f, scroller) then
+            list[#list + 1] = rects[f]
+            map[#list] = f
+        end
+    end
+    local i = Gamepad.Nearest(from, list, dir)
+    return i and map[i]
+end
+
+-- Rows: scrolled one data row at a time, the highlight in the same column of the next row.
+local function NextRow(box, dir)
+    if box.HasDataProvider and not box:HasDataProvider() then return end
+    local row, index = focus, nil
+    while row and row ~= box do
+        index = box:FindFrameElementDataIndex(row)
+        if index then break end
+        row = row:GetParent()
+    end
+    if not index then return end
+    local x = Center(Rect(focus) or focusRect)
+    local step = dir == "DOWN" and 1 or -1
+    local i = index + step
+    while box:FindElementData(i) do
+        box:ScrollToNearest(i, 0, true)
+        local target = box:FindFrame(box:FindElementData(i))
+        if target then
+            local frames, rects = Gamepad.Collect(layer)
+            local best, bestDistance
+            for _, f in ipairs(frames) do
+                if f == target or Inside(f, target) then
+                    local distance = math.abs(Center(rects[f]) - x)
+                    if not bestDistance or distance < bestDistance then best, bestDistance = f, distance end
+                end
+            end
+            if best then return best end
+        end
+        i = i + step
+    end
+end
+
+-- A scrolling area: half its height at a time, until something shows up that way. Blizzard's
+-- scroll frame caps the position to its bar, whose top is the range rounded down: a scroll that
+-- did not move is the end.
+local function NextInArea(scroll, dir)
+    local range, step = scroll:GetVerticalScrollRange() or 0, math.max(20, (scroll:GetHeight() or 0) / 2)
+    while true do
+        local current = scroll:GetVerticalScroll()
+        local target = dir == "DOWN" and math.min(current + step, range) or math.max(current - step, 0)
+        if target == current then return end
+        scroll:SetVerticalScroll(target)
+        if math.abs(scroll:GetVerticalScroll() - current) < 1 then return end
+        local found = NearestIn(scroll, Rect(focus) or focusRect, dir)
+        if found then return found end
+    end
+end
+
 local function Move(dir)
     local typing = TypingIn()
     if typing then typing:ClearFocus() end
     if not focus then return end
+    -- In a list: its next element, scrolled into view; past its end, on to the rest of the page.
+    local scroller = (dir == "UP" or dir == "DOWN") and ScrollerOf(focus)
+    if scroller then
+        local found = NearestIn(scroller, Rect(focus) or focusRect, dir)
+        if found then Focus(found) return end
+        if IsScrollBox(scroller) then found = NextRow(scroller, dir) else found = NextInArea(scroller, dir) end
+        if found then Focus(found, true) return end
+    end
     local frames, rects = Gamepad.Collect(layer)
     local list = {}
     for i, f in ipairs(frames) do list[i] = rects[f] end
-    local i = Gamepad.Nearest(rects[focus] or focusRect, list, dir)
+    local i = Gamepad.Nearest(rects[focus] or Rect(focus) or focusRect, list, dir)
     if i then Focus(frames[i]) end
 end
 
