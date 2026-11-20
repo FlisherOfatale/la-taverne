@@ -461,6 +461,7 @@ if GetLocale() == "frFR" then
     L["Chosen dungeons"] = "Donjons choisis"
     L["Create this group"] = "Créer ce groupe"
     L["Not at the tavern: whisper them"] = "Pas à la taverne : chuchotez-lui"
+    L["Click %s to whisper them."] = "Cliquez sur %s pour lui chuchoter."
     L["For how long"] = "Pour combien de temps"
     L["For how long (from now)"] = "Pour combien de temps (à partir de maintenant)"
     L["At the tavern, but not looking for a group right now"] = "À la taverne, mais ne cherche pas de groupe pour le moment"

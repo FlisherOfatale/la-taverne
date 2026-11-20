@@ -2809,7 +2809,16 @@ end
 -- Who can I ask: my availability, the dungeons available players want, and the online guild
 -- members: available players first, the others folded away, with Invite and Whisper.
 
+-- With the gamepad UI on, opening the chat from addon code makes the gamepad manager call
+-- protected functions (ADDON_ACTION_FORBIDDEN): a chat line with the player's name instead, a
+-- click on it opens the whisper the game's way.
 local function Whisper(name)
+    if ns.GamepadUI() then
+        local text = "|cff71d5ff[" .. name .. "]|r" -- like La Taverne's other chat links
+        local link = GetPlayerLink and GetPlayerLink(name, text) or ("|Hplayer:" .. name .. "|h" .. text .. "|h")
+        ns.Print(format(L["Click %s to whisper them."], link))
+        return
+    end
     local tell = (ChatFrameUtil and ChatFrameUtil.SendTell) or ChatFrame_SendTell
     if tell then tell(name) end
 end
