@@ -4987,6 +4987,11 @@ function UI:ShowPage(page)
     self:Refresh()
 end
 
+-- The page shown (Gamepad.lua: what the d-pad goes through).
+function UI:CurrentPanel()
+    return panels[currentPage]
+end
+
 -- A section opens on the page last seen there.
 function UI:ShowSection(key)
     for _, section in ipairs(SECTIONS) do
