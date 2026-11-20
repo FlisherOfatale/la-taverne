@@ -17,6 +17,7 @@ Libs\LibDBIcon-1.0\lib.xml
 
 Core.lua
 Locale.lua
+Menu.lua
 Errors.lua
 Guild.lua
 Comm.lua

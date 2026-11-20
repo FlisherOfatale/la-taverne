@@ -24,8 +24,7 @@ local function OpenPage(page)
 end
 
 local function QuickMenu(owner)
-    if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
-    MenuUtil.CreateContextMenu(owner, function(_, root)
+    ns.ContextMenu(owner, function(_, root)
         root:CreateTitle("La Taverne")
         local available = ns.Players:IsActive()
         local inGroup = ns.Groups:GetMine() or ns.Groups:GetJoined()

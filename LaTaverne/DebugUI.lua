@@ -190,7 +190,7 @@ local function BuildWindow()
         { key = "yes", text = L["Answer: yes, in my guild"] },
         { key = "no", text = L["Answer: no, not in my guild"] },
     }
-    local vouchSelf = CreateFrame("DropdownButton", nil, p, "WowStyle1DropdownTemplate")
+    local vouchSelf = ns.NewDropdown(p)
     vouchSelf:SetPoint("TOPLEFT", 250, -412)
     vouchSelf:SetWidth(150)
     vouchSelf:SetupMenu(function(_, root)

@@ -438,7 +438,7 @@ end
 -- Role pickers --------------------------------------------------------------------------
 
 local function RoleMenu(owner, title, roles, onPick)
-    MenuUtil.CreateContextMenu(owner, function(_, root)
+    ns.ContextMenu(owner, function(_, root)
         root:CreateTitle(title)
         for _, role in ipairs(roles) do
             root:CreateButton(RoleText(role), function() onPick(role) end)
@@ -465,7 +465,7 @@ end
 -- Role picker for a player. getClass returns their class: roles it can't take are disabled.
 -- canPlay(role), when given, decides instead (e.g. only the roles the player offered).
 local function NewRoleDropdown(parent, width, getRole, setRole, getClass, canPlay)
-    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    local dd = ns.NewDropdown(parent)
     dd:SetWidth(width)
     if dd.SetDefaultText then dd:SetDefaultText(L["Choose a role"]) end
     dd:SetupMenu(function(_, root)
@@ -1195,7 +1195,7 @@ end
 
 local function AcceptMenu(owner, p)
     local offered, missing = SortedOffer(p)
-    MenuUtil.CreateContextMenu(owner, function(_, root)
+    ns.ContextMenu(owner, function(_, root)
         root:CreateTitle(format(L["Accept %s as..."], ClassColored(p.name, p.class)))
         for _, role in ipairs(offered) do
             local n = missing[role] or 0
@@ -3906,7 +3906,7 @@ local OPTION_ROW, OPTION_GAP = 30, 56 -- between two rows; between a section's l
 
 -- A dropdown of the game's style: choices = { { text, value } }, get() and set(value).
 local function NewChoice(parent, width, choices, get, set, tooltip)
-    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    local dd = ns.NewDropdown(parent)
     dd:SetWidth(width)
     dd:SetupMenu(function(_, root)
         for _, choice in ipairs(type(choices) == "function" and choices() or choices) do
