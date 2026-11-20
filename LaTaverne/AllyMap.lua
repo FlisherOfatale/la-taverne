@@ -269,7 +269,15 @@ end
 
 -- OpenMap's stitched art can sit over the map's pins: a dot is lifted above it (not in
 -- combat, where frame levels on the map are best left alone; lifted again as it ends).
+local function HoverScripts(pin)
+    if pin and not pin:GetScript("OnEnter") then
+        pin:SetScript("OnEnter", pin.OnMouseEnter)
+        pin:SetScript("OnLeave", pin.OnMouseLeave)
+    end
+end
+
 local function Lift(pin)
+    HoverScripts(pin)
     if not pin or not OpenMapStitched() or InCombatLockdown() or not OpenMapAPI.ArtTopLevel then return end
     local ok, top = pcall(OpenMapAPI.ArtTopLevel)
     if ok and type(top) == "number" and pin:GetFrameLevel() <= top then pin:SetFrameLevel(top + 2) end
@@ -316,9 +324,13 @@ function PinMixin:OnLoad()
     end
     self:EnableMouse(true)
     if self.SetMouseClickEnabled then self:SetMouseClickEnabled(false) end -- (clicks go to the map)
-    self:SetScript("OnEnter", ShowTooltip)
-    self:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- No OnEnter/OnLeave here: the map asserts a new pin has none ("assertion failed!" in
+    -- AcquirePin), then sets them itself from OnMouseEnter/OnMouseLeave below. HoverScripts
+    -- adds them after AcquirePin on clients whose map doesn't.
 end
+
+function PinMixin:OnMouseEnter() ShowTooltip(self) end
+function PinMixin:OnMouseLeave() GameTooltip:Hide() end
 
 function PinMixin:Look()
     local e = self.entry
