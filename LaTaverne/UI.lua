@@ -4093,10 +4093,10 @@ local function BuildOptionsPanel()
 
     -- The little lynx at the top of the window (on unless turned off).
     rowY = Row()
-    local lynx = NewCheckbox(c, L["Show the lynx at the top of the window"], function(self)
+    local lynxCheck = NewCheckbox(c, L["Show the lynx at the top of the window"], function(self)
         ns.Lynx:SetEnabled(self:GetChecked())
     end)
-    lynx:SetPoint("TOPLEFT", 12, rowY + 2)
+    lynxCheck:SetPoint("TOPLEFT", 12, rowY + 2)
 
     -- Dungeon names in the other languages (one switch per language, not the client's own).
     local langChecks = {}
@@ -4273,7 +4273,7 @@ local function BuildOptionsPanel()
         drawer:SetShown(ns.Minimap:HasDrawer())
         drawer:SetChecked(ns.db.inDrawer ~= false)
         glow:SetChecked(ns.db.minimapGlow ~= false)
-        lynx:SetChecked(ns.db.lynx ~= false)
+        lynxCheck:SetChecked(ns.db.lynx ~= false)
         alertSound:SetChecked(ns.db.alertSound == true)
         requestSound:SetChecked(ns.db.requestSound ~= false)
         quiet:SetChecked(ns.db.quiet == true)

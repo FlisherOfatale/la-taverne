@@ -3,7 +3,10 @@ local _, ns = ...
 -- The lynx in the band at the top of the window, beside the portrait: a 32 px pixel-art lynx
 -- that lives in the right third of the band. It sits most of the time, now and then turns its
 -- head to look at you or licks a paw, and sometimes walks to another spot. It only runs while
--- the window is open (the OnUpdate belongs to a child of the window).
+-- the window is open (the OnUpdate belongs to a child of the window); closing the window pauses
+-- it, and opening it again resumes where it was (kept for the session, not saved).
+-- The first time the window opens in a session it greets you right away, and stays lively
+-- (short rests) for LIVELY seconds, counted even while the window is closed.
 --
 -- media/lynx_sprites.tga: 256 x 128, cells of 32 x 32 in rows of 6 (only these are used):
 --   row 0 walk:  2 legs apart, 4 legs crossed (a two-pose walk with a 1 px bounce)
@@ -30,8 +33,10 @@ local MIN_WALK = 40      -- a walk goes at least this far
 
 -- Seconds sitting still between two things. The Debug tab's "short pauses" divides them, not
 -- the animations themselves.
-local REST_MIN, REST_MAX = 15, 45
+local REST_MIN, REST_MAX = 6, 20
 local FAST_DIVIDE = 12
+local LIVELY, LIVELY_MIN, LIVELY_MAX = 30, 1.5, 5
+local livelyUntil = 0
 
 local holder, tex
 local x, facingLeft = nil, true
@@ -60,7 +65,12 @@ end
 
 local function Rest()
     local fast = ns.db and ns.db.dev and ns.db.dev.lynxFast
-    local seconds = REST_MIN + math.random() * (REST_MAX - REST_MIN)
+    local seconds
+    if GetTime() < livelyUntil then
+        seconds = LIVELY_MIN + math.random() * (LIVELY_MAX - LIVELY_MIN)
+    else
+        seconds = REST_MIN + math.random() * (REST_MAX - REST_MIN)
+    end
     Add(SEAT, fast and seconds / FAST_DIVIDE or seconds)
 end
 
@@ -79,16 +89,19 @@ local function Lick()
     Add(SEAT, 0.25)
 end
 
+-- A walk goes MIN_WALK to half of its space at most, left or right where there's room.
 local function StartWalk()
     local lo, hi = Range()
-    if hi - lo < MIN_WALK * 2 then return false end
-    local target
-    for _ = 1, 20 do
-        target = math.random(lo, hi)
-        if math.abs(target - x) >= MIN_WALK then break end
-    end
-    if math.abs(target - x) < MIN_WALK then return false end
-    facingLeft = target < x
+    local longest = math.floor((hi - lo) / 2)
+    if longest < MIN_WALK then return false end
+    local sides = {}
+    if x - lo >= MIN_WALK then sides[#sides + 1] = -1 end
+    if hi - x >= MIN_WALK then sides[#sides + 1] = 1 end
+    if #sides == 0 then return false end
+    local dir = sides[math.random(#sides)]
+    local room = dir < 0 and (x - lo) or (hi - x)
+    local target = math.floor(x + dir * math.random(MIN_WALK, math.min(longest, room)) + 0.5)
+    facingLeft = dir < 0
     for i = 3, 1, -1 do Add(SIT_DOWN[i], 0.14) end -- gets up
     queue[#queue + 1] = { walk = target }
     return true
@@ -99,13 +112,32 @@ local function SitDown()
     Add(SEAT, 0.14)
 end
 
--- After each rest: a head turn or a paw lick more often than a walk. A walk ends with sitting
--- down and a rest (OnUpdate, on arrival).
+-- After each rest: mostly a head turn or a paw lick; a walk now and then, never twice in a row.
+-- A walk ends with sitting down and a rest (OnUpdate, on arrival).
+local WALK_CHANCE = 0.15
+local walkedLast = false
+
+local function Fidget()
+    if math.random() < 0.55 then LookAround() else Lick() end
+end
+
 local function Next()
-    local roll = math.random()
-    if roll >= 0.75 and StartWalk() then return end
-    if roll < 0.45 then LookAround() else Lick() end
+    if not walkedLast and math.random() < WALK_CHANCE and StartWalk() then
+        walkedLast = true
+        return
+    end
+    walkedLast = false
+    Fidget()
     Rest()
+end
+
+-- The first time the window opens: a head turn or a lick right away.
+local function Greet()
+    Show(SEAT)
+    Add(SEAT, 0.5)
+    Fidget()
+    Rest()
+    timer = 0
 end
 
 local WALK_POSES = { { LEGS_APART, 0 }, { LEGS_APART, 1 }, { LEGS_CROSSED, 0 }, { LEGS_CROSSED, 1 } }
@@ -178,9 +210,9 @@ function Lynx:Attach(frame, anchor)
             local _, hi = Range()
             if hi <= 0 then return end
             x, facingLeft = hi, true
-            Show(SEAT)
+            livelyUntil = GetTime() + LIVELY
             tex:Show()
-            Rest()
+            Greet()
             return
         end
         OnUpdate(self, elapsed)
