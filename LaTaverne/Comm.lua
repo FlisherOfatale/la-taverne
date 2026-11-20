@@ -84,6 +84,9 @@ local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
     if dir == "in" then
         local tag = scope == "ally" and type(payload) == "table" and ns.Alliance:GetTag(payload.g)
         from = "  " .. tostring(sender) .. (tag and (" [" .. tag .. "]") or "")
+        -- Their version, when it isn't mine (an old version explains a lot).
+        local ver = type(payload) == "table" and payload.ver
+        if type(ver) == "string" and ver ~= ns.version then from = from .. " (v" .. ver:sub(1, 16) .. ")" end
         -- One sender sending a lot.
         local key = tostring(sender)
         local r = msgLog.rate[key]

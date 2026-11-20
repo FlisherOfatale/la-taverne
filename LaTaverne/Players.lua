@@ -24,6 +24,8 @@ local EXPIRE = 150           -- someone else's availability without heartbeat fo
 local WARN_BEFORE = 300      -- popup this long before the end
 local PRESENCE_AGE = 20 * 60 -- "has La Taverne": heard from in the last 20 minutes
 local WHO_WAIT = 20           -- after asking who's there: online members who didn't answer
+local WHO_EVERY = 60          -- nobody asks again this soon after a question (anyone's)
+local WHO_SPREAD_MIN, WHO_SPREAD_MAX = 1, 10 -- answers come this many seconds after a question
 local NOTE_MAX = 80
 
 Players.DURATIONS = { 900, 1800, 3600, 7200, 0 } -- 0: until I log out
@@ -386,16 +388,25 @@ local function ForgetSilent(asked, onlineThen)
     if changed then Changed() end
 end
 
+-- The last question, mine or someone else's: everyone hears the answers, so nobody asks again
+-- for a minute (a big guild answers each question with one message per player).
 local lastWho = 0
-function Players:AskWho()
-    if GetTime() - lastWho < 30 then return end
+local function WatchAnswers()
     lastWho = GetTime()
-    -- The sweep counts on the answers: only when the question went out now (not just queued).
-    if not ns.Comm:Send("WHO", {}) then return end
     local asked = GetServerTime()
     local onlineThen = {}
     for _, m in ipairs(ns.Guild:GetOnline()) do onlineThen[ns.NameKey(m.name)] = true end
     C_Timer.After(WHO_WAIT, function() ForgetSilent(asked, onlineThen) end)
+end
+
+function Players:AskWho()
+    if GetTime() - lastWho < WHO_EVERY then return end
+    -- The sweep counts on the answers: only when the question went out now (not just queued).
+    if not ns.Comm:Send("WHO", {}) then
+        lastWho = GetTime()
+        return
+    end
+    WatchAnswers()
 end
 
 -- Guild members with La Taverne, online first then most recent: { name, class, level, seen,
@@ -482,7 +493,10 @@ end)
 
 ns.Comm:On("WHO", function(_, _, isSelf)
     if isSelf then return end
-    C_Timer.After(0.5 + math.random() * 3, function()
+    -- Someone else asked: I hear the answers too.
+    if GetTime() - lastWho >= WHO_EVERY then WatchAnswers() end
+    -- Spread out, so a big guild's answers don't all arrive in the same second.
+    C_Timer.After(WHO_SPREAD_MIN + math.random() * (WHO_SPREAD_MAX - WHO_SPREAD_MIN), function()
         local _, class = UnitClass("player")
         ns.Comm:Send("HERE", { class = class, level = UnitLevel("player") })
     end)

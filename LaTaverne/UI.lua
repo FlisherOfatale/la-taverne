@@ -1511,6 +1511,28 @@ local function InitBrowseRow(row, data)
     InitGroupRow(row.body, data.listing, data.invite)
     row.body:SetAlpha(data.dim and DIMMED or 1)
     row:SetScript("OnUpdate", data.dim and DimOnHover or nil)
+    -- The group the chat's [View] link points to: a gold glow that pulses a few times.
+    local focused = UI.focusGroup and data.listing.id == UI.focusGroup.id
+    if focused and GetTime() < UI.focusGroup.flashUntil then
+        if not row.flash then
+            row.flash = row:CreateTexture(nil, "OVERLAY")
+            row.flash:SetAllPoints()
+            row.flash:SetColorTexture(1, 0.82, 0, 1)
+            row.flash:SetBlendMode("ADD")
+            row.flash:SetAlpha(0)
+            row.flashAnim = row.flash:CreateAnimationGroup()
+            local pulse = row.flashAnim:CreateAnimation("Alpha")
+            pulse:SetFromAlpha(0)
+            pulse:SetToAlpha(0.3)
+            pulse:SetDuration(0.45)
+            row.flashAnim:SetLooping("BOUNCE")
+        end
+        row.flash:Show()
+        if not row.flashAnim:IsPlaying() then row.flashAnim:Play() end
+    elseif row.flash then
+        row.flashAnim:Stop()
+        row.flash:Hide()
+    end
 end
 
 local function BrowseRowHeight(data)
@@ -2005,7 +2027,8 @@ local function BuildGroupsPanel()
                 -- shown at the top
             elseif mineOrIn then
                 active[#active + 1] = { listing = l }
-            elseif not ns.Groups:PassesFilters(l) or (ns.db.hideRunning and state == "running") then
+            elseif (not ns.Groups:PassesFilters(l) or (ns.db.hideRunning and state == "running"))
+                and not (UI.focusGroup and UI.focusGroup.id == l.id) then
                 filtered = filtered + 1
             elseif state ~= "running" and state ~= "full" then
                 active[#active + 1] = { listing = l }
@@ -4523,6 +4546,7 @@ local function CreateMainFrame()
     end
 
     frame:SetScript("OnShow", function() UI:Refresh() end)
+    frame:HookScript("OnHide", function() UI.focusGroup = nil end)
     frame:Hide()
 end
 
@@ -4572,6 +4596,7 @@ function UI:ShowPage(page)
     if not frame then CreateMainFrame() end
     if not sectionOf[page] then page = "browse" end
     if not PageAllowed(page) then page = Fallback(page) end
+    if page ~= "browse" then self.focusGroup = nil end
     currentPage = page
     lastPage[sectionOf[page].key] = page
     for key, panel in pairs(panels) do
@@ -4603,12 +4628,29 @@ function UI:ShowGroup(id)
         self:ShowPage("mygroup")
         return
     end
+    local exists = false
+    for _, l in ipairs(ns.Groups:GetListings()) do
+        if l.id == id then exists = true break end
+    end
+    if not exists then
+        self.focusGroup = nil
+        self:ShowPage("browse")
+        ns.Print(L["That group isn't listed any more."])
+        return
+    end
+    -- Shown even if the filters hide it (until I leave the page), and it glows for a moment.
+    local FLASH = 3
+    self.focusGroup = { id = id, flashUntil = GetTime() + FLASH }
     self:ShowPage("browse")
     local box = panels.browse and panels.browse.box
     if box and box.ScrollToElementDataByPredicate then
         box:ScrollToElementDataByPredicate(function(e) return e.listing and e.listing.id == id end,
             ScrollBoxConstants and ScrollBoxConstants.AlignCenter)
     end
+    -- Stop the glow once it's over (a refresh of the rows does it).
+    C_Timer.After(FLASH + 0.1, function()
+        if self.focusGroup and self.focusGroup.id == id and currentPage == "browse" then self:Refresh() end
+    end)
 end
 
 function UI:Open()

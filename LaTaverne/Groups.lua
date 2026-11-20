@@ -36,6 +36,7 @@ local Groups = ns.NewModule("Groups")
 local L = ns.L
 
 local HEARTBEAT = 60         -- leader re-sends the listing this often
+local NEW_GROUP_AGE = 90     -- a group posted this recently is announced as new
 local EXPIRE = 150           -- a listing without heartbeat for this long is gone (leader offline)
 local MAX_AGE = 2 * 60 * 60  -- groups still forming close after 2 hours (in progress: as long as the party)
 local REQUEST_TTL = 10 * 60  -- a join request nobody answered expires after 10 minutes
@@ -599,7 +600,7 @@ local function Sanitize(p, sender, scope)
         discord = p.discord and true or nil,
         discordChannel = type(p.discordChannel) == "string" and p.discordChannel:sub(1, CHANNEL_MAX) or nil,
         started = p.started and true or nil,
-        reopened = p.reopened and true or nil,
+        reopened = tonumber(p.reopened) or (p.reopened and true) or nil,
         members = members,
         pending = pending,
         seen = GetServerTime(),
@@ -720,7 +721,8 @@ local function DungeonWithRange(key)
     return ns.DungeonName(key) .. (range ~= "" and (" " .. range) or "")
 end
 
-local function AlertNewGroup(l)
+-- A new group, or (replacement) a group in progress looking for players again.
+local function AlertNewGroup(l, replacement)
     if ns.IsIgnored(l.leader) then return end
     local mode = Groups:AlertMode()
     -- Available players want a group: they hear about the ones that fit them, whatever the setting.
@@ -728,8 +730,16 @@ local function AlertNewGroup(l)
     if mode == "none" and P and P:IsActive() then mode = "fit" end
     if mode == "none" or (mode == "fit" and not (Groups:FitsMe(l) and (not P or P:WantsDungeon(l.dungeon)))) then return end
     if ns.Quiet() then return end -- in a dungeon, a raid or combat (Options)
-    ns.Print(format(L["New group: %s by %s"], DungeonWithRange(l.dungeon), l.leader .. (l.tag and (" [" .. l.tag .. "]") or ""))
-        .. " " .. GroupLink(l))
+    local leader = l.leader .. (l.tag and (" [" .. l.tag .. "]") or "")
+    local text
+    if replacement then
+        local missing = Groups:MissingText(l)
+        text = format(L["Replacement wanted: %s in %s by %s"], missing ~= "" and missing or L["a player"],
+            DungeonWithRange(l.dungeon), leader)
+    else
+        text = format(L["New group: %s by %s"], DungeonWithRange(l.dungeon), leader)
+    end
+    ns.Print(text .. " " .. GroupLink(l))
     ns.Sound("group")
 end
 
@@ -1146,7 +1156,7 @@ end
 function Groups:Reopen()
     local l = self:GetMine()
     if not l or not l.started or self:IsComplete(l) then return end
-    l.reopened = true
+    l.reopened = GetServerTime() -- when: others announce it only if it's recent
     self:Broadcast()
     Changed()
 end
@@ -1303,7 +1313,18 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
     -- Their group had gone quiet (leader offline) before this update.
     local wasAway = not previous or now - (previous.seen or 0) > HEARTBEAT + 20
     listings[l.id] = l
-    if not previous then AlertNewGroup(l) end
+    -- Announced only when it's really new: after a /reload or a login, every group I hear
+    -- about is new to me, but most were posted long ago. Not one in progress or full either:
+    -- nobody can join it. A group in progress that looks for a replacement: its own line, when
+    -- it starts looking (reopened is when, from 1.0.1; older versions send true).
+    local looking = Groups:GetState(l) == "midrun"
+    if looking then
+        local wasLooking = previous and Groups:GetState(previous) == "midrun"
+        local justNow = previous or (type(l.reopened) == "number" and now - l.reopened < NEW_GROUP_AGE)
+        if not wasLooking and justNow then AlertNewGroup(l, true) end
+    elseif not previous and now - l.created < NEW_GROUP_AGE and Groups:IsOpen(l) then
+        AlertNewGroup(l)
+    end
     -- My request didn't reach them (no receipt): send it again. Once at their next update (a
     -- /reload, a lost message), then each time they come back after being away.
     local app = myApplications[l.id]

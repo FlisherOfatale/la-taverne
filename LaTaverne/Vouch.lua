@@ -18,6 +18,7 @@ local L = ns.L
 local KEEP = 30 * 60
 local KEEP_UNVERIFIED = 5 * 60
 local WAIT = 4                         -- seconds to wait for an answer
+local ASK_DELAY_MAX = 2                -- random wait before asking (someone else may ask first)
 local ANSWER_MIN, ANSWER_MAX = 0.3, 2  -- random delay before answering
 local HOLD_MAX = 10                    -- messages held per player while waiting
 local ONLINE = 10 * 60                 -- heard from this recently: online
@@ -102,6 +103,7 @@ local function Settle(entry, state, by, source)
     local old = entry.state
     entry.state, entry.by, entry.source, entry.t = state, by, source, GetServerTime()
     if entry.timer then entry.timer:Cancel() entry.timer = nil end
+    entry.asking = nil
     if old ~= state then Vouch.stats[state] = (Vouch.stats[state] or 0) + 1 end
     local waiting = entry.waiting
     entry.waiting = nil
@@ -123,21 +125,33 @@ local function Settle(entry, state, by, source)
     Changed()
 end
 
-local function Ask(entry)
-    Vouch.stats.asked = Vouch.stats.asked + 1
+-- Everyone hearing a new player would ask at once (and everyone hears the answer): wait a
+-- moment first, and stay quiet if someone else asks about them meanwhile (entry.heardAsk).
+-- now: ask right away (the Debug tab's button).
+local function Ask(entry, now)
     entry.asked = GetServerTime()
-    ns.Comm:SendAlly("VQ", { p = entry.name, pg = entry.guild }, "ALERT")
-    entry.timer = C_Timer.NewTimer(WAIT, function()
-        entry.timer = nil
-        if entry.state == "denied" then
-            -- Nobody answered this time: a denial stays until someone confirms them.
-            entry.t = GetServerTime()
-            if entry.waiting then Vouch.stats.dropped = Vouch.stats.dropped + #entry.waiting end
-            entry.waiting = nil
-            return
+    entry.asking, entry.heardAsk = true, nil
+    entry.timer = C_Timer.NewTimer(now and 0 or math.random() * ASK_DELAY_MAX, function()
+        entry.asking = false
+        if not entry.heardAsk then
+            Vouch.stats.asked = Vouch.stats.asked + 1
+            ns.Comm:SendAlly("VQ", { p = entry.name, pg = entry.guild }, "ALERT")
+        else
+            ns.Comm:LogNote(format("someone else asked about %s: waiting for their answer", entry.name))
         end
-        ns.Comm:LogNote(format("nobody from [%s] answered about %s: let through, not checked", tostring(entry.guild), entry.name))
-        Settle(entry, "unverified", nil, "timeout")
+        entry.heardAsk = nil
+        entry.timer = C_Timer.NewTimer(WAIT, function()
+            entry.timer = nil
+            if entry.state == "denied" then
+                -- Nobody answered this time: a denial stays until someone confirms them.
+                entry.t = GetServerTime()
+                if entry.waiting then Vouch.stats.dropped = Vouch.stats.dropped + #entry.waiting end
+                entry.waiting = nil
+                return
+            end
+            ns.Comm:LogNote(format("nobody from [%s] answered about %s: let through, not checked", tostring(entry.guild), entry.name))
+            Settle(entry, "unverified", nil, "timeout")
+        end)
     end)
 end
 
@@ -318,7 +332,7 @@ function Vouch:AskAbout(name)
             entry.state, entry.source, entry.t, entry.by = "checking", nil, nil, nil
 
             if entry.timer then entry.timer:Cancel() entry.timer = nil end
-            Ask(entry)
+            Ask(entry, true)
         end
     end
     Changed()
@@ -335,12 +349,17 @@ end
 
 -- Messages ----------------------------------------------------------------------------------
 
--- A question: only members of the named guild answer, from their roster.
+-- A question: only members of the named guild answer, from their roster. The others note that
+-- it was asked: no need to ask the same.
 ns.Comm:OnAlly("VQ", function(sender, payload, isSelf)
     if isSelf then return end
     local name, guild = payload.p, payload.pg
     if type(name) ~= "string" or type(guild) ~= "string" or name == "" then return end
-    if not ns.Guild:IsMyGuild(guild) then return end
+    if not ns.Guild:IsMyGuild(guild) then
+        local entry = players[ns.NameKey(name)]
+        if entry and entry.asking and SameGuild(entry.guild, guild) then entry.heardAsk = true end
+        return
+    end
     local key = ns.NameKey(name)
     if answering[key] then return end
     local ok
