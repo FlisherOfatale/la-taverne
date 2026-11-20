@@ -4931,6 +4931,8 @@ local function CreateMainFrame()
     end)
     frame:HookScript("OnHide", function() UI.focusGroup = nil end)
     frame:Hide()
+    -- With the gamepad UI on: the pad's buttons while the window is open (Gamepad.lua).
+    if ns.Gamepad then ns.Gamepad.Attach(frame) end
 end
 
 -- The page to land on when the current one isn't allowed anymore.

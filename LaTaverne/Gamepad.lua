@@ -135,3 +135,74 @@ function Gamepad.Collect(root)
     end)
     return frames, rects
 end
+
+-- Pad buttons ---------------------------------------------------------------------------------
+-- While the window is open, the pad's buttons are taken with override bindings to hidden
+-- buttons (SetOverrideBindingClick: allowed to addons out of combat), and given back when it
+-- closes. B and X stay the game's (B closes the chat). Only the main window takes them: a
+-- window that opens on its own (availability ending) never does, so A can't click it mid-fight.
+-- A fight gives them back as it starts (before the game locks bindings), and takes them again
+-- when it ends if the window is still open.
+
+Gamepad.KEYS = { "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT", "PAD1", "PAD4", "PADLSHOULDER", "PADRSHOULDER" }
+
+local ACTIONS = {} -- [key] = function()
+local owner = CreateFrame("Frame", "LaTavernePadOwner", UIParent)
+local mainFrame
+local bound, pendingClear, fighting = false, false, false
+
+function Gamepad.OnButton(key)
+    local action = ACTIONS[key]
+    if action then action() end
+end
+
+for _, key in ipairs(Gamepad.KEYS) do
+    local button = CreateFrame("Button", "LaTavernePad" .. key, UIParent)
+    button:Hide()
+    button:SetScript("OnClick", function() Gamepad.OnButton(key) end)
+end
+
+local function Bind(on)
+    if InCombatLockdown() then
+        -- The game refuses binding changes in combat: giving them back waits for its end.
+        pendingClear = pendingClear or (bound and not on)
+        return
+    end
+    if on and not bound then
+        for _, key in ipairs(Gamepad.KEYS) do
+            SetOverrideBindingClick(owner, true, key, "LaTavernePad" .. key)
+        end
+        bound = true
+    elseif not on and (bound or pendingClear) then
+        ClearOverrideBindings(owner)
+        bound = false
+    end
+    pendingClear = false
+end
+
+-- The buttons are La Taverne's right now.
+function Gamepad.IsActive()
+    return bound
+end
+
+local function Take()
+    if mainFrame and mainFrame:IsShown() and not fighting and ns.GamepadUI() then Bind(true) end
+end
+
+-- The main window (UI.lua): its buttons follow it.
+function Gamepad.Attach(frame)
+    mainFrame = frame
+    frame:HookScript("OnShow", Take)
+    frame:HookScript("OnHide", function() Bind(false) end)
+end
+
+ns.On("PLAYER_REGEN_DISABLED", function()
+    fighting = true
+    Bind(false)
+end)
+
+ns.On("PLAYER_REGEN_ENABLED", function()
+    fighting = false
+    if pendingClear then Bind(false) end
+    Take()
+end)
