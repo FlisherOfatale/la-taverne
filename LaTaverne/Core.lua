@@ -395,6 +395,79 @@ function ns.TextDialog(opts)
     if opts.selectAll then f.edit:HighlightText() end
 end
 
+-- Confirmation window: the text window's frame with a message and buttons instead of the text
+-- box, at the top of the screen like the game's. Not the game's own dialogs: opened by an addon,
+-- they break the gamepad UI (ADDON_ACTION_FORBIDDEN). One window per kind, so one can't replace
+-- another. opts = { kind, text, buttons = { { text, onClick } } }; text can be a function, read
+-- again while the window is open. A button runs its onClick (if any) and closes the window;
+-- Escape and the X only close it.
+local confirmDialogs = {}
+
+local function BuildConfirmDialog(kind)
+    local f = CreateFrame("Frame", "LaTaverneConfirm_" .. kind, UIParent, "ButtonFrameTemplate")
+    f:SetWidth(440)
+    f:SetPoint("TOP", 0, -135)
+    f:SetFrameStrata("DIALOG")
+    f:SetToplevel(true)
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    if ButtonFrameTemplate_HidePortrait then ButtonFrameTemplate_HidePortrait(f) end
+    if ButtonFrameTemplate_HideButtonBar then ButtonFrameTemplate_HideButtonBar(f) end
+    if ButtonFrameTemplate_HideAttic then ButtonFrameTemplate_HideAttic(f) end
+    if f.CloseButton then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
+    if f.SetTitle then f:SetTitle("La Taverne") end
+    tinsert(UISpecialFrames, f:GetName())
+
+    local inner = f.Inset or f
+    f.text = inner:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.text:SetPoint("TOP", 0, -14)
+    f.text:SetWidth(400)
+    f.buttons = {}
+    f:SetScript("OnUpdate", function(self)
+        local text = type(self.getText) == "function" and self.getText()
+        if text then self.text:SetText(text) end
+    end)
+    confirmDialogs[kind] = f
+    return f
+end
+
+function ns.ConfirmDialog(opts)
+    local f = confirmDialogs[opts.kind] or BuildConfirmDialog(opts.kind)
+    f.getText = opts.text
+    local text = opts.text
+    if type(text) == "function" then text = text() end
+    f.text:SetText(text or "")
+    local inner = f.Inset or f
+    local n = #opts.buttons
+    for i, spec in ipairs(opts.buttons) do
+        local b = f.buttons[i]
+        if not b then
+            b = CreateFrame("Button", nil, inner, "UIPanelButtonTemplate")
+            b:SetSize(120, 24)
+            f.buttons[i] = b
+        end
+        b:SetText(spec.text)
+        b:ClearAllPoints()
+        b:SetPoint("BOTTOM", (i - (n + 1) / 2) * 128, 12)
+        b:SetScript("OnClick", function()
+            f:Hide()
+            if spec.onClick then spec.onClick() end
+        end)
+        b:Show()
+    end
+    for i = n + 1, #f.buttons do f.buttons[i]:Hide() end
+    f:SetHeight(f.text:GetStringHeight() + 96)
+    f:Show()
+end
+
+function ns.CloseConfirmDialog(kind)
+    local f = confirmDialogs[kind]
+    if f and f:IsShown() then f:Hide() end
+end
+
 -- Slash commands: modules add handlers to ns.commands.
 ns.commands = {}
 

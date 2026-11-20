@@ -495,9 +495,10 @@ ns.Comm:On("HERE", function(sender, p, isSelf)
 end)
 
 -- Expiry popup ---------------------------------------------------------------------------------
--- The game's standard dialog, at the top of the screen like a ready check: "+15 min", "+1 h"
--- (the length I chose last comes first) and "Stop". The time left updates while it's open.
--- Escape or doing nothing: it ends at the set time, and the chat line offers to start again.
+-- A confirmation window at the top of the screen like a ready check (ns.ConfirmDialog, not the
+-- game's dialog): "+15 min", "+1 h" (the length I chose last comes first) and "Stop". The time
+-- left updates while it's open. Escape or doing nothing: it ends at the set time, and the chat
+-- line offers to start again.
 
 -- Add time to my availability (from its current end), and remember it as my usual length.
 function Players:AddTime(seconds)
@@ -509,50 +510,30 @@ function Players:AddTime(seconds)
     Changed()
 end
 
-local POPUP = "LATAVERNE_AVAIL_EXPIRING"
-local popupChoices = { 900, 3600 } -- button1, button2
-
 local function PopupText()
     local left = Players:Remaining() or 0
     return format(L["You're still available for %d min (until %s)."], math.max(1, math.ceil(left / 60)),
         date("%H:%M", state.expires or GetServerTime()))
 end
 
-StaticPopupDialogs[POPUP] = {
-    text = "%s",
-    button1 = "+15 min",
-    button2 = "+1 h",
-    button3 = STOP or "Stop",
-    OnAccept = function() Players:AddTime(popupChoices[1]) end,
-    -- Only a click on the button: never when the dialog is hidden for another reason.
-    OnCancel = function(_, _, reason)
-        if reason == "clicked" then Players:AddTime(popupChoices[2]) end
-    end,
-    OnAlt = function() Players:Stop(L["You're no longer available."]) end,
-    OnUpdate = function(self)
-        local text = self.text or self.Text
-        if text and state.active then text:SetText(PopupText()) end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    noCancelOnEscape = true,
-    preferredIndex = 3,
-}
-
 local function ShowPopup()
     -- The length I chose last comes first.
     local last = Settings().duration
-    popupChoices = (last == 3600 or last == 7200) and { 3600, 900 } or { 900, 3600 }
-    local info = StaticPopupDialogs[POPUP]
-    info.button1 = "+" .. Players.DurationText(popupChoices[1])
-    info.button2 = "+" .. Players.DurationText(popupChoices[2])
-    info.button3 = L["Stop"]
-    StaticPopup_Show(POPUP, PopupText())
+    local choices = (last == 3600 or last == 7200) and { 3600, 900 } or { 900, 3600 }
+    ns.ConfirmDialog({
+        kind = "avail",
+        -- Only a click on a button adds time or stops: never Escape or the X.
+        text = function() if state.active then return PopupText() end end,
+        buttons = {
+            { text = "+" .. Players.DurationText(choices[1]), onClick = function() Players:AddTime(choices[1]) end },
+            { text = "+" .. Players.DurationText(choices[2]), onClick = function() Players:AddTime(choices[2]) end },
+            { text = L["Stop"], onClick = function() Players:Stop(L["You're no longer available."]) end },
+        },
+    })
 end
 
 Players.HidePopup = function()
-    if StaticPopup_Hide then StaticPopup_Hide(POPUP) end
+    ns.CloseConfirmDialog("avail")
 end
 
 -- Timers and events ------------------------------------------------------------------------------
