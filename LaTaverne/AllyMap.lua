@@ -101,11 +101,13 @@ AllyMap.Here = Here
 
 -- Sending -----------------------------------------------------------------------------------
 
--- Small: the place as one short text, "map x y" (x and y in 1/10000 of the map). Class, level,
--- character ID and the OpenMap flag don't change while I walk: only in a full one (the first,
--- then once a minute); receivers keep them from the last full one.
+-- Small: the place as one short text, "map x y" (x and y in 1/10000 of the map), then " 1" when
+-- my OpenMap shares my place too (in every message, so nobody draws a second dot over
+-- OpenMap's). Class, level and character ID don't change while I walk: only in a full one (the
+-- first, then once a minute); receivers keep them from the last full one.
 local function MyPayload(m, x, y, full)
-    local payload = { p = format("%d %d %d", m, math.floor(x * 10000 + 0.5), math.floor(y * 10000 + 0.5)) }
+    local payload = { p = format("%d %d %d%s", m, math.floor(x * 10000 + 0.5), math.floor(y * 10000 + 0.5),
+        OpenMapShares() and " 1" or "") }
     if full then
         local _, class = UnitClass("player")
         local level = UnitLevel("player")
@@ -113,7 +115,6 @@ local function MyPayload(m, x, y, full)
         payload.c = (not IsSecret(class) and type(class) == "string") and class or nil
         payload.l = (not IsSecret(level) and type(level) == "number") and level or nil
         payload.id = (not IsSecret(guid) and type(guid) == "string") and guid or nil
-        payload.om = OpenMapShares() or nil
     end
     return payload
 end
@@ -458,12 +459,14 @@ local function Between(v, lo, hi)
     return type(v) == "number" and v >= lo and v <= hi
 end
 
--- The place in a message: "map x y" (p), or m, x, y (the first version). Fills p.m, p.x, p.y.
+-- The place in a message: "map x y" or "map x y 1" (p: 1 = their OpenMap shares too), or m, x,
+-- y and om (the first version). Fills p.m, p.x, p.y, p.om.
 local function ReadPlace(p)
     if type(p.p) == "string" and #p.p <= 32 then
-        local m, x, y = p.p:match("^(%d+) (%d+) (%d+)$")
+        local m, x, y, om = p.p:match("^(%d+) (%d+) (%d+)( ?1?)$")
         if not m then return false end
         p.m, p.x, p.y = tonumber(m), tonumber(x) / 10000, tonumber(y) / 10000
+        p.om = om == " 1" or nil
     end
     return true
 end
@@ -495,10 +498,9 @@ local function OnPosition(sender, p, isSelf, scope)
         return
     end
     AllyMap.stats.received = AllyMap.stats.received + 1
-    -- Class, level, ID and OpenMap only come in a full message: kept from the last one. Until
+    -- Class, level and ID only come in a full message: kept from the last one. Until
     -- one arrives, the class from the guild roster when it's a guildmate.
     local old = live[key]
-    local isFull = p.p == nil or p.c ~= nil or p.l ~= nil or p.id ~= nil
     if p.c == nil then
         p.c = old and old.c
         if not p.c and scope == "guild" then
@@ -508,7 +510,6 @@ local function OnPosition(sender, p, isSelf, scope)
     end
     if p.l == nil then p.l = old and old.l end
     if p.id == nil then p.id = old and old.guid end
-    if not isFull and old then p.om = old.om end
     local e = {
         -- (the guild's name is checked allied by Comm; shown as text, no "|" codes)
         key = key, name = sender, scope = scope,
