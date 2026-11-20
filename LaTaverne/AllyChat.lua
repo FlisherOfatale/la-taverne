@@ -362,7 +362,8 @@ end)
 -- t: when I typed it, f: I was in a fight (the line may arrive late, see Receive).
 local function MyPayload(text)
     local _, class = UnitClass("player")
-    local fighting = (UnitAffectingCombat and UnitAffectingCombat("player")) or ns.Guild:Restricted()
+    -- Only real combat: Restricted() is also on in Mythic+ and PvP, where "in combat" would be wrong.
+    local fighting = UnitAffectingCombat and UnitAffectingCombat("player")
     return { m = text, c = class, id = UnitGUID("player"), t = GetServerTime(), f = fighting and true or nil }
 end
 

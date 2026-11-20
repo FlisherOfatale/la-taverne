@@ -119,6 +119,7 @@ local function BuildMenu()
     end)
     menu:Hide()
     tinsert(UISpecialFrames, "LaTaverneMenu")
+    ns.EscapeFirst(menu)
 end
 
 -- Fill the window from a fresh description (the generator runs at each opening).

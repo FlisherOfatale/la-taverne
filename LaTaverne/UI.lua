@@ -4190,6 +4190,8 @@ local function BuildOptionsPanel()
     openMapNote:SetJustifyH("LEFT")
     local mapShare = NewCheckbox(c, L["With my guild and allies"], function(self)
         ns.db.allyMap.share = self:GetChecked() and true or false
+        -- Turned on here: the player knows it's shared (no notice owed, and Tick may send).
+        if ns.db.allyMap.share then ns.db.allyMap.told = true end
         ns.AllyMap:SettingsChanged()
     end)
     mapShare:SetPoint("TOPLEFT", 12, rowY + 2)

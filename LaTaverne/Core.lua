@@ -417,6 +417,27 @@ end
 -- Escape and the X only close it.
 local confirmDialogs = {}
 
+-- Escape closes every frame of UISpecialFrames at once: with a menu or a confirm window open
+-- over La Taverne's window, Escape closed both. While one of them is open, the main window
+-- leaves that list, so Escape closes only the menu or the confirm window.
+local escapeHolds = 0
+local function MainOnEscape(on)
+    for i = #UISpecialFrames, 1, -1 do
+        if UISpecialFrames[i] == "LaTaverneFrame" then tremove(UISpecialFrames, i) end
+    end
+    if on and _G.LaTaverneFrame then tinsert(UISpecialFrames, "LaTaverneFrame") end
+end
+function ns.EscapeFirst(f)
+    f:HookScript("OnShow", function()
+        escapeHolds = escapeHolds + 1
+        MainOnEscape(false)
+    end)
+    f:HookScript("OnHide", function()
+        escapeHolds = math.max(0, escapeHolds - 1)
+        if escapeHolds == 0 then MainOnEscape(true) end
+    end)
+end
+
 local function BuildConfirmDialog(kind)
     local f = CreateFrame("Frame", "LaTaverneConfirm_" .. kind, UIParent, "ButtonFrameTemplate")
     f:SetWidth(440)
@@ -434,6 +455,7 @@ local function BuildConfirmDialog(kind)
     if f.CloseButton then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
     if f.SetTitle then f:SetTitle("La Taverne") end
     tinsert(UISpecialFrames, f:GetName())
+    ns.EscapeFirst(f)
 
     local inner = f.Inset or f
     f.text = inner:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
