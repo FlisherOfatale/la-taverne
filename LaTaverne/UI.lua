@@ -4019,9 +4019,15 @@ local function BuildOptionsPanel()
     bind:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     WithTooltip(bind, { L["Shortcut to open La Taverne"], L["Click to change, right-click to remove. Escape cancels."] })
 
+    -- While it waits for a key it takes the whole keyboard (nothing else gets the key), so it
+    -- never waits for long: a click anywhere else, Escape, closing the page, or 10 s stop it.
+    local BIND_WAIT = 10
     local function StopWaiting()
         bind.waiting = false
         bind:EnableKeyboard(false)
+        if bind.SetPropagateKeyboardInput then bind:SetPropagateKeyboardInput(true) end
+        bind:UnregisterEvent("GLOBAL_MOUSE_DOWN")
+        if bind.waitTimer then bind.waitTimer:Cancel() bind.waitTimer = nil end
         bind:SetText(BindingText())
         if bind.SetBackdropBorderColor then bind:SetBackdropBorderColor(0.6, 0.6, 0.6, 1) end
     end
@@ -4035,6 +4041,12 @@ local function BuildOptionsPanel()
         self.waiting = true
         self:EnableKeyboard(true)
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+        self:RegisterEvent("GLOBAL_MOUSE_DOWN")
+        if self.waitTimer then self.waitTimer:Cancel() end
+        self.waitTimer = C_Timer.NewTimer(BIND_WAIT, function()
+            self.waitTimer = nil
+            if self.waiting then StopWaiting() end
+        end)
         self:SetText(L["Press a key..."])
         if self.SetBackdropBorderColor then self:SetBackdropBorderColor(1, 0.82, 0, 1) end
     end)
@@ -4051,6 +4063,9 @@ local function BuildOptionsPanel()
         StopWaiting()
     end)
     bind:SetScript("OnHide", StopWaiting)
+    bind:SetScript("OnEvent", function(self, event)
+        if event == "GLOBAL_MOUSE_DOWN" and self.waiting and not self:IsMouseOver() then StopWaiting() end
+    end)
 
     -- Window size, and back to the middle of the screen.
     rowY = Row(L["Window size"])
