@@ -189,6 +189,7 @@ local DEFAULTS = {
         infoText = "",
         roster = {}, -- [nameKey] = { name = "Firstname Lastname", class, level, seen }
         gameChat = true, -- test guild chat also shown in the game's chat windows (only to me)
+        lynxFast = false, -- the window's lynx: short pauses between its moves (Debug tab)
     },
 }
 

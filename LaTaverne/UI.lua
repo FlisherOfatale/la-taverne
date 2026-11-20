@@ -4091,6 +4091,13 @@ local function BuildOptionsPanel()
         { L["La Taverne messages in"], L["New groups, join requests, invitations... Chat windows you made yourself are listed too."] })
     chatWindow:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
 
+    -- The little lynx at the top of the window (on unless turned off).
+    rowY = Row()
+    local lynx = NewCheckbox(c, L["Show the lynx at the top of the window"], function(self)
+        ns.Lynx:SetEnabled(self:GetChecked())
+    end)
+    lynx:SetPoint("TOPLEFT", 12, rowY + 2)
+
     -- Dungeon names in the other languages (one switch per language, not the client's own).
     local langChecks = {}
     for _, lang in ipairs(ns.OtherDungeonLanguages()) do
@@ -4266,6 +4273,7 @@ local function BuildOptionsPanel()
         drawer:SetShown(ns.Minimap:HasDrawer())
         drawer:SetChecked(ns.db.inDrawer ~= false)
         glow:SetChecked(ns.db.minimapGlow ~= false)
+        lynx:SetChecked(ns.db.lynx ~= false)
         alertSound:SetChecked(ns.db.alertSound == true)
         requestSound:SetChecked(ns.db.requestSound ~= false)
         quiet:SetChecked(ns.db.quiet == true)
@@ -4584,6 +4592,9 @@ local function CreateMainFrame()
             portrait:SetTexture("Interface\\AddOns\\LaTaverne\\media\\lynx_logo")
         end
     end
+
+    -- The little lynx living in the band beside the portrait (right third), on every page.
+    ns.Lynx:Attach(frame, frame.Inset)
 
     local titleText = frame.TitleText or (frame.TitleContainer and frame.TitleContainer.TitleText)
     if frame.SetTitle then

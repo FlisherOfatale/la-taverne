@@ -30,6 +30,7 @@ AllyMap.lua
 
 Invites.lua
 Players.lua
+Lynx.lua
 
 UI.lua
 Minimap.lua

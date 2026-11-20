@@ -333,6 +333,8 @@ if GetLocale() == "frFR" then
     L["Two made-up players inviting, one on +1 and inv, one on +2 (auto-invite page)."] = "Deux joueurs inventés qui invitent, un sur +1 et inv, un sur +2 (page Invitation automatique)."
     L["Remove the fake inviters"] = "Retirer les faux inviteurs"
     L["Fake others inviting"] = "Simuler d'autres inviteurs"
+    L["Show the lynx at the top of the window"] = "Afficher le lynx en haut de la fenêtre"
+    L["Lynx: short pauses (to see all its moves quickly)"] = "Lynx : pauses courtes (pour voir tous ses gestes rapidement)"
     L["The game doesn't let addons write the Guild Info: you paste it yourself. This text is your whole Guild Info, with La Taverne's lines updated and the rest unchanged."] = "Le jeu ne laisse pas les addons écrire les informations de guilde : vous les collez vous-même. Ce texte, ce sont toutes vos informations de guilde, avec les lignes de La Taverne à jour et le reste inchangé."
     L["Copy it: Ctrl+C (it's already selected)."] = "Copiez-le : Ctrl+C (il est déjà sélectionné)."
     L["Open the test guild window (button above La Taverne's window)."] = "Ouvrez la fenêtre de la guilde de test (bouton au-dessus de la fenêtre de La Taverne)."

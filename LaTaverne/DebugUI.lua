@@ -524,6 +524,12 @@ function ns.BuildDebugPanel()
     ask:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 
+    -- The window's lynx: short pauses, to see all its moves without waiting (not faster moves).
+    local lynxFast = K.NewCheckbox(p, L["Lynx: short pauses (to see all its moves quickly)"], function(self)
+        ns.Lynx:SetFast(self:GetChecked())
+    end)
+    lynxFast:SetPoint("TOPLEFT", 4, -456)
+
     -- Leaving test mode
     local leave = K.NewButton(p, L["Leave test mode"], 160, 24)
     leave:SetPoint("BOTTOMLEFT", 8, 8)
@@ -534,6 +540,7 @@ function ns.BuildDebugPanel()
     function p:Refresh()
         guildText:SetText(L["Test guild: %s"]:format(ns.db.dev.guildName or "?"))
         gameChat:SetChecked(ns.db.dev.gameChat)
+        lynxFast:SetChecked(ns.db.dev.lynxFast)
         watch:SetText(ns.IsChatWatching() and L["Stop the chat watch"] or L["Start the chat watch"])
         msgLog:SetText(ns.Comm:IsLogging() and L["Stop the message log"] or L["Start the message log"])
         fakeRunners:SetText(ns.Invites:HasFakeRunners() and L["Remove the fake inviters"] or L["Fake others inviting"])
