@@ -29,6 +29,12 @@ function ns.Quiet()
     return (inside and (kind == "party" or kind == "raid")) and true or false
 end
 
+-- The gamepad UI is on. Then La Taverne doesn't open or close the game's windows: the gamepad
+-- manager follows them, and its protected calls from addon code get blocked (ADDON_ACTION_FORBIDDEN).
+function ns.GamepadUI()
+    return InputUtil and InputUtil.IsGamepadUIEnabled and InputUtil.IsGamepadUIEnabled() and true or false
+end
+
 -- La Taverne's sounds. kind: "group" (a new group alert, if its sound is on), "request" (my
 -- group: someone asks to join or accepts, if that sound is on), "notice" (invited, my
 -- availability ends), "posted" (I listed a group: the game's joining a queue sound). None while quiet.

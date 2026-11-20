@@ -430,6 +430,7 @@ if GetLocale() == "frFR" then
     L["No answer from %s: your request expired. You can ask again."] = "Pas de réponse de %s : votre demande a expiré. Vous pouvez redemander."
     L["No answer"] = "Pas de réponse"
     L["A newer La Taverne (%s) is in use. You have %s: ask for the new version, so everything keeps working together."] = "Une version plus récente de La Taverne (%s) est utilisée. Vous avez la %s : demandez la nouvelle version, pour que tout continue de fonctionner ensemble."
+    L["Close the password window with Cancel (B)."] = "Fermez la fenêtre du mot de passe avec Annuler (B)."
     L["(old version)"] = "(ancienne version)"
 
     -- Available players, Players page (0.17)
