@@ -299,6 +299,9 @@ local function SafeLink(kind, data, name)
         local ok, _, link = pcall(getInfo, "item:" .. data)
         if ok and type(link) == "string" and not IsSecret(link) and link:find("|Hitem:", 1, true) then return link end
     end
+    -- Achievements (WoW Forever's Legacy objectives, e.g. [Explore Eastern Kingdoms]): the game
+    -- has no achievement window to open, so the name in yellow, not a link.
+    if kind == "achievement" then return "|cffffff00[" .. name .. "]|r" end
     return "|c" .. (LINK_COLORS[kind] or "ff71d5ff") .. "|H" .. kind .. ":" .. data .. "|h[" .. name .. "]|h|r"
 end
 
@@ -312,8 +315,9 @@ local function SafeText(text)
         return "\1" .. #links .. "\2"
     end
     text = text:gsub("[\1\2]", "")
-    text = text:gsub("|c[^|]*|H(%a+):([%d:%-]*)|h%[([^%]|]*)%]|h|r", keep)
-    text = text:gsub("|H(%a+):([%d:%-]*)|h%[([^%]|]*)%]|h", keep)
+    -- (Link data: numbers, and for achievements the player's ID, letters too: Player-6933-005A8B24.)
+    text = text:gsub("|c[^|]*|H(%a+):([%w:%-]*)|h%[([^%]|]*)%]|h|r", keep)
+    text = text:gsub("|H(%a+):([%w:%-]*)|h%[([^%]|]*)%]|h", keep)
     text = text:gsub("|", "||")
     return (text:gsub("\1(%d+)\2", function(i) return links[tonumber(i)] end))
 end
