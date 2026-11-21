@@ -259,18 +259,16 @@ function Groups:GetFilters()
     return db.filters
 end
 
--- How many filters are on ("Hide groups in progress" counts as one).
+-- How many filters are on.
 function Groups:CountFilters()
     local f = self:GetFilters()
-    local n = (next(f.dungeons) and 1 or 0) + (f.role and 1 or 0) + (f.level and 1 or 0)
-    return n + (ns.db.hideRunning and 1 or 0)
+    return (next(f.dungeons) and 1 or 0) + (f.role and 1 or 0) + (f.level and 1 or 0)
 end
 
 function Groups:ClearFilters()
     local f = self:GetFilters()
     wipe(f.dungeons)
     f.role, f.level = nil, nil
-    ns.db.hideRunning = false
     Changed()
 end
 

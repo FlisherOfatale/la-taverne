@@ -1489,8 +1489,9 @@ local function InitBrowseRow(row, data)
         row.gold:SetPoint("BOTTOMRIGHT", 0, -1)
         BoxBackdrop(row.gold, { 1, 0.82, 0, 0.07 }, { 1, 0.82, 0, 1 })
         row.gold:SetFrameLevel(math.max(0, row.body:GetFrameLevel() - 1))
-        row.sep = CreateFrame("Frame", nil, row)
+        row.sep = CreateFrame("Button", nil, row)
         row.sep:SetAllPoints()
+        row.sep:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
         row.sep.text = NewLabel(row.sep, nil, "GameFontNormal")
         row.sep.text:SetPoint("BOTTOMLEFT", 8, 6)
         local line = row.sep:CreateTexture(nil, "ARTWORK")
@@ -1503,7 +1504,15 @@ local function InitBrowseRow(row, data)
         row.body:Hide()
         row.gold:Hide()
         row.sep:Show()
-        row.sep.text:SetText(data.text)
+        -- A part of the list that folds ("In progress or full"): the game's +/- icon, a click.
+        if data.onClick then
+            row.sep.text:SetText((data.open and "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
+                or "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t ") .. data.text)
+        else
+            row.sep.text:SetText(data.text)
+        end
+        row.sep:EnableMouse(data.onClick ~= nil)
+        row.sep:SetScript("OnClick", data.onClick)
         row:SetScript("OnUpdate", nil)
         return
     end
@@ -1931,12 +1940,13 @@ local function BuildGroupsPanel()
     local fp = CreateFrame("Frame", nil, p, "BackdropTemplate")
     fp:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, -2)
     fp:SetPoint("RIGHT", p, "RIGHT", -2, 0)
-    fp:SetHeight(66)
+    fp:SetHeight(42)
     -- Set apart from the roles bar above and the list below: a gold frame and a warmer tint.
     BoxBackdrop(fp, { 1, 0.82, 0, 0.12 }, { 1, 0.82, 0, 0.8 })
     p.filterPanel = fp
 
-    -- First line: three switches, short labels (the full meaning in their tooltips).
+    -- One line: two switches (short labels, the full meaning in their tooltips), the dungeons,
+    -- then "Show everything" on the right.
     local function FilterCheck(text, tip, get, set)
         local cb = NewCheckbox(fp, text, function(self) set(self:GetChecked()) end)
         cb:SetScript("OnEnter", function(self) ShowTooltip(self, { text, tip }) end)
@@ -1946,19 +1956,13 @@ local function BuildGroupsPanel()
     end
     fp.role = FilterCheck(L["Needs one of my roles"], L["Groups that need a role I can play"],
         function() return G:GetFilters().role == true end, function(on) G:SetFilter("role", on) end)
-    fp.role:SetPoint("TOPLEFT", 6, -4)
+    fp.role:SetPoint("LEFT", 6, 0) -- the line sits in the middle of the box
     fp.level = FilterCheck(L["At my level"], L["Dungeons at my level"],
         function() return G:GetFilters().level == true end, function(on) G:SetFilter("level", on) end)
     PlaceAfterLabel(fp.level, fp.role, 24)
-    fp.running = FilterCheck(L["Hide groups in progress"], L["Groups that are complete or already running don't show."],
-        function() return ns.db.hideRunning == true end, function(on) ns.db.hideRunning = on or nil UI:Refresh() end)
-    PlaceAfterLabel(fp.running, fp.level, 24)
 
-    -- Second line: the dungeons, in a dropdown of checkboxes (it scrolls, and stays open while
-    -- ticking), then "Show everything".
-    local dungeonsLabel = NewLabel(fp, L["Dungeons"])
-    dungeonsLabel:SetPoint("TOPLEFT", 12, -42)
-    -- Its text: "All dungeons", the one chosen, or "3 dungeons".
+    -- The dungeons, in a dropdown of checkboxes (it scrolls, and stays open while ticking), as
+    -- wide as the room left. Its text says it all: "All dungeons", the one chosen, or "3 dungeons".
     fp.dungeons = NewDungeonPicker(fp, 320, function()
         local names = {}
         for key in pairs(G:GetFilters().dungeons) do names[#names + 1] = ns.DungeonName(key) end
@@ -1972,15 +1976,16 @@ local function BuildGroupsPanel()
             for key in pairs(G:GetFilters().dungeons) do G:SetDungeonFilter(key, false) end
         end,
     })
-    fp.dungeons:SetPoint("LEFT", dungeonsLabel, "RIGHT", 12, 0)
     function fp:DungeonsText() self.dungeons:Update() end
     local clear = NewButton(fp, L["Show everything"], 140, 22)
-    clear:SetPoint("BOTTOMRIGHT", -8, 8)
+    clear:SetPoint("RIGHT", -8, 0)
+    PlaceAfterLabel(fp.dungeons, fp.level, 24)
+    fp.dungeons:SetPoint("RIGHT", clear, "LEFT", -12, 0)
     clear:SetScript("OnClick", function() G:ClearFilters() end)
     fp.clear = clear
 
     function fp:Refresh()
-        for _, cb in ipairs({ self.role, self.level, self.running }) do cb:SetChecked(cb.get()) end
+        for _, cb in ipairs({ self.role, self.level }) do cb:SetChecked(cb.get()) end
         self:DungeonsText()
         self.clear:SetEnabled(G:CountFilters() > 0)
     end
@@ -1998,7 +2003,7 @@ local function BuildGroupsPanel()
         if self.filtersShown == open then return end
         self.filtersShown = open
         fp:SetShown(open)
-        self.box:SetPoint("TOPLEFT", 0, open and -156 or -88)
+        self.box:SetPoint("TOPLEFT", 0, open and -132 or -88)
         if open then self.filters:LockHighlight() else self.filters:UnlockHighlight() end
     end
 
@@ -2029,8 +2034,7 @@ local function BuildGroupsPanel()
                 -- shown at the top
             elseif mineOrIn then
                 active[#active + 1] = { listing = l }
-            elseif (not ns.Groups:PassesFilters(l) or (ns.db.hideRunning and state == "running"))
-                and not (UI.focusGroup and UI.focusGroup.id == l.id) then
+            elseif not ns.Groups:PassesFilters(l) and not (UI.focusGroup and UI.focusGroup.id == l.id) then
                 filtered = filtered + 1
             elseif state ~= "running" and state ~= "full" then
                 active[#active + 1] = { listing = l }
@@ -2046,9 +2050,17 @@ local function BuildGroupsPanel()
             if #active > 0 then list[#list + 1] = { separator = true, text = format(L["Open groups (%d)"], openCount) } end
         end
         for _, entry in ipairs(active) do list[#list + 1] = entry end
+        -- In progress or full: folded unless opened (kept), or when a [View] link points in there.
         if #busy > 0 then
-            list[#list + 1] = { separator = true, text = format(L["In progress or full (%d)"], #busy) }
-            for _, entry in ipairs(busy) do list[#list + 1] = entry end
+            local open = ns.db.showBusy == true
+            for _, entry in ipairs(busy) do
+                if UI.focusGroup and entry.listing.id == UI.focusGroup.id then open = true end
+            end
+            list[#list + 1] = { separator = true, text = format(L["In progress or full (%d)"], #busy), open = open,
+                onClick = function() ns.db.showBusy = not open or nil UI:Refresh() end }
+            if open then
+                for _, entry in ipairs(busy) do list[#list + 1] = entry end
+            end
         end
         self.header:SetText(format(L["Open groups (%d)"], openCount))
         self.hidden:SetText(filtered > 0 and format(L["(%d hidden by the filters)"], filtered) or "")

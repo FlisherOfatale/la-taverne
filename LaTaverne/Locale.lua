@@ -428,7 +428,6 @@ if GetLocale() == "frFR" then
     L["I can play:"] = "Je peux jouer :"
     L["I'm a new player"] = "Je suis un nouveau joueur"
     L["Leaders see it with your request."] = "Les chefs le voient avec votre demande."
-    L["Hide groups in progress"] = "Masquer les groupes en cours"
     L["Look for players again"] = "Chercher à nouveau des joueurs"
     L["Your group is complete: it shows as in progress and takes no more requests."] = "Votre groupe est complet : il s'affiche comme en cours et n'accepte plus de demandes."
     L["Your group is complete: it now shows as in progress."] = "Votre groupe est complet : il s'affiche maintenant comme en cours."
@@ -695,7 +694,6 @@ if GetLocale() == "frFR" then
     -- Browse filters
     L["Needs one of my roles"] = "Besoin d'un de mes rôles"
     L["At my level"] = "À mon niveau"
-    L["Groups that are complete or already running don't show."] = "Les groupes complets ou déjà lancés ne s'affichent pas."
     L["All dungeons"] = "Tous les donjons"
     L["%d dungeons"] = "%d donjons"
     L["Availability"] = "Disponibilités"
