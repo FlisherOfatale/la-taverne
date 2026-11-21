@@ -38,7 +38,13 @@ local L = ns.L
 local HEARTBEAT = 60         -- leader re-sends the listing this often
 local NEW_GROUP_AGE = 90     -- a group posted this recently is announced as new
 local EXPIRE = 150           -- a listing without heartbeat for this long is gone (leader offline)
-local MAX_AGE = 2 * 60 * 60  -- groups still forming close after 2 hours (in progress: as long as the party)
+local MAX_AGE = 2 * 60 * 60  -- groups still forming close after 2 hours
+-- My group in progress and not looking for anyone: removed once I'm alone for ALONE_MAX (the
+-- others left after the run, time to re-invite someone), or RUNNING_MAX after it started (a
+-- party that went on questing together and forgot it).
+local ALONE_MAX = 5 * 60
+local RUNNING_MAX = 3 * 60 * 60
+local RUNNING_WARN = 10 * 60 -- the leader is told this long before RUNNING_MAX
 local REQUEST_TTL = 10 * 60  -- a join request nobody answered expires after 10 minutes
 local MAX_SIZE = 10
 local NOTE_MAX = 250
@@ -185,6 +191,36 @@ end
 
 function Groups:GetMine()
     return CharDB().listing
+end
+
+-- A group removed on its own (alone too long, in progress too long): its settings, kept so the
+-- create form opens filled in with them (UI), once. Per character, for half a day.
+local REPOST_KEEP = 12 * 60 * 60
+
+local function KeepForRepost(l)
+    local roles, myRole = {}, nil
+    local myKey = MyKey()
+    for key, m in pairs(l.members or {}) do
+        if key == myKey then myRole = m.role else roles[key] = m.role end
+    end
+    CharDB().repost = {
+        time = GetServerTime(), dungeon = l.dungeon, note = l.note, composition = CopyTable(l.composition or {}),
+        newbies = l.newbies, discord = l.discord, discordChannel = l.discordChannel, myRole = myRole, roles = roles,
+    }
+end
+
+function Groups:HasRepost()
+    local r = CharDB().repost
+    if r and GetServerTime() - (r.time or 0) > REPOST_KEEP then CharDB().repost = nil r = nil end
+    return r ~= nil and not self:GetMine()
+end
+
+-- The kept settings, once (nil when none).
+function Groups:TakeRepost()
+    if not self:HasRepost() then return nil end
+    local r = CharDB().repost
+    CharDB().repost = nil
+    return r
 end
 
 -- What I offer when joining a group, chosen at the top of the group list (per character):
@@ -912,7 +948,12 @@ local function UpdateState(l, from)
     if not Groups:IsComplete(l) then return end
     if not l.started then
         l.started = true
+        l.startedAt = GetServerTime() -- mine only (not sent): RUNNING_MAX
         ns.Print(L["Your group is complete: it now shows as in progress."])
+    elseif l.reopened then
+        -- Complete again after looking for a replacement: the 3 hours start over.
+        l.startedAt = GetServerTime()
+        l.runningWarned = nil
     end
     l.reopened = nil
 end
@@ -1628,6 +1669,41 @@ function Groups:OnLogin()
             Groups:Delist()
             ns.Print(L["Your group listing expired."])
             return
+        end
+        -- In progress and not looking for anyone: alone too long, or started too long ago.
+        if mine and mine.started and not Groups:IsOpen(mine) then
+            if IsInGroup() then
+                mine.aloneSince, mine.aloneWarned = nil, nil
+            else
+                mine.aloneSince = mine.aloneSince or now
+                -- Told once, right away (not when it was already too late at login).
+                if not mine.aloneWarned and now - mine.aloneSince < ALONE_MAX then
+                    mine.aloneWarned = true
+                    ns.Print("|cffff9900" .. L["Everyone left your party: your group will be removed from La Taverne in 5 minutes. To keep it, invite someone or look for a replacement (My group)."] .. "|r")
+                end
+            end
+            if mine.aloneSince and now - mine.aloneSince >= ALONE_MAX then
+                KeepForRepost(mine)
+                Groups:Delist()
+                ns.Print(L["Everyone left your party: your group was removed from La Taverne."] .. " "
+                    .. L["If you still need players, open La Taverne: the form is filled in."])
+                return
+            end
+            -- (Groups started before this rule have no start time: from when they were posted.)
+            local running = now - (mine.startedAt or mine.created)
+            if not mine.runningWarned and running >= RUNNING_MAX - RUNNING_WARN and running < RUNNING_MAX then
+                mine.runningWarned = true
+                ns.Print("|cffff9900" .. L["Your group has been in progress for almost 3 hours: it will be removed from La Taverne in 10 minutes. If you still need players after that, you can post it again in one click: the form will be filled in."] .. "|r")
+            end
+            if running >= RUNNING_MAX then
+                KeepForRepost(mine)
+                Groups:Delist()
+                ns.Print(L["Your group was in progress for 3 hours: it was removed from La Taverne."] .. " "
+                    .. L["If you still need players, open La Taverne: the form is filled in."])
+                return
+            end
+        elseif mine then
+            mine.aloneSince, mine.aloneWarned = nil, nil
         end
         -- Requests I left unanswered: expired, and the player is told.
         for key, p in pairs(mine and mine.pending or {}) do

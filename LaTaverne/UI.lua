@@ -2318,6 +2318,26 @@ local function BuildCreateForm(parent)
     end
 
     function f:Refresh()
+        -- My group removed on its own: its settings back in the form, ready to post again.
+        local r = UI.repost
+        if r then
+            UI.repost = nil
+            self.dungeon = r.dungeon
+            self.myRole = r.myRole or self.myRole
+            self.roleLoaded = true
+            wipe(self.extra)
+            wipe(self.partyRoles)
+            for key, role in pairs(r.roles or {}) do self.partyRoles[key] = role end
+            self.mixSize = ns.DungeonSize(r.dungeon)
+            self.mix = (r.composition and next(r.composition)) and CopyTable(r.composition)
+                or CopyTable(ns.Groups.DEFAULT_COMPOSITION[self.mixSize] or ns.Groups.DEFAULT_COMPOSITION[5])
+            self.newbies:SetChecked(r.newbies == true)
+            self.discord:SetChecked(r.discord == true)
+            self.discordChannel:SetText(r.discordChannel or "")
+            note:SetText(r.note or "")
+            note:ClearFocus()
+            self.error = nil
+        end
         -- "Create this group" from the Players page: start on that dungeon.
         if UI.presetDungeon then
             self.dungeon = UI.presetDungeon
@@ -4845,6 +4865,12 @@ end
 function UI:ShowPage(page)
     if not frame then CreateMainFrame() end
     if not sectionOf[page] then page = "browse" end
+    -- My group was removed on its own: the Groups section opens on the create form, filled in
+    -- with it (once).
+    if (page == "browse" or page == "mygroup") and frame:IsShown() and not self.fromLink and ns.Groups:HasRepost() then
+        self.repost = ns.Groups:TakeRepost()
+        page = "mygroup"
+    end
     if not PageAllowed(page) then page = Fallback(page) end
     if page ~= "browse" then self.focusGroup = nil end
     currentPage = page
@@ -4872,7 +4898,10 @@ end
 -- From the chat's [View] link: Browse, scrolled to that group (My group when it's mine).
 function UI:ShowGroup(id)
     if not frame then CreateMainFrame() end
+    -- (Not the filled-in form of a removed group of mine: the group the link points to.)
+    self.fromLink = true
     frame:Show()
+    C_Timer.After(0, function() self.fromLink = nil end)
     local mine = ns.Groups:GetMine()
     if mine and mine.id == id then
         self:ShowPage("mygroup")
