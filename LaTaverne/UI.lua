@@ -2498,8 +2498,9 @@ local function BuildManageView(parent)
     delist:SetPoint("TOPRIGHT", -2, -4)
     delist:SetScript("OnClick", function() ns.Groups:Delist() end)
     m.delist = delist
-    -- One short line in guild chat, on demand (at most once a minute): bottom left (away from
-    -- where Post group was, under the mouse right after posting).
+    -- A La Taverne line about the group for the players who run it (not guild chat), on demand,
+    -- at most once a minute: bottom left (away from where Post group was, under the mouse right
+    -- after posting).
     m.guildPost = NewButton(m, L["Announce in chat"], 180)
     m.guildPost:SetPoint("BOTTOMLEFT", 2, 2)
     m.guildPost:SetMotionScriptsWhileDisabled(true)
@@ -2507,7 +2508,7 @@ local function BuildManageView(parent)
     m.guildPost:SetScript("OnEnter", function(self)
         local mine = ns.Groups:GetMine()
         local lines = { L["Announce in chat"],
-            L["One short line in guild chat. The [La Taverne] tag tells it's listed in the addon. Once a minute at most."] }
+            L["A La Taverne message for the players who run it, in your guild and the allied guilds. Not in guild chat. Not in the group's first 5 minutes, then once every 5 minutes at most."] }
         local text = mine and ns.Groups:GuildPostText(mine)
         if text then lines[#lines + 1] = "|cffffffff" .. text .. "|r" end
         local ok, why = ns.Groups:CanPostInGuild()
@@ -2769,6 +2770,13 @@ local function BuildManageView(parent)
         local full = ns.Groups:CountTaken(mine) >= size
         self.nameInput:SetShown(not full)
         self.guildPost:SetEnabled(ns.Groups:CanPostInGuild())
+        -- Greyed for a while (the group's first 5 minutes, or since the last announce): back on
+        -- by itself.
+        local wait = ns.Groups:GuildPostWait()
+        if wait > 0 and not self.announceTimer then
+            self.announceTimer = true
+            C_Timer.After(wait + 0.2, function() self.announceTimer = nil UI:Refresh() end)
+        end
 
         -- Bottom line: not leading (stays), a recent error, or "posted" right after posting.
         if not ns.Groups:IsLeading() then
@@ -4267,6 +4275,13 @@ local function BuildOptionsPanel()
     end)
     alertSound:SetPoint("LEFT", alerts, "RIGHT", 12, 0)
     rowY = Row()
+    local announces = NewCheckbox(c, L["Show group announcements from leaders"], function(self)
+        ns.db.showAnnounces = self:GetChecked() and true or false
+    end)
+    announces:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(announces, { L["Show group announcements from leaders"],
+        L["A chat line when a group leader clicks Announce in chat, with a link to the group. Not affected by the new groups setting above."] })
+    rowY = Row()
     local requestSound = NewCheckbox(c, L["A sound when someone asks to join my group"], function(self)
         ns.db.requestSound = self:GetChecked() and true or false
     end)
@@ -4400,6 +4415,7 @@ local function BuildOptionsPanel()
         glow:SetChecked(ns.db.minimapGlow ~= false)
         lynxCheck:SetChecked(ns.db.lynx ~= false)
         alertSound:SetChecked(ns.db.alertSound == true)
+        announces:SetChecked(ns.db.showAnnounces ~= false)
         requestSound:SetChecked(ns.db.requestSound ~= false)
         quiet:SetChecked(ns.db.quiet == true)
         mapShare:SetChecked(ns.db.allyMap.share)

@@ -565,11 +565,17 @@ if GetLocale() == "frFR" then
     L["A chat line when a guild member posts a group. Fit me: it needs one of the roles you ticked in the group list, and the dungeon is at your level."] = "Une ligne dans le chat quand un membre de la guilde publie un groupe. Qui me conviennent : il a besoin d'un des rôles cochés dans la liste des groupes, et le donjon est à votre niveau."
     L["With a sound"] = "Avec un son"
     L["Post in guild chat"] = "Publier dans la guilde"
-    L["One short line in guild chat. The [La Taverne] tag tells it's listed in the addon. Once a minute at most."] = "Une ligne courte dans le canal de guilde. Le tag [La Taverne] indique que le groupe est dans l'addon. Une fois par minute au plus."
+    L["A La Taverne message for the players who run it, in your guild and the allied guilds. Not in guild chat. Not in the group's first 5 minutes, then once every 5 minutes at most."] = "Un message de La Taverne pour les joueurs qui l'utilisent, dans votre guilde et les guildes alliées. Pas dans le chat de guilde. Pas dans les 5 premières minutes du groupe, puis une fois toutes les 5 minutes au plus."
+    L["Everyone was just told about your group. You can announce it in %s."] = "Tout le monde vient d'être prévenu de votre groupe. Vous pourrez l'annoncer dans %s."
+    L["You can announce it again in %s."] = "Vous pourrez l'annoncer de nouveau dans %s."
+    L["%d min %02d s"] = "%d min %02d s"
+    L["%d s"] = "%d s"
+    L["%s is looking for %s: %s"] = "%s cherche %s : %s"
+    L["Show group announcements from leaders"] = "Afficher les annonces de groupe des chefs"
+    L["A chat line when a group leader clicks Announce in chat, with a link to the group. Not affected by the new groups setting above."] = "Une ligne dans le chat quand un chef de groupe clique sur Annoncer dans le chat, avec un lien vers le groupe. Indépendant du réglage des nouveaux groupes ci-dessus."
+    L["Announced to the players who run La Taverne:"] = "Annoncé aux joueurs qui utilisent La Taverne :"
     L["Only while the group is looking for players."] = "Seulement quand le groupe cherche des joueurs."
-    L["Wait %d s before posting again."] = "Attendez %d s avant de publier de nouveau."
     L["Debug mode: it goes to the test guild chat."] = "Mode débogage : elle va dans le chat de la guilde de test."
-    L["[La Taverne] LFM %s - %s"] = "[La Taverne] LFM %s - %s"
 
 
     -- Navigation and layout pass (0.10)

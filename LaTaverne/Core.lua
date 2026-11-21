@@ -166,6 +166,7 @@ end
 
 local DEFAULTS = {
     notify = true,    -- chat line when a new group is posted
+    showAnnounces = true, -- chat line when a leader clicks "Announce in chat"
     minimap = {},     -- LibDBIcon position and visibility
     chars = {},       -- per character: [fullName] = { listing = ... }
     allyChat = {

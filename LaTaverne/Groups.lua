@@ -721,18 +721,28 @@ local function DungeonWithRange(key)
     return ns.DungeonName(key) .. (range ~= "" and (" " .. range) or "")
 end
 
--- A new group, or (replacement) a group in progress looking for players again.
-local function AlertNewGroup(l, replacement)
+-- A new group, (replacement) a group in progress looking for players again, or (announce) the
+-- leader's "Announce in chat". New groups and replacements follow my alert setting; announces
+-- have their own on/off (Options). All: not from my ignore list, not when quiet.
+local function AlertNewGroup(l, replacement, announce)
     if ns.IsIgnored(l.leader) then return end
-    local mode = Groups:AlertMode()
-    -- Available players want a group: they hear about the ones that fit them, whatever the setting.
-    local P = ns.Players
-    if mode == "none" and P and P:IsActive() then mode = "fit" end
-    if mode == "none" or (mode == "fit" and not (Groups:FitsMe(l) and (not P or P:WantsDungeon(l.dungeon)))) then return end
+    if announce then
+        if ns.db.showAnnounces == false then return end
+    else
+        local mode = Groups:AlertMode()
+        -- Available players want a group: they hear about the ones that fit them, whatever the setting.
+        local P = ns.Players
+        if mode == "none" and P and P:IsActive() then mode = "fit" end
+        if mode == "none" or (mode == "fit" and not (Groups:FitsMe(l) and (not P or P:WantsDungeon(l.dungeon)))) then return end
+    end
     if ns.Quiet() then return end -- in a dungeon, a raid or combat (Options)
     local leader = l.leader .. (l.tag and (" [" .. l.tag .. "]") or "")
     local text
-    if replacement then
+    if announce then
+        local missing = Groups:MissingText(l)
+        text = format(L["%s is looking for %s: %s"], leader, missing ~= "" and missing or L["a player"],
+            DungeonWithRange(l.dungeon))
+    elseif replacement then
         local missing = Groups:MissingText(l)
         text = format(L["Replacement wanted: %s in %s by %s"], missing ~= "" and missing or L["a player"],
             DungeonWithRange(l.dungeon), leader)
@@ -743,12 +753,21 @@ local function AlertNewGroup(l, replacement)
     ns.Sound("group")
 end
 
--- Guild chat line, on demand (My group, "Post in guild chat"): short, e.g.
--- "[La Taverne] LFM 1 Tank, 2 DPS - Hall of Thanes". The tag says the group is listed in the
--- addon. At most once a minute, so a double click doesn't flood the chat. In debug mode it goes
--- to the test guild chat, never to the real guild.
-Groups.GUILD_POST_COOLDOWN = 60
+-- "Announce in chat" (My group), on demand: a La Taverne line for the players who run it, not a
+-- guild chat line. "Oylex is looking for 1 Tank, 2 DPS: Hall of Thanes 13-20 [View]", in their
+-- La Taverne messages, with the same filters as new group alerts. My guild, and the allied
+-- guilds (with a Guild Alliance every group is shown to them). Not in the first 5 minutes of
+-- the group (everyone just got the new group alert), then at most once every 5 minutes.
+-- (Test mode: the test channel, like every La Taverne message.)
+Groups.GUILD_POST_COOLDOWN = 300
+Groups.ANNOUNCE_AFTER = 300 -- seconds after posting (or looking for players again mid-run)
 local lastGuildPost
+
+-- "4 min 05 s", "35 s".
+local function MinSec(seconds)
+    if seconds >= 60 then return format(L["%d min %02d s"], math.floor(seconds / 60), seconds % 60) end
+    return format(L["%d s"], seconds)
+end
 
 function Groups:MissingText(l)
     local parts = {}
@@ -760,26 +779,42 @@ function Groups:MissingText(l)
     return table.concat(parts, ", ")
 end
 
+-- What the others will read (the button's tooltip), nil when nothing is missing.
 function Groups:GuildPostText(l)
     local missing = self:MissingText(l)
     if missing == "" then return nil end
-    return format(L["[La Taverne] LFM %s - %s"], missing, ns.DungeonName(l.dungeon))
+    return format(L["%s is looking for %s: %s"], l.leader, missing, DungeonWithRange(l.dungeon))
 end
 
--- Seconds before the next line can go out (0: now).
+-- Seconds left in the first minutes of my group (posted, or looking for players again).
+local function SinceAlertWait(l)
+    if not l then return 0 end
+    local from = math.max(l.created or 0, type(l.reopened) == "number" and l.reopened or 0)
+    return math.max(0, from + Groups.ANNOUNCE_AFTER - GetServerTime())
+end
+
+-- Seconds before the next announce can go out (0: now): the group's first minutes, or the
+-- wait after the last one.
 function Groups:GuildPostWait()
-    if not lastGuildPost then return 0 end
-    return math.max(0, math.ceil(lastGuildPost + self.GUILD_POST_COOLDOWN - GetTime()))
+    local wait = SinceAlertWait(self:GetMine())
+    if lastGuildPost then
+        wait = math.max(wait, math.ceil(lastGuildPost + self.GUILD_POST_COOLDOWN - GetTime()))
+    end
+    return wait
 end
 
--- Can I post my group's line now? Returns ok, reason.
+-- Can I announce my group now? Returns ok, reason.
 function Groups:CanPostInGuild()
     local l = self:GetMine()
     if not l or not self:IsOpen(l) or not self:GuildPostText(l) then
         return false, L["Only while the group is looking for players."]
     end
+    local first = SinceAlertWait(l)
+    if first > 0 then
+        return false, format(L["Everyone was just told about your group. You can announce it in %s."], MinSec(first))
+    end
     local wait = self:GuildPostWait()
-    if wait > 0 then return false, format(L["Wait %d s before posting again."], wait) end
+    if wait > 0 then return false, format(L["You can announce it again in %s."], MinSec(wait)) end
     return true
 end
 
@@ -789,14 +824,14 @@ function Groups:PostInGuild()
     local text = self:GuildPostText(l)
     lastGuildPost = GetTime()
     C_Timer.After(self.GUILD_POST_COOLDOWN + 0.1, function() if ns.UI then ns.UI:Refresh() end end)
-    -- The line reaches the allied guilds too (shared guild chat) only when the group is shared.
-    local relay = self:IsShared(l)
-    if ns.Guild:IsSandbox() then
-        ns.AllyChat:SendTestGuildChat(text, not relay)
-    elseif IsInGuild() then
-        if not relay then ns.AllyChat:SkipRelay(text) end
-        SendChatMessage(text, "GUILD")
+    -- The others need the group's latest state with it: the listing goes first.
+    ns.Comm:Send("LIST", Public(l))
+    ns.Comm:Send("ANNOUNCE", { id = l.id })
+    if self:IsShared(l) and ns.Alliance:IsActive() then
+        ns.Comm:SendAlly("LIST", Public(l))
+        ns.Comm:SendAlly("ANNOUNCE", { id = l.id })
     end
+    ns.Print(L["Announced to the players who run La Taverne:"] .. " " .. text)
     if ns.UI then ns.UI:Refresh() end
 end
 
@@ -1291,6 +1326,15 @@ function Groups:ChangeMyRole(id, role)
 end
 
 -- Message handlers -------------------------------------------------------------------
+
+-- A leader's "Announce in chat": their group's line in my La Taverne messages (alert filters).
+OnBoth("ANNOUNCE", function(sender, p, isSelf, scope)
+    if isSelf or type(p) ~= "table" or type(p.id) ~= "string" then return end
+    local l = listings[p.id]
+    if not l or ns.NameKey(l.leader) ~= ns.NameKey(sender) then return end
+    if not Groups:IsOpen(l) then return end
+    AlertNewGroup(l, false, true)
+end)
 
 OnBoth("LIST", function(sender, p, isSelf, scope)
     if isSelf then return end
