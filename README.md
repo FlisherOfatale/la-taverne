@@ -48,7 +48,7 @@ Everything works inside your own guild right away. Linking allied guilds is done
 ### Shared guild chat
 
 - What you type in guild chat also reaches the allied guilds, and theirs reaches you, in your usual guild chat (same colors, timestamps, clickable names) and in the guild window.
-- Allied lines start with the lynx and the guild's tag (the tag can be turned off).
+- Allied lines start with the lynx and the guild's tag (each can be turned off, so allied lines can look like your guild's).
 - Item, spell and quest links stay real links. A line that arrives late says when it was typed.
 - Allied players are checked: their own guild confirms they belong to it. A player who isn't confirmed yet is marked, and an impostor's messages are dropped.
 

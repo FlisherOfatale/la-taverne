@@ -130,6 +130,7 @@ if GetLocale() == "frFR" then
     L["Guild Alliance"] = "Alliance de guildes"
     L["Share guild chat with the allied guilds"] = "Partager le chat de guilde avec les guildes alliées"
     L["Show the guild tag on allied messages"] = "Afficher le tag de la guilde sur les messages alliés"
+    L["Show the lynx on allied messages"] = "Afficher le lynx sur les messages alliés"
     L["Allied with: %s"] = "Alliée avec : %s"
     L["No allied guild set up. Officers set it up in the Officers tab."] = "Aucune guilde alliée configurée. Les officiers la configurent dans l'onglet Officiers."
     L["Guild Alliance: off."] = "Alliance de guildes : désactivée."

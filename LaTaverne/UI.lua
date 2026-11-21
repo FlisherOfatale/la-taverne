@@ -4218,8 +4218,8 @@ local function BuildOptionsPanel()
         L["Those who run La Taverne and share their position, with their guild's tag."], L["Only with a Guild Alliance."] })
     EndSection()
 
-    -- Shared guild chat: always on. The tag option, and (only while GuildUnion is loaded too)
-    -- a switch to stop it, so allied lines don't show twice --------------------------------
+    -- Shared guild chat: always on. The lynx and tag options, and (only while GuildUnion is
+    -- loaded too) a switch to stop it, so allied lines don't show twice --------------------
     local chatHeader = Section(L["Shared guild chat"])
     local chatInfo = NewInfoIcon(c, { L["Shared guild chat"],
         L["Messages from the allied guilds show up in your guild chat, and yours in theirs."],
@@ -4227,6 +4227,11 @@ local function BuildOptionsPanel()
     chatInfo:SetPoint("LEFT", chatHeader, "RIGHT", 6, 0)
     local chatOff = NewLabel(c, L["Only with a Guild Alliance."], "GameFontDisableSmall")
     chatOff:SetPoint("LEFT", chatInfo, "RIGHT", 10, 0)
+    rowY = Row()
+    local allyLynx = NewCheckbox(c, L["Show the lynx on allied messages"], function(self)
+        ns.db.allyChat.showLynx = self:GetChecked() and true or false
+    end)
+    allyLynx:SetPoint("TOPLEFT", 12, rowY + 2)
     rowY = Row()
     local allyTag = NewCheckbox(c, L["Show the guild tag on allied messages"], function(self)
         ns.db.allyChat.showTag = self:GetChecked() and true or false
@@ -4237,6 +4242,7 @@ local function BuildOptionsPanel()
     local allyChat = NewCheckbox(c, L["Share guild chat with the allied guilds"], function(self)
         ns.db.allyChat.enabled = self:GetChecked() and true or false
         allyTag:SetEnabled(ns.db.allyChat.enabled)
+        allyLynx:SetEnabled(ns.db.allyChat.enabled)
     end)
     allyChat:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(allyChat, { L["Share guild chat with the allied guilds"],
@@ -4302,8 +4308,10 @@ local function BuildOptionsPanel()
         c:SetHeight(contentHeight - (ns.AllyChat:CanTurnOff() and 0 or OPTION_ROW))
         allyChat:SetChecked(ns.db.allyChat.enabled)
         allyTag:SetChecked(ns.db.allyChat.showTag)
+        allyLynx:SetChecked(ns.db.allyChat.showLynx ~= false)
         allyChat:SetEnabled(active)
         allyTag:SetEnabled(active and ns.AllyChat.Enabled())
+        allyLynx:SetEnabled(active and ns.AllyChat.Enabled())
 
         local errors = ns.Errors:Count()
         showErrors:SetEnabled(errors > 0)

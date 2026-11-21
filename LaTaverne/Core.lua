@@ -163,6 +163,7 @@ local DEFAULTS = {
     allyChat = {
         enabled = true,  -- share guild chat with the allied guilds
         showTag = true,  -- allied guild's tag in front of the name
+        showLynx = true, -- the lynx in front of allied lines
     },
     allyLog = {},
     allyMap = {       -- guild and allied players on the world map (AllyMap.lua)

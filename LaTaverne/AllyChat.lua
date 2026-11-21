@@ -75,13 +75,16 @@ local function GuildFrames()
 end
 
 -- In front of an allied player's name: the Nation du Québec lynx (a line shared by La Taverne),
--- then the guild's tag if that option is on.
+-- then the guild's tag; each has its option, so allied lines can look like guild ones.
 local function TagText(tag)
     if not tag then return "" end
     -- (also AllyChat.TagText, for the test guild window)
-    local lynx = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
-    if not ns.db.allyChat.showTag then return lynx end
-    return lynx .. TAG_COLOR .. "[" .. tag .. "]|r "
+    local text = ""
+    if ns.db.allyChat.showLynx ~= false then
+        text = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
+    end
+    if ns.db.allyChat.showTag then text = text .. TAG_COLOR .. "[" .. tag .. "]|r " end
+    return text
 end
 
 AllyChat.TagText = TagText

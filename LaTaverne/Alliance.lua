@@ -397,7 +397,7 @@ ns.commands.ally = function()
         end
     end
     local s = ns.AllyChat.stats
-    L("allied chat", ns.AllyChat.Enabled() and "on" or "off", "GuildUnion", ns.AllyChat:CanTurnOff() and "loaded" or "no", "tag", ns.db.allyChat.showTag and "on" or "off",
+    L("allied chat", ns.AllyChat.Enabled() and "on" or "off", "GuildUnion", ns.AllyChat:CanTurnOff() and "loaded" or "no", "tag", ns.db.allyChat.showTag and "on" or "off", "lynx", ns.db.allyChat.showLynx ~= false and "on" or "off",
         "lines shown: handler", s.handler, "chattynator", s.chattynator or 0, "tagged", s.tagged, "fallback", s.fallback,
         "guild window", ns.AllyChat:IsWindowHooked() and "hooked" or "not loaded yet", "saved lines", #ns.db.allyLog)
     if s.lastError then L("last handler error", s.lastError) end
