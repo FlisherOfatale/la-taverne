@@ -3957,9 +3957,11 @@ local function WithTooltip(widget, lines)
     return widget
 end
 
--- The chat windows a line can go to: the main one, then each other window that exists.
+-- The chat windows a line can go to: the main one, then each other window that exists
+-- (only the main one with Chattynator: its tabs choose, see the Options note).
 local function ChatWindowChoices()
     local out = { { text = L["Main chat window"], value = 0 } }
+    if ns.UsingChattynator() then return out end
     for i = 2, (NUM_CHAT_WINDOWS or 10) do
         local name, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(i)
         if name and name ~= "" and (shown or docked) then out[#out + 1] = { text = name, value = i } end
@@ -4090,6 +4092,12 @@ local function BuildOptionsPanel()
         end,
         { L["La Taverne messages in"], L["New groups, join requests, invitations... Chat windows you made yourself are listed too."] })
     chatWindow:SetPoint("TOPLEFT", CONTROL_X, rowY + 2)
+    -- With Chattynator: greyed, and where to choose instead.
+    local chattyInfo = NewInfoIcon(c, { L["La Taverne messages in"],
+        L["Chattynator is installed: its tabs choose what they show. To get La Taverne's lines in a tab, right-click the tab, Tab Settings, then Add-ons: tick La Taverne. Untick it in the other tabs to see them only there."] })
+    chattyInfo:SetPoint("LEFT", chatWindow, "RIGHT", 8, 0)
+    local chattyNote = NewLabel(c, L["Set in Chattynator's tabs"], "GameFontDisableSmall")
+    chattyNote:SetPoint("LEFT", chattyInfo, "RIGHT", 6, 0)
 
     -- The little lynx at the top of the window (on unless turned off).
     rowY = Row()
@@ -4277,6 +4285,12 @@ local function BuildOptionsPanel()
         for _, dd in ipairs({ scale, chatWindow, alerts }) do
             if dd.GenerateMenu then dd:GenerateMenu() end
         end
+        local chatty = ns.UsingChattynator()
+        chatWindow:SetEnabled(not chatty)
+        chatWindow.text:SetFontObject(chatty and "GameFontDisable" or "GameFontHighlight")
+        chatWindow.arrow:SetDesaturated(chatty)
+        chattyInfo:SetShown(chatty)
+        chattyNote:SetShown(chatty)
         minimap:SetChecked(not ns.db.minimap.hide)
         drawer:SetShown(ns.Minimap:HasDrawer())
         drawer:SetChecked(ns.db.inDrawer ~= false)

@@ -109,6 +109,8 @@ if GetLocale() == "frFR" then
     L["Window size"] = "Taille de la fenêtre"
     L["Recenter the window"] = "Recentrer la fenêtre"
     L["La Taverne messages in"] = "Messages de La Taverne dans"
+    L["Set in Chattynator's tabs"] = "Réglé dans les onglets de Chattynator"
+    L["Chattynator is installed: its tabs choose what they show. To get La Taverne's lines in a tab, right-click the tab, Tab Settings, then Add-ons: tick La Taverne. Untick it in the other tabs to see them only there."] = "Chattynator est installé : ce sont ses onglets qui choisissent ce qu'ils affichent. Pour voir les messages de La Taverne dans un onglet, faites un clic droit sur l'onglet, Paramètres de l'onglet, puis Add-ons : cochez La Taverne. Décochez-le dans les autres onglets pour ne les voir que là."
     L["Main chat window"] = "Fenêtre de discussion principale"
     L["La Taverne messages show here."] = "Les messages de La Taverne s'affichent ici."
     L["New groups, join requests, invitations... Chat windows you made yourself are listed too."] = "Nouveaux groupes, demandes, invitations... Les fenêtres de discussion que vous avez créées sont aussi proposées."

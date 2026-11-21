@@ -3,10 +3,18 @@ local ADDON, ns = ...
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 ns.version = (GetMeta and GetMeta(ADDON, "Version")) or "?"
 
--- The chat window chosen in Options (its number), when it still exists; nil: the main one.
+-- Chattynator replaces the chat windows with its own and only collects the lines written to the
+-- main one: its tabs pick what they show (a tab's settings, Add-ons).
+function ns.UsingChattynator()
+    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+    return loaded and loaded("Chattynator") and true or false
+end
+
+-- The chat window chosen in Options (its number), when it still exists; nil: the main one
+-- (always with Chattynator: a line written to another window would be lost).
 function ns.ChatWindow()
     local i = ns.db and ns.db.chatWindow
-    if not i or not GetChatWindowInfo then return nil end
+    if not i or not GetChatWindowInfo or ns.UsingChattynator() then return nil end
     local name, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(i)
     local f = _G["ChatFrame" .. i]
     if f and f.AddMessage and name and name ~= "" and (shown or docked) then return f end
