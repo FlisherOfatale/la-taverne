@@ -84,12 +84,12 @@ Linking guilds is done once by an officer of each guild:
 
 ### Options
 
-Window size, the chat window for La Taverne's lines, the minimap button and its glow, which new groups to be told about, sounds, **Quiet in dungeons, raids and combat** (no alerts and no sounds there), dungeon names in the other language (English / French) in tooltips, the map, and the shared chat's tag. **Error report** is at the bottom.
+Window size, the chat window for La Taverne's lines, the minimap button and its glow, which new groups to be told about, sounds, **Quiet in dungeons, raids and combat** (no alerts and no sounds there), dungeon names in the other language (English / French) in tooltips, the map, the lynx at the top of the window, and the lynx and tag on allied chat lines. **Error report** is at the bottom.
 
 ### Works with
 
 - **OpenMap:** the dots also show on OpenMap's map, at any zoom. Its menu gets La Taverne's two map switches, and a player who already shares through OpenMap doesn't get a second dot.
-- **Chattynator:** allied guild chat shows in Chattynator's windows like your own guild's.
+- **Chattynator:** allied guild chat shows in Chattynator's windows like your own guild's. To choose the tab for La Taverne's own messages, use the tab's settings in Chattynator (Add-ons).
 - **GuildUnion:** **Import > From GuildUnion** copies its guilds and tags, and both addons' lines fit side by side in the Guild Info. While both are installed, keep only one of them sharing guild chat (in La Taverne: **Options**), or allied lines show twice.
 - **Controller (gamepad) interface:** La Taverne's menus and confirmation windows work with it, without "action blocked" errors.
 - **BugSack / BugGrabber:** La Taverne's errors also go to its own error report.
@@ -156,7 +156,7 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 ### Chat de guilde partagé
 
 - Ce que vous écrivez dans le chat de guilde arrive aussi aux guildes alliées, et le leur vous arrive, dans votre chat de guilde habituel (mêmes couleurs, horodatage, noms cliquables) et dans la fenêtre de guilde.
-- Les lignes des alliés commencent par le lynx et le tag de leur guilde (le tag peut être retiré).
+- Les lignes des alliés commencent par le lynx et le tag de leur guilde (chacun peut être retiré, pour que les lignes alliées ressemblent à celles de votre guilde).
 - Les liens d'objets, de sorts et de quêtes restent de vrais liens. Une ligne qui arrive en retard indique quand elle a été écrite.
 - Les joueurs alliés sont vérifiés : leur propre guilde confirme qu'ils en font partie. Un joueur pas encore confirmé est signalé, et les messages d'un imposteur sont ignorés.
 
@@ -192,12 +192,12 @@ Le lien entre les guildes se fait une fois, par un officier de chaque guilde :
 
 ### Options
 
-Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de la minicarte et son halo, les nouveaux groupes à signaler, les sons, **Silencieux en donjon, en raid et en combat** (ni alerte ni son), le nom des donjons dans l'autre langue (anglais / français) dans les infobulles, la carte, et le tag du chat partagé. Le **Rapport d'erreurs** est en bas.
+Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de la minicarte et son halo, les nouveaux groupes à signaler, les sons, **Silencieux en donjon, en raid et en combat** (ni alerte ni son), le nom des donjons dans l'autre langue (anglais / français) dans les infobulles, la carte, le lynx en haut de la fenêtre, et le lynx et le tag sur les lignes des alliés. Le **Rapport d'erreurs** est en bas.
 
 ### Compatible avec
 
 - **OpenMap :** les points s'affichent aussi sur la carte d'OpenMap, à tous les niveaux de zoom. Son menu reçoit les deux options de carte de La Taverne, et un joueur qui partage déjà sa position par OpenMap n'a pas de deuxième point.
-- **Chattynator :** le chat des guildes alliées s'affiche dans les fenêtres de Chattynator comme celui de votre guilde.
+- **Chattynator :** le chat des guildes alliées s'affiche dans les fenêtres de Chattynator comme celui de votre guilde. Pour choisir l'onglet des messages de La Taverne, passez par les paramètres de l'onglet dans Chattynator (Add-ons).
 - **GuildUnion :** **Importer > Depuis GuildUnion** reprend ses guildes et ses tags, et les lignes des deux addons tiennent ensemble dans les infos de guilde. Tant que les deux sont installés, ne laissez qu'un seul des deux partager le chat de guilde (dans La Taverne : **Options**), sinon les lignes alliées s'affichent deux fois.
 - **Interface manette :** les menus et les fenêtres de confirmation de La Taverne fonctionnent avec elle, sans erreurs « action bloquée ».
 - **BugSack / BugGrabber :** les erreurs de La Taverne vont aussi dans son propre rapport d'erreurs.
