@@ -2436,25 +2436,6 @@ local function BuildManageView(parent)
     delist:SetPoint("TOPRIGHT", -2, -4)
     delist:SetScript("OnClick", function() ns.Groups:Delist() end)
     m.delist = delist
-    -- One short line in guild chat, on demand (at most once a minute): bottom left (away from
-    -- where Post group was, under the mouse right after posting).
-    m.guildPost = NewButton(m, L["Announce in chat"], 180)
-    m.guildPost:SetPoint("BOTTOMLEFT", 2, 2)
-    m.guildPost:SetMotionScriptsWhileDisabled(true)
-    m.guildPost:SetScript("OnClick", function() ns.Groups:PostInGuild() end)
-    m.guildPost:SetScript("OnEnter", function(self)
-        local mine = ns.Groups:GetMine()
-        local lines = { L["Announce in chat"],
-            L["One short line in guild chat. The [La Taverne] tag tells it's listed in the addon. Once a minute at most."] }
-        local text = mine and ns.Groups:GuildPostText(mine)
-        if text then lines[#lines + 1] = "|cffffffff" .. text .. "|r" end
-        local ok, why = ns.Groups:CanPostInGuild()
-        if not ok then lines[#lines + 1] = "|cffff4040" .. why .. "|r" end
-
-        ShowTooltip(self, lines)
-    end)
-    m.guildPost:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
     m.title = NewLabel(m, nil, "GameFontNormalLarge")
     m.titleHit = NewDungeonHover(m, m.title)
     m.title:SetPoint("TOPLEFT", 8, -8)
@@ -2519,7 +2500,7 @@ local function BuildManageView(parent)
 
     -- Bottom line: errors (red, a few seconds), or "Group posted" right after posting (green).
     m.message = NewLabel(m, nil, "GameFontHighlightSmall")
-    m.message:SetPoint("LEFT", m.guildPost, "RIGHT", 16, 0)
+    m.message:SetPoint("BOTTOMLEFT", m, "BOTTOMLEFT", 8, 8)
     m.message:SetPoint("RIGHT", m, "RIGHT", -8, 0)
     m.message:SetJustifyH("LEFT")
     local function ShowError(text)
@@ -2653,7 +2634,7 @@ local function BuildManageView(parent)
         self.requestsHeader:SetPoint("TOPLEFT", 8, after - 14)
         self.box:ClearAllPoints()
         self.box:SetPoint("TOPLEFT", 0, after - 34)
-        self.box:SetPoint("BOTTOMRIGHT", -20, 30) -- clear of "Announce in chat" below
+        self.box:SetPoint("BOTTOMRIGHT", -20, 30) -- clear of the bottom line (errors) below
     end
     m.empty:SetPoint("TOP", m.box, "TOP", 0, -16)
 
@@ -2688,7 +2669,6 @@ local function BuildManageView(parent)
 
         local full = ns.Groups:CountTaken(mine) >= size
         self.nameInput:SetShown(not full)
-        self.guildPost:SetEnabled(ns.Groups:CanPostInGuild())
 
         -- Bottom line: not leading (stays), a recent error, or "posted" right after posting.
         if not ns.Groups:IsLeading() then
