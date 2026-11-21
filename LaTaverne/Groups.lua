@@ -743,7 +743,13 @@ local function AlertNewGroup(l, replacement)
     ns.Sound("group")
 end
 
--- The roles still missing, e.g. "1 Tank, 2 DPS".
+-- Guild chat line, on demand (My group, "Post in guild chat"): short, e.g.
+-- "[La Taverne] LFM 1 Tank, 2 DPS - Hall of Thanes". The tag says the group is listed in the
+-- addon. At most once a minute, so a double click doesn't flood the chat. In debug mode it goes
+-- to the test guild chat, never to the real guild.
+Groups.GUILD_POST_COOLDOWN = 60
+local lastGuildPost
+
 function Groups:MissingText(l)
     local parts = {}
     local missing = self:MissingRoles(l)
@@ -752,6 +758,46 @@ function Groups:MissingText(l)
         if n > 0 then parts[#parts + 1] = n .. " " .. ns.RoleLabel(role) end
     end
     return table.concat(parts, ", ")
+end
+
+function Groups:GuildPostText(l)
+    local missing = self:MissingText(l)
+    if missing == "" then return nil end
+    return format(L["[La Taverne] LFM %s - %s"], missing, ns.DungeonName(l.dungeon))
+end
+
+-- Seconds before the next line can go out (0: now).
+function Groups:GuildPostWait()
+    if not lastGuildPost then return 0 end
+    return math.max(0, math.ceil(lastGuildPost + self.GUILD_POST_COOLDOWN - GetTime()))
+end
+
+-- Can I post my group's line now? Returns ok, reason.
+function Groups:CanPostInGuild()
+    local l = self:GetMine()
+    if not l or not self:IsOpen(l) or not self:GuildPostText(l) then
+        return false, L["Only while the group is looking for players."]
+    end
+    local wait = self:GuildPostWait()
+    if wait > 0 then return false, format(L["Wait %d s before posting again."], wait) end
+    return true
+end
+
+function Groups:PostInGuild()
+    if not self:CanPostInGuild() then return end
+    local l = self:GetMine()
+    local text = self:GuildPostText(l)
+    lastGuildPost = GetTime()
+    C_Timer.After(self.GUILD_POST_COOLDOWN + 0.1, function() if ns.UI then ns.UI:Refresh() end end)
+    -- The line reaches the allied guilds too (shared guild chat) only when the group is shared.
+    local relay = self:IsShared(l)
+    if ns.Guild:IsSandbox() then
+        ns.AllyChat:SendTestGuildChat(text, not relay)
+    elseif IsInGuild() then
+        if not relay then ns.AllyChat:SkipRelay(text) end
+        SendChatMessage(text, "GUILD")
+    end
+    if ns.UI then ns.UI:Refresh() end
 end
 
 

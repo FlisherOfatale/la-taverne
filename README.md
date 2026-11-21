@@ -36,6 +36,7 @@ Everything works inside your own guild right away. Linking allied guilds is done
 - **Ask to join** with every role you can play. The leader accepts you as one of them, and La Taverne sends the party invite. Requests wait while the leader is offline and are sent again when they're back.
 - **My group:** invite players by name (with autocomplete), follow requests and members, and change roles. If someone leaves during the run, **Find a replacement** opens the group to requests again.
 - **Alerts** in the chat window you choose, with a sound if you want: a new group that fits you, or a group in progress looking for a replacement. **[View]** opens the list on that group and makes it glow for a moment.
+- **Announce in chat** posts one short line in guild chat ("LFM 1 Tank - ...") for players without the addon.
 - Passing the party lead hands your group over to the new leader if they run La Taverne.
 
 ### Availability
@@ -143,6 +144,7 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 - **Demandez à rejoindre** avec tous les rôles que vous pouvez jouer. Le chef vous accepte dans l'un d'eux, et La Taverne envoie l'invitation de groupe. Les demandes attendent si le chef est hors ligne, et repartent à son retour.
 - **Mon groupe :** invitez des joueurs par leur nom (avec autocomplétion), suivez demandes et membres, et changez les rôles. Si quelqu'un part en cours de route, **Chercher un remplaçant** rouvre le groupe aux demandes.
 - **Alertes** dans la fenêtre de chat de votre choix, avec un son si vous voulez : un nouveau groupe qui vous convient, ou un groupe en cours qui cherche un remplaçant. **[Voir]** ouvre la liste sur ce groupe et le fait briller un instant.
+- **Annoncer dans le chat** publie une courte ligne dans le chat de guilde (« LFM 1 Tank - ... ») pour les joueurs sans l'addon.
 - En passant le chef du groupe, votre groupe passe au nouveau chef s'il utilise La Taverne.
 
 ### Disponibilités

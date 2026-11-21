@@ -564,6 +564,12 @@ if GetLocale() == "frFR" then
     L["None"] = "Aucun"
     L["A chat line when a guild member posts a group. Fit me: it needs one of the roles you ticked in the group list, and the dungeon is at your level."] = "Une ligne dans le chat quand un membre de la guilde publie un groupe. Qui me conviennent : il a besoin d'un des rôles cochés dans la liste des groupes, et le donjon est à votre niveau."
     L["With a sound"] = "Avec un son"
+    L["Post in guild chat"] = "Publier dans la guilde"
+    L["One short line in guild chat. The [La Taverne] tag tells it's listed in the addon. Once a minute at most."] = "Une ligne courte dans le canal de guilde. Le tag [La Taverne] indique que le groupe est dans l'addon. Une fois par minute au plus."
+    L["Only while the group is looking for players."] = "Seulement quand le groupe cherche des joueurs."
+    L["Wait %d s before posting again."] = "Attendez %d s avant de publier de nouveau."
+    L["Debug mode: it goes to the test guild chat."] = "Mode débogage : elle va dans le chat de la guilde de test."
+    L["[La Taverne] LFM %s - %s"] = "[La Taverne] LFM %s - %s"
 
 
     -- Navigation and layout pass (0.10)
@@ -729,6 +735,7 @@ if GetLocale() == "frFR" then
     L["You're in %s's group (%s)."] = "Vous êtes dans le groupe de %s (%s)."
     L["Tell the guild you want a group: leaders see your roles and the dungeons you want, and can invite you."] = "Dites à la guilde que vous cherchez un groupe : les chefs voient vos rôles et les donjons que vous voulez, et peuvent vous inviter."
     L["Choose at least one dungeon, or any dungeon at my level."] = "Choisissez au moins un donjon, ou n'importe quel donjon à mon niveau."
+    L["Announce in chat"] = "Annoncer dans le chat"
     L["Group posted: the guild sees it in Groups."] = "Groupe publié : la guilde le voit dans Groupes."
     L["Members (%d/%d)"] = "Membres (%d/%d)"
     L["Requests"] = "Demandes"

@@ -375,11 +375,23 @@ local function Relay(text)
     ns.Comm:SendAlly("CHAT", MyPayload(text), "ALERT")
 end
 
+-- A line La Taverne itself sends to guild chat that must stay in my guild (a group shown to my
+-- guild only): the next send of that exact text isn't relayed.
+local skipText
+function AllyChat:SkipRelay(text)
+    skipText = text
+    C_Timer.After(2, function() if skipText == text then skipText = nil end end)
+end
+
 local lastSig, lastTime = nil, 0
 local function OnSend(text, chatType)
     if ns.Guild:IsSandbox() then return end -- never touch the real guild chat in sandbox
     if type(text) ~= "string" or IsSecret(text) or text == "" or type(chatType) ~= "string" then return end
     if chatType:upper() ~= "GUILD" then return end
+    if skipText and text == skipText then
+        lastSig, lastTime = text, GetTime() -- the second send function of the same message too
+        return
+    end
     -- Both send functions can fire for one message.
     local now = GetTime()
     if text == lastSig and now - lastTime < 0.2 then return end
