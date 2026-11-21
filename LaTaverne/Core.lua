@@ -520,14 +520,18 @@ SlashCmdList.LATAVERNE = function(msg)
     else
         ns.Print("v" .. ns.version .. " - commands:")
         ns.Print("/taverne - open or close the window")
-        ns.Print("/taverne dev - test mode (sandbox) status and settings")
-        ns.Print("/taverne ally - allied guilds: what was read from the guild info")
-        ns.Print("/taverne g <text> - fake guild chat (test mode)")
-        ns.Print("/taverne map - positions on the map: what's shared and shown")
-        ns.Print("/taverne test [all|env|api|names|guild|chan] - run diagnostics")
-        ns.Print("/taverne who <name> - look a name up in the guild roster")
         ns.Print("/taverne autoinvite - turn keyword auto-invite on or off")
         ns.Print("/taverne errors [clear] - error report to send to the author")
-        ns.Print("/taverne copy - reopen the output window")
+        -- Testing and diagnostics: listed only in test mode (they still work outside it).
+        if ns.db and ns.db.dev and ns.db.dev.sandbox then
+            ns.Print("Test mode:")
+            ns.Print("/taverne dev - test mode (sandbox) status and settings")
+            ns.Print("/taverne g <text> - fake guild chat")
+            ns.Print("/taverne ally - allied guilds: what was read from the guild info")
+            ns.Print("/taverne map - positions on the map: what's shared and shown")
+            ns.Print("/taverne test [all|env|api|names|guild|chan] - run diagnostics")
+            ns.Print("/taverne who <name> - look a name up in the guild roster")
+            ns.Print("/taverne copy - reopen the output window")
+        end
     end
 end
