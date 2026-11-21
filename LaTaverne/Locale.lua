@@ -635,6 +635,12 @@ if GetLocale() == "frFR" then
     L["Those who run La Taverne and share their position, with their guild's tag."] = "Ceux qui utilisent La Taverne et partagent leur position, avec le tag de leur guilde."
     L["Guild members (La Taverne)"] = "Membres de la guilde (La Taverne)"
     L["Allied guilds (La Taverne)"] = "Guildes alliées (La Taverne)"
+    L["Map: guild members"] = "Carte : membres de la guilde"
+    L["Map: allied guilds"] = "Carte : guildes alliées"
+    L["Button on the game's map"] = "Bouton sur la carte du jeu"
+    L["A lynx button in the corner of the world map: click it to choose who shows."] = "Un bouton lynx dans le coin de la carte du monde : cliquez dessus pour choisir qui s'affiche."
+    L["Not with OpenMap: its menu has these switches, and a star puts them on its map."] = "Pas avec OpenMap : son menu a ces options, et une étoile les met sur sa carte."
+    L["Who shows on the map: click to choose."] = "Qui s'affiche sur la carte : cliquez pour choisir."
     L["Updated %d s ago"] = "Mis à jour il y a %d s"
     L["Your position is now shared on the map with your guild and the allied guilds (players who run La Taverne). Options, Map: to turn it off."] = "Votre position est maintenant partagée sur la carte avec votre guilde et les guildes alliées (les joueurs qui utilisent La Taverne). Options, Carte : pour la désactiver."
 

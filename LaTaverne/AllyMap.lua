@@ -564,6 +564,7 @@ function AllyMap:SetShow(scope, on)
     local s = Settings()
     if scope == "guild" then s.showGuild = on and true or false else s.showAllies = on and true or false end
     self:SettingsChanged()
+    self:UpdateMapButton()
     if ns.UI and ns.UI.Refresh then ns.UI:Refresh() end
 end
 
@@ -573,24 +574,170 @@ function AllyMap:Count()
     return n
 end
 
--- OpenMap's menu: the two "show" switches, under a "La Taverne" heading (its public API).
+-- OpenMap's menu: the two "show" switches, under a "La Taverne" heading (its public API), with
+-- the lynx, so a switch starred onto OpenMap's map shows as La Taverne's.
+local LYNX = "Interface\\AddOns\\LaTaverne\\media\\lynx_icon"
 local openMapHooked = false
 local function AddOpenMapToggles()
     if openMapHooked or not (OpenMapAPI and OpenMapAPI.RegisterMenuToggle) then return end
     openMapHooked = true
     pcall(OpenMapAPI.RegisterMenuToggle, "LaTaverne", {
-        id = "guild", label = L["Guild members (La Taverne)"], section = "La Taverne",
+        id = "guild", label = L["Guild members (La Taverne)"], section = "La Taverne", icon = LYNX,
         get = function() return Settings().showGuild end,
         set = function(v) AllyMap:SetShow("guild", v) end,
     })
     pcall(OpenMapAPI.RegisterMenuToggle, "LaTaverne", {
-        id = "allies", label = L["Allied guilds (La Taverne)"], section = "La Taverne",
+        id = "allies", label = L["Allied guilds (La Taverne)"], section = "La Taverne", icon = LYNX,
         get = function() return Settings().showAllies end,
         set = function(v) AllyMap:SetShow("ally", v) end,
     })
     if OpenMapAPI.RegisterCallback then
         pcall(OpenMapAPI.RegisterCallback, AllyMap, "OpenMap_StitchedChanged", function() Refresh() end)
     end
+end
+
+-- The game map's own filter menu (the button at its top right that lists what the map shows):
+-- the same two switches, so they're at hand on the game's map too, without OpenMap. The player
+-- opens that menu; La Taverne only adds lines to it, through the game's menu system. Whether the
+-- menu showed them: /taverne map ("filter menu").
+AllyMap.stats.filterMenu = "not available"
+local filterHooked = false
+local function AddMapFilterToggles()
+    if filterHooked or not (Menu and Menu.ModifyMenu) then return end
+    filterHooked = true
+    AllyMap.stats.filterMenu = "added, not opened yet"
+    pcall(Menu.ModifyMenu, "MENU_WORLD_MAP_TRACKING", function(_, root)
+        AllyMap.stats.filterMenu = "shown"
+        if not (root and root.CreateCheckbox) then return end
+        if root.CreateDivider then root:CreateDivider() end
+        root:CreateCheckbox(L["Guild members (La Taverne)"], function() return Settings().showGuild end,
+            function() AllyMap:SetShow("guild", not Settings().showGuild) end)
+        if ns.Alliance:IsActive() then
+            root:CreateCheckbox(L["Allied guilds (La Taverne)"], function() return Settings().showAllies end,
+                function() AllyMap:SetShow("ally", not Settings().showAllies) end)
+        end
+    end)
+end
+
+-- A lynx tab on the game map's right edge, where and as OpenMap shows its own: a click opens the
+-- two switches. Only without OpenMap's map (its menu has them, and a star puts them on its map),
+-- and only while Options, Map leaves it on. Lit while a switch is on, greyed while both are off.
+local mapButton
+
+local function ButtonWanted()
+    return Settings().button ~= false and AllyMap:OpenMapState() ~= "on"
+end
+
+local function ButtonMenu(owner)
+    ns.ContextMenu(owner, function(_, root)
+        root:CreateTitle("La Taverne")
+        root:CreateCheckbox(L["My guild's members"], function() return Settings().showGuild end,
+            function() AllyMap:SetShow("guild", not Settings().showGuild) end)
+        if ns.Alliance:IsActive() then
+            root:CreateCheckbox(L["The allied guilds' members"], function() return Settings().showAllies end,
+                function() AllyMap:SetShow("ally", not Settings().showAllies) end)
+        end
+        root:CreateDivider()
+        root:CreateButton(L["Options"], function() ns.UI:ShowSection("options") ns.UI:Open() end)
+    end)
+end
+
+function AllyMap:UpdateMapButton()
+    if not mapButton then return end
+    mapButton:SetShown(ButtonWanted())
+    local s = Settings()
+    local on = (s.showGuild or (s.showAllies and ns.Alliance:IsActive())) and true or false
+    -- On: the tab's lit edge, as OpenMap lights a switch that's on. Off: the lynx greyed.
+    mapButton.selected:SetShown(on and mapButton.hasArt)
+    mapButton.icon:SetDesaturated(not on)
+    mapButton.icon:SetAlpha(on and 1 or 0.6)
+end
+
+-- The tab looks and sits like OpenMap's own (its Panel.lua and Dungeons.lua): WoW Forever's side
+-- tab art (the quest log's tabs), 40 out from the map's right edge by 42 along it, low on that
+-- edge with 44 kept clear at the end, the lynx filling its face. The art is drawn for a tab on
+-- the left, so it's mirrored for the right edge.
+local TAB_ART = { bg = "common-sidetab-c60", selected = "common-sidetab-selected-c60", hover = "common-sidetab-hover-c60" }
+local TAB_MASK = "common-sidetab-mask-c60"
+local TAB_OUT, TAB_ALONG, TAB_END = 40, 42, 44
+local ART_OUT, ART_ALONG, SHOW_OUT, SHOW_ALONG = 55, 60, 52, 54 -- (the art, and the part of it the tab shows)
+local FACE_OUT, FACE_ALONG, FACE_IN = 43, 44, 2                 -- (its face, 2 in from the flat side)
+
+local function HasAtlas(name)
+    return C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name) and true or false
+end
+
+-- An atlas on a texture, mirrored left for right.
+local function Mirrored(tex, name)
+    tex:SetAtlas(name)
+    local ulx, uly, llx, lly, urx = tex:GetTexCoord()
+    tex:SetTexCoord(urx, ulx, uly, lly)
+end
+
+local function MakeMapButton()
+    local map = WorldMapFrame
+    local sc = map and map.ScrollContainer
+    if mapButton or not sc then return end
+    local b = CreateFrame("Button", nil, map)
+    b:SetSize(TAB_OUT, TAB_ALONG)
+    b:SetPoint("RIGHT", sc, "BOTTOMRIGHT", 0, TAB_END + TAB_ALONG / 2)
+    b:SetFrameLevel(math.min(sc:GetFrameLevel() + 9300, 9950)) -- (over the map and its pins)
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.selected = b:CreateTexture(nil, "OVERLAY")
+    b.hover = b:CreateTexture(nil, "HIGHLIGHT")
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetTexture(LYNX)
+    -- The art at the tab's size, its flat side on the map's edge.
+    local ao, aa = TAB_OUT * ART_OUT / SHOW_OUT, TAB_ALONG * ART_ALONG / SHOW_ALONG
+    local cx = -(ao - TAB_OUT) / 2
+    b.hasArt = HasAtlas(TAB_ART.bg)
+    if b.hasArt then
+        for key, name in pairs(TAB_ART) do
+            local tex = b[key]
+            Mirrored(tex, HasAtlas(name) and name or TAB_ART.bg)
+            tex:SetSize(ao, aa)
+            tex:SetPoint("CENTER", cx, 0)
+        end
+        -- The lynx fills the tab's face, cut to its shape (the face's middle is nearer the flat side).
+        if HasAtlas(TAB_MASK) then
+            local mask = b:CreateMaskTexture()
+            mask:SetAtlas(TAB_MASK)
+            pcall(mask.SetTexCoord, mask, 1, 0, 0, 1)
+            mask:SetSize(ao, aa)
+            mask:SetPoint("CENTER", cx, 0)
+            b.icon:AddMaskTexture(mask)
+        end
+        local side = math.max(FACE_OUT * ao / ART_OUT, FACE_ALONG * aa / ART_ALONG)
+        local toward = (ART_OUT / 2 - FACE_IN - FACE_OUT / 2) * ao / ART_OUT
+        b.icon:SetSize(side, side)
+        b.icon:SetPoint("CENTER", cx + toward, 0)
+    else
+        -- (no such art on this client: a plain dark tab)
+        b.bg:SetAllPoints()
+        b.bg:SetColorTexture(0.1, 0.08, 0.06, 0.95)
+        b.hover:SetAllPoints()
+        b.hover:SetColorTexture(1, 1, 1, 0.15)
+        b.icon:SetSize(TAB_ALONG - 10, TAB_ALONG - 10)
+        b.icon:SetPoint("CENTER")
+    end
+    b:SetScript("OnMouseDown", function(self) self.icon:SetVertexColor(0.75, 0.75, 0.75) end)
+    b:SetScript("OnMouseUp", function(self) self.icon:SetVertexColor(1, 1, 1) end)
+    b:SetScript("OnClick", function(self) ButtonMenu(self) end)
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine("La Taverne")
+        GameTooltip:AddLine(L["Who shows on the map: click to choose."], 1, 1, 1, true)
+        local s = Settings()
+        GameTooltip:AddLine(L["My guild's members"] .. ": " .. (s.showGuild and L["on"] or L["off"]), 0.8, 0.8, 0.8)
+        if ns.Alliance:IsActive() then
+            GameTooltip:AddLine(L["The allied guilds' members"] .. ": " .. (s.showAllies and L["on"] or L["off"]), 0.8, 0.8, 0.8)
+        end
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", GameTooltip_Hide)
+    mapButton = b
+    map:HookScript("OnShow", function() AllyMap:UpdateMapButton() end)
+    AllyMap:UpdateMapButton()
 end
 
 -- Before a reload that changes the guild (test mode on or off): "off" now, on the side I'm
@@ -604,12 +751,17 @@ end
 
 function AllyMap:OnLogin()
     Register()
-    if not registered then
+    MakeMapButton()
+    if not registered or not mapButton then
         ns.On("ADDON_LOADED", function(name)
-            if name == "Blizzard_WorldMap" then Register() end
+            if name == "Blizzard_WorldMap" then
+                Register()
+                MakeMapButton()
+            end
         end)
     end
     AddOpenMapToggles()
+    AddMapFilterToggles()
     ns.On("ADDON_LOADED", function(name)
         if name == "OpenMap" then AddOpenMapToggles() end
     end)
@@ -638,6 +790,7 @@ ns.commands.map = function()
     local st = AllyMap.stats
     ns.Print(format("map: sent %d, off %d, received %d, rejected %d, expired %d, drawn %d, left to OpenMap %d",
         st.sent, st.offSent, st.received, st.rejected, st.expired, st.drawn, st.skippedOpenMap))
+    ns.Print("map: switches in the game map's filter menu: " .. tostring(st.filterMenu))
     local now = GetTime()
     for _, e in pairs(live) do
         ns.Print(format("  %s (%s%s) map %d %.1f, %.1f, %d s ago", e.name, e.scope, e.tag and (" " .. e.tag) or "",

@@ -179,6 +179,7 @@ local DEFAULTS = {
         share = true,      -- my position goes to my guild and the allied guilds
         showGuild = true,  -- dots for my guild's members
         showAllies = true, -- dots for the allied guilds' members
+        button = true,     -- the lynx button on the game's map (not with OpenMap's map)
         told = false,      -- the "your position is shared" line was shown once
     },
     invites = {       -- keyword auto-invite (always off at login)

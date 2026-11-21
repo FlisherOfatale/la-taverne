@@ -1,7 +1,8 @@
 -- La Taverne's own menus: a context menu at the cursor and a dropdown button. They take the same
 -- generator functions as the game's menus (function(_, root) ... end) and understand what La
--- Taverne uses of them: root:CreateTitle, CreateButton, CreateRadio, CreateDivider, and on an
--- element SetEnabled and SetTooltip.
+-- Taverne uses of them: root:CreateTitle, CreateButton, CreateRadio, CreateCheckbox,
+-- CreateDivider, and on an element SetEnabled and SetTooltip. A checkbox switches on a click and
+-- leaves the menu open, so several can be switched in a row.
 -- Why not the game's: a game menu opened or closed by an addon, with the gamepad UI on, makes
 -- the gamepad manager call protected functions from addon code (ADDON_ACTION_FORBIDDEN).
 local ADDON, ns = ...
@@ -32,7 +33,15 @@ function Root:CreateButton(text, onClick) return Add(self, { kind = "button", te
 function Root:CreateRadio(text, isSelected, setSelected)
     return Add(self, { kind = "radio", text = text, isSelected = isSelected, setSelected = setSelected })
 end
+-- setSelected(): switches it (the caller reads its own setting: isSelected says the new state).
+function Root:CreateCheckbox(text, isSelected, setSelected)
+    return Add(self, { kind = "checkbox", text = text, isSelected = isSelected, setSelected = setSelected })
+end
 function Root:CreateDivider() return Add(self, { kind = "divider" }) end
+
+local function Checked(item)
+    return (item.kind == "radio" or item.kind == "checkbox") and item.isSelected and item.isSelected() and true or false
+end
 
 local function Describe(generator, owner)
     local root = setmetatable({ items = {} }, Root)
@@ -49,8 +58,14 @@ local function Close()
     if menu and menu:IsShown() then menu:Hide() end
 end
 
-local function Choose(item)
+local function Choose(item, row)
     if not item.enabled then return end
+    if item.kind == "checkbox" then
+        -- Switched in place: the menu stays open.
+        if item.setSelected then item.setSelected() end
+        if row then row.check:SetShown(Checked(item)) end
+        return
+    end
     local dropdown = menu.dropdown
     Close()
     if item.kind == "radio" then
@@ -77,7 +92,7 @@ local function NewRow()
     row.line:SetPoint("LEFT", 4, 0)
     row.line:SetPoint("RIGHT", -4, 0)
     row.line:SetColorTexture(0.5, 0.5, 0.5, 0.6)
-    row:SetScript("OnClick", function(self) Choose(self.item) end)
+    row:SetScript("OnClick", function(self) Choose(self.item, self) end)
     row:SetScript("OnEnter", function(self)
         if not self.item.tooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -135,7 +150,7 @@ local function Fill(root, minWidth)
         local text, line = item.kind ~= "divider", item.kind == "divider"
         row.text:SetShown(text)
         row.line:SetShown(line)
-        row.check:SetShown(item.kind == "radio" and item.isSelected and item.isSelected() and true or false)
+        row.check:SetShown(Checked(item))
         row.text:SetFontObject(item.kind == "title" and "GameFontNormalSmall"
             or (item.enabled and "GameFontHighlightSmall" or "GameFontDisableSmall"))
         row.text:SetText(item.text or "")

@@ -1,8 +1,9 @@
 -- Minimap button (LibDataBroker launcher + LibDBIcon).
 -- Left-click opens La Taverne; right-click opens a short menu. Idle: Create a group, I'm
 -- available..., then Groups, Availability. In a group of the finder: just My group; available:
--- Groups and Availability (in green). Then auto-invite (Start, or its page in green while it
--- runs: the Stop button is there), Options.
+-- Groups and Availability (in green). Then the map's dots (guild members, allied guilds:
+-- switched in place), auto-invite (Start, or its page in green while it runs: the Stop button is
+-- there), Options.
 -- The tooltip says where I'm at: my group, my availability, auto-invite.
 -- On the button: a golden pulse with a count when something waits for my answer and I haven't
 -- seen it yet (join requests to my group, invitations), and a small steady green dot while
@@ -52,6 +53,17 @@ local function QuickMenu(owner)
             root:CreateButton(L["Availability"], function() OpenPage("players") end)
         end
         Divider(root)
+        -- Dots on the map, switched here without opening the map or Options (allied guilds:
+        -- only with an alliance).
+        if ns.AllyMap and ns.db.allyMap then
+            root:CreateCheckbox(L["Map: guild members"], function() return ns.db.allyMap.showGuild end,
+                function() ns.AllyMap:SetShow("guild", not ns.db.allyMap.showGuild) end)
+            if ns.Alliance:IsActive() then
+                root:CreateCheckbox(L["Map: allied guilds"], function() return ns.db.allyMap.showAllies end,
+                    function() ns.AllyMap:SetShow("ally", not ns.db.allyMap.showAllies) end)
+            end
+            Divider(root)
+        end
         -- Auto-invite: start it, or (running) its page, where the Stop button is. Not at all
         -- when the officers turned it off for my rank.
         if not ns.Invites:IsAllowed() then
