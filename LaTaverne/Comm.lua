@@ -283,6 +283,13 @@ function Comm:LeaveAllChannels()
     for role in pairs(channels) do self:LeaveChannel(role) end
 end
 
+-- Messages not gone out yet: waiting for a channel here, or held by the game's throttle.
+function Comm:Pending()
+    if #queues.guild > 0 or #queues.ally > 0 then return true end
+    local ctl = _G.ChatThrottleLib
+    return ctl and ctl.bQueueing and true or false
+end
+
 ns.On("CHAT_MSG_CHANNEL_NOTICE", function(notice, _, _, _, _, _, _, _, baseName)
     local ch = ChannelByName(baseName)
     if not ch then return end

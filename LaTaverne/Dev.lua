@@ -38,15 +38,20 @@ local function EndForSwitch()
     ns.Players:Stop()
     ns.Invites:Stop()
     if ns.AllyMap.StopSharing then ns.AllyMap:StopSharing() end
-    ns.Comm:LeaveAllChannels() -- a reload keeps them otherwise (after the messages above)
 end
 
--- The game only lets a reload come from the player (ReloadUI is protected): the popup's Reload
--- is a secure button running the /reload macro, laid over the popup's first button. Its
--- PreClick ends my things and saves the new mode, then the macro reloads. Secure buttons can't
--- be shown or hidden during combat: the popup doesn't open then, and closes when combat starts.
-local DIALOG = "LaTaverneConfirm_switchTestMode"
-local switchTo                   -- the mode Reload switches to, while the popup is open
+-- Two steps. The game only lets a reload come from the player's click (ReloadUI is protected),
+-- and that click reloads at once: messages sent in it were lost in the queues. So:
+-- 1. the question; Continue ends my things and sends them;
+-- 2. a second popup waits until nothing is left to send (at most WAIT_MAX seconds), then leaves
+--    the channels (a reload keeps them otherwise), saves the new mode and shows Reload: a secure
+--    button running the /reload macro, laid over the popup's button.
+-- Secure buttons can't be shown or hidden in combat: no switching then, and combat starting
+-- closes the popups (then /reload finishes it, if step 1 was done).
+local ASK, DIALOG = "LaTaverneConfirm_switchTestMode", "LaTaverneConfirm_switchTestModeReload"
+local WAIT_MIN, WAIT_MAX = 0.5, 6
+local ready                      -- step 2: everything went out, Reload is showing
+local prepared                   -- step 1 done (the mode is switched once ready)
 local reloadButton
 
 local function ReloadButton()
@@ -60,17 +65,62 @@ local function ReloadButton()
     b:SetText(ns.L["Reload"])
     b:Hide()
     b:SetScript("PreClick", function()
-        if switchTo == nil then return end
-        local on = switchTo
-        switchTo = nil
-        EndForSwitch()
-        ns.db.dev.sandbox = on
-        ns.reloadPending = true -- nothing more goes out before the reload
         -- If the reload didn't happen, say how to finish.
         C_Timer.After(2, function() ns.Print(ns.L["Type /reload to finish switching test mode."]) end)
     end)
     reloadButton = b
     return b
+end
+
+local function ShowReload(dialog)
+    local slot = dialog.buttons and dialog.buttons[1]
+    if not slot or InCombatLockdown() then return end
+    local b = ReloadButton()
+    slot:Hide()
+    b:ClearAllPoints()
+    b:SetPoint("CENTER", slot, "CENTER")
+    b:SetFrameLevel(dialog:GetFrameLevel() + 20)
+    b:Show()
+end
+
+-- Step 2: wait for the messages, then switch and offer the reload.
+local function Prepare(on)
+    local T = ns.L
+    EndForSwitch()
+    prepared, ready = true, false
+    ns.ConfirmDialog({
+        kind = "switchTestModeReload",
+        text = function()
+            return ready and T["Done: everything went out. Reload to finish switching test mode."]
+                or T["Ending your group, availability and auto-invite on the side you're leaving..."]
+        end,
+        buttons = { { text = T["Reload"] } },
+    })
+    local dialog = _G[DIALOG]
+    if not dialog then return end
+    dialog.buttons[1]:Disable()
+    if not dialog.reloadHooked then
+        dialog.reloadHooked = true
+        dialog:HookScript("OnHide", function()
+            if reloadButton and not InCombatLockdown() then reloadButton:Hide() end
+            if prepared then ns.Print(T["Type /reload to finish switching test mode."]) end
+        end)
+    end
+    local started = GetTime()
+    local function Check()
+        local waited = GetTime() - started
+        if waited < WAIT_MAX and (waited < WAIT_MIN or ns.Comm:Pending()) then
+            C_Timer.After(0.25, Check)
+            return
+        end
+        ns.Comm:LeaveAllChannels()
+        ns.db.dev.sandbox = on
+        ns.reloadPending = true -- nothing more goes out before the reload
+        ready = true
+        dialog.buttons[1]:Enable()
+        if dialog:IsShown() then ShowReload(dialog) end
+    end
+    Check()
 end
 
 local function SetSandbox(on)
@@ -83,37 +133,26 @@ local function SetSandbox(on)
         ns.Print(ns.L["Test mode can't be switched during combat."])
         return
     end
+    if prepared then
+        ns.Print(ns.L["Type /reload to finish switching test mode."])
+        return
+    end
     local T = ns.L
     ns.ConfirmDialog({
         kind = "switchTestMode",
         text = on and T["Switch to test mode? La Taverne will reload and use the test guild. Your group, your availability and auto-invite end first, so they don't follow you there."]
             or T["Leave test mode? La Taverne will reload and use your REAL guild. Your test group, your availability and auto-invite end first, so they don't reach your real guild."],
-        buttons = { { text = T["Reload"] }, { text = CANCEL } },
+        buttons = { { text = T["Continue"], onClick = function() Prepare(on) end }, { text = CANCEL } },
     })
-    local dialog = _G[DIALOG]
-    local slot = dialog and dialog.buttons and dialog.buttons[1]
-    if not slot then return end
-    switchTo = on
-    local b = ReloadButton()
-    slot:Hide()
-    b:ClearAllPoints()
-    b:SetPoint("CENTER", slot, "CENTER")
-    b:SetFrameLevel(dialog:GetFrameLevel() + 20)
-    b:Show()
-    if not dialog.reloadHooked then
-        dialog.reloadHooked = true
-        dialog:HookScript("OnHide", function()
-            switchTo = nil
-            if reloadButton and not InCombatLockdown() then reloadButton:Hide() end
-        end)
-    end
 end
 ns.SetSandbox = SetSandbox
 
--- Combat starting: close the popup while the secure button can still be hidden.
+-- Combat starting: close the popups while the secure button can still be hidden.
 ns.On("PLAYER_REGEN_DISABLED", function()
-    local dialog = _G[DIALOG]
-    if dialog and dialog:IsShown() then dialog:Hide() end
+    for _, name in ipairs({ ASK, DIALOG }) do
+        local dialog = _G[name]
+        if dialog and dialog:IsShown() then dialog:Hide() end
+    end
 end)
 
 
