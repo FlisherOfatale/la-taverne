@@ -326,6 +326,9 @@ AllyChat.SafeText = SafeText
 local function Receive(author, payload, tag)
     local text = payload.m
     if type(text) ~= "string" or text == "" or IsSecret(text) then return end
+    -- On my ignore list: the game hides their real chat on its side, but these lines don't go
+    -- through it. Not shown, not logged, not read by auto-invite.
+    if ns.IsIgnored(author) then return end
     if #text > 255 then
         -- Cut, without leaving half a letter (UTF-8) at the end.
         text = text:sub(1, 255):gsub("[\192-\255][\128-\191]*$", "")
