@@ -1205,6 +1205,9 @@ local function AcceptMenu(owner, p)
     end)
 end
 
+local InitPlayerRow -- the Players page's row (defined with it, below); My group lists available players with it
+local RoleIcons     -- role icons for a set of roles (defined with the Players page); the create form uses it too
+
 -- Pending row, in the member list's columns: name (level and "new player" under it), status,
 -- role(s), then the leader's buttons.
 local function InitPendingRow(row, p)
@@ -2095,6 +2098,36 @@ local function BuildCreateForm(parent)
         onPick = function(key) f.dungeon = key; f.error = nil; f:Refresh() end,
     })
     dropdown:SetPoint("TOPLEFT", COL, -44)
+    -- Beside it: the available players who'd fit (a missing role, a dungeon they want or at
+    -- their level). Hover: who; click: add one to the players invited when the group is posted.
+    local availHint = CreateFrame("Button", nil, f)
+    availHint:SetHeight(22)
+    availHint:SetPoint("LEFT", dropdown, "RIGHT", 14, 0)
+    availHint.text = NewLabel(availHint, nil, "GameFontHighlightSmall")
+    availHint.text:SetPoint("LEFT", 0, 0)
+    availHint.text:SetWordWrap(false)
+    availHint:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    availHint:SetScript("OnEnter", function(self)
+        local lines = { L["Available players who fit this group"] }
+        for _, a in ipairs(self.players or {}) do
+            lines[#lines + 1] = NameText(a.name, a.class, a.tag) .. "  " .. RoleIcons(a.roles)
+        end
+        lines[#lines + 1] = "|cff9fdf7f" .. L["Click: add one to the players to invite. They get the invitation when you post the group."] .. "|r"
+        ShowTooltip(self, lines)
+    end)
+    availHint:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    availHint:SetScript("OnClick", function(self)
+        GameTooltip:Hide()
+        ns.ContextMenu(self, function(_, root)
+            root:CreateTitle(L["Available players who fit this group"])
+            for _, a in ipairs(self.players or {}) do
+                root:CreateButton(NameText(a.name, a.class, a.tag) .. "  " .. RoleIcons(a.roles), function()
+                    f:AddExtra({ name = a.name })
+                end)
+            end
+        end)
+    end)
+    availHint:Hide()
 
     -- My role: big role icons with a checkbox. Starts with the role of the last group I posted
     -- (none the first time); clicking it again unpicks it. Picking one ticks it in the roles bar of the group list too (it
@@ -2319,7 +2352,36 @@ local function BuildCreateForm(parent)
             if e.kind == "party" and self.partyRoles[e.key] then taken[#taken + 1] = self.partyRoles[e.key] end
         end
         self.mix = FitMix(self.mix, taken)
-        self.mixRow:SetMix(self.mix, size, MissingFor(self.mix, taken))
+        local missing = MissingFor(self.mix, taken)
+        self.mixRow:SetMix(self.mix, size, missing)
+
+        -- Available players who'd fit, not already listed: "Available: 1 Tank, 2 DPS".
+        local listed = {}
+        for _, e in ipairs(entries) do listed[e.key] = true end
+        local players = {}
+        for _, a in ipairs(ns.Players:GetFittingFor(self.dungeon, missing)) do
+            if not listed[ns.NameKey(a.name)] then players[#players + 1] = a end
+        end
+        availHint.players = players
+        if #players > 0 then
+            local parts = {}
+            for _, role in ipairs(ns.Groups.ROLES) do
+                local n = 0
+                if (missing[role] or 0) > 0 then
+                    for _, a in ipairs(players) do if a.roles and a.roles[role] then n = n + 1 end end
+                end
+                if n > 0 then parts[#parts + 1] = n .. " " .. ns.RoleLabel(role) end
+            end
+            availHint.text:SetText("|cff9fdf7f" .. format(L["Available: %s"], table.concat(parts, ", ")) .. "|r")
+            local room = (self:GetRight() or 0) - (dropdown:GetRight() or 0) - 38
+            local width = availHint.text:GetStringWidth() or 0
+            if room > 40 then width = math.min(width, room) end
+            availHint.text:SetWidth(width)
+            availHint:SetWidth(width + 4)
+            availHint:Show()
+        else
+            availHint:Hide()
+        end
         local default = ns.Groups.DEFAULT_COMPOSITION[size] or ns.Groups.DEFAULT_COMPOSITION[5]
         self.mixChanged = not SameMix(self.mix, FitMix(default, taken))
         UpdateReset()
@@ -2620,9 +2682,28 @@ local function BuildManageView(parent)
         function() return true end))
 
     -- Requests: players asking to join, waiting for my answer.
+    -- Under them, while the group looks for players: the available players who'd fit it, each
+    -- with Invite (the Players page's rows), so the leader doesn't have to go looking.
     m.requestsHeader = NewLabel(m, L["Requests"], "GameFontNormal")
-    m.empty = NewLabel(m, L["No requests yet. Guild members can see your group now."], "GameFontDisable")
-    m.box = NewScrollList(m, 40, InitPendingRow)
+    m.box = NewScrollList(m, function(d)
+        if d.status then return 40 end            -- a request
+        if d.kind == "message" then return 24 end
+        if d.kind == "toggle" then return 40 end
+        return 38                                 -- an available player
+    end, function(row, d)
+        if not row.parts then
+            row.parts = true
+            row.pendingPart = CreateFrame("Frame", nil, row)
+            row.pendingPart:SetAllPoints()
+            row.playerPart = CreateFrame("Frame", nil, row)
+            row.playerPart:SetAllPoints()
+        end
+        local pending = d.status ~= nil
+        row.pendingPart:SetShown(pending)
+        row.playerPart:SetShown(not pending)
+        if pending then InitPendingRow(row.pendingPart, d) else InitPlayerRow(row.playerPart, d) end
+    end)
+    m.showAvailable = true
 
     -- Everything under the title moves down when there's a state notice to show, and the
     -- requests follow the member list, which is as tall as the group.
@@ -2655,7 +2736,6 @@ local function BuildManageView(parent)
         self.box:SetPoint("TOPLEFT", 0, after - 34)
         self.box:SetPoint("BOTTOMRIGHT", -20, 30) -- clear of "Announce in chat" below
     end
-    m.empty:SetPoint("TOP", m.box, "TOP", 0, -16)
 
     function m:Refresh(mine)
         self.title:SetText(DungeonTitle(mine))
@@ -2707,8 +2787,31 @@ local function BuildManageView(parent)
 
         local requests = Requests(mine)
         self.requestsHeader:SetText(#requests > 0 and format(L["Requests (%d)"], #requests) or L["Requests"])
-        self.empty:SetShown(#requests == 0)
-        SetListData(self.box, requests)
+        local list = {}
+        for _, p in ipairs(requests) do list[#list + 1] = p end
+        if #requests == 0 then
+            list[1] = { kind = "message", text = L["No requests yet. Guild members can see your group now."] }
+        end
+        -- Available players who fit, not already in the group, invited or asking.
+        if ns.Groups:IsOpen(mine) then
+            local fitting = {}
+            for _, e in ipairs(ns.Players:GetOnline()) do
+                if e.tier == "available" and not mine.members[e.key] and not mine.pending[e.key]
+                    and ns.Players:FitsGroup(e.avail, mine) then
+                    e.kind = "player"
+                    fitting[#fitting + 1] = e
+                end
+            end
+            if #fitting > 0 then
+                list[#list + 1] = { kind = "toggle", label = L["Available for this group (%d)"], count = #fitting,
+                    open = self.showAvailable,
+                    onClick = function() self.showAvailable = not self.showAvailable UI:Refresh() end }
+                if self.showAvailable then
+                    for _, e in ipairs(fitting) do list[#list + 1] = e end
+                end
+            end
+        end
+        SetListData(self.box, list)
     end
     return m
 end
@@ -2856,7 +2959,7 @@ local function CanInvite(entry)
     return true
 end
 
-local function RoleIcons(roles)
+function RoleIcons(roles)
     local out = ""
     for _, role in ipairs(ns.Groups.ROLES) do
         if roles and roles[role] then out = out .. ns.RoleIcon(role) .. " " end
@@ -2868,7 +2971,7 @@ end
 -- Section header rows get room above them (spacing before a section, none after it).
 local PLAYER_ROW, TOGGLE_ROW, MESSAGE_ROW = 38, 40, 24
 
-local function InitPlayerRow(row, e)
+function InitPlayerRow(row, e)
     if not row.built then
         row.player = CreateFrame("Frame", nil, row)
         row.player:SetAllPoints()

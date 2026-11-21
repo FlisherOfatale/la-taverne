@@ -238,15 +238,31 @@ local function DungeonFits(a, key)
 end
 Players.DungeonFits = DungeonFits
 
--- Does an available player fit a group? A role it misses, and a dungeon they want (or at their level).
-function Players:FitsGroup(a, l)
-    if not l or not ns.Groups:IsOpen(l) then return false end
-    local missing = ns.Groups:MissingRoles(l)
+-- Would an available player fit? A role still missing ({ [role] = n }), and the dungeon is one
+-- they want (or at their level).
+function Players:FitsNeed(a, dungeon, missing)
     local roleOk = false
     for role in pairs(a.roles or {}) do
         if (missing[role] or 0) > 0 then roleOk = true break end
     end
-    return roleOk and DungeonFits(a, l.dungeon)
+    return roleOk and DungeonFits(a, dungeon)
+end
+
+-- Does an available player fit a group? A role it misses, and a dungeon they want (or at their level).
+function Players:FitsGroup(a, l)
+    if not l or not ns.Groups:IsOpen(l) then return false end
+    return self:FitsNeed(a, l.dungeon, ns.Groups:MissingRoles(l))
+end
+
+-- Available players (not AFK) who'd fit a group being made: the create form's hint.
+function Players:GetFittingFor(dungeon, missing)
+    local out = {}
+    if not dungeon then return out end
+    for _, a in pairs(available) do
+        if not a.afk and self:FitsNeed(a, dungeon, missing) then out[#out + 1] = a end
+    end
+    table.sort(out, function(x, y) return x.name < y.name end)
+    return out
 end
 
 -- Available players (not me), AFK last.
