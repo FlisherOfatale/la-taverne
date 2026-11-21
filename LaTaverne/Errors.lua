@@ -130,6 +130,10 @@ end
 
 function Errors:OnInit()
     ns.db.errors = ns.db.errors or {}
+    -- A new version starts with an empty report: errors kept from another version are dropped.
+    for i = #ns.db.errors, 1, -1 do
+        if ns.db.errors[i].version ~= ns.version then table.remove(ns.db.errors, i) end
+    end
     for _, e in ipairs(pending) do ns.db.errors[#ns.db.errors + 1] = e end
     wipe(pending)
 end
