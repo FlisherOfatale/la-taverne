@@ -35,8 +35,11 @@ Everything works inside your own guild right away. Linking allied guilds is done
 - **Browse** the open groups of your guild and the allied guilds, filtered by the roles you can play, your level and the dungeons you want. Level ranges use the game's difficulty colors.
 - **Ask to join** with every role you can play. The leader accepts you as one of them, and La Taverne sends the party invite. Requests wait while the leader is offline and are sent again when they're back.
 - **My group:** invite players by name (with autocomplete), follow requests and members, and change roles. If someone leaves during the run, **Find a replacement** opens the group to requests again.
+- **Available players who fit** show where you make your group: a count beside the dungeon when creating it (click to add one to the invitations), and a list with **Invite** buttons under the requests in My group.
+- A group in progress is removed on its own when everyone has left (after 5 minutes alone) or after 3 hours, with a warning first. The next time you open La Taverne, the form is filled in to post it again in one click.
+- In the group list, groups in progress or full are folded under their own heading.
 - **Alerts** in the chat window you choose, with a sound if you want: a new group that fits you, or a group in progress looking for a replacement. **[View]** opens the list on that group and makes it glow for a moment.
-- **Announce in chat** sends a La Taverne message about your group ("... is looking for 1 Tank: ...") to the players who run La Taverne, with a link to it. Nothing goes in guild chat.
+- **Announce in chat** sends a La Taverne message about your group ("... is looking for 1 Tank: ...") to the players who run La Taverne, with a link to it. Nothing goes in guild chat. Not in the group's first 5 minutes, then once every 5 minutes; each player can turn these messages off (**Options > Alerts**).
 - Passing the party lead hands your group over to the new leader if they run La Taverne.
 
 ### Availability
@@ -50,17 +53,19 @@ Everything works inside your own guild right away. Linking allied guilds is done
 - What you type in guild chat also reaches the allied guilds, and theirs reaches you, in your usual guild chat (same colors, timestamps, clickable names) and in the guild window.
 - Allied lines start with the lynx and the guild's tag (each can be turned off, so allied lines can look like your guild's).
 - Item, spell and quest links stay real links. A line that arrives late says when it was typed.
+- Players on your ignore list stay hidden in the shared chat too.
 - Allied players are checked: their own guild confirms they belong to it. A player who isn't confirmed yet is marked, and an impostor's messages are dropped.
 
 ### Alliance
 
-The **Alliance** tab has one card per guild: who is online with La Taverne (with their version), the players seen in the last two weeks, and how many open groups and available players each guild has right now.
+The **Alliance** tab has one card per guild: who is online with La Taverne (with their version, and a mark for an old one), the players seen in the last two weeks, and how many open groups and available players each guild has right now. Sort the players by name, last heard from or version (to see who needs to update), and show the offline ones or not.
 
 ### World map
 
 - Your guildmates and allied players who run La Taverne show as class-colored dots on the world map: a green ring for your guild, a blue ring for allies. Hover a dot for the name, guild, level and place.
 - Positions go out every 10 seconds while you move (every minute while you stand still), and the dots glide in between. Your party and raid keep the game's own dots.
-- **Sharing is on**, from the first notice in chat. It never shares from inside a dungeon, raid or battleground. To turn it off, or to hide your guild's or the allies' dots: **Options > Map**.
+- **Sharing is on**, from the first notice in chat. It never shares from inside a dungeon, raid or battleground. To turn it off: **Options > Map**.
+- To show or hide your guild's and the allies' dots: the lynx tab on the world map, the minimap button's right-click menu, or **Options > Map**.
 
 ### Auto-invite
 
@@ -88,7 +93,7 @@ Window size, the chat window for La Taverne's lines, the minimap button and its 
 
 ### Works with
 
-- **OpenMap:** the dots also show on OpenMap's map, at any zoom. Its menu gets La Taverne's two map switches, and a player who already shares through OpenMap doesn't get a second dot.
+- **OpenMap:** the dots also show on OpenMap's map, at any zoom, and their tooltips look like OpenMap's. Its menu gets La Taverne's two map switches, and its own "Guild members on the map" switch hides La Taverne's guild and allied dots too. A player who already shares through OpenMap doesn't get a second dot.
 - **Chattynator:** allied guild chat shows in Chattynator's windows like your own guild's. To choose the tab for La Taverne's own messages, use the tab's settings in Chattynator (Add-ons).
 - **GuildUnion:** **Import > From GuildUnion** copies its guilds and tags, and both addons' lines fit side by side in the Guild Info. While both are installed, keep only one of them sharing guild chat (in La Taverne: **Options**), or allied lines show twice.
 - **Controller (gamepad) interface:** La Taverne's menus and confirmation windows work with it, without "action blocked" errors.
@@ -143,8 +148,11 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 - **Parcourez** les groupes ouverts de votre guilde et des guildes alliées, filtrés selon les rôles que vous pouvez jouer, votre niveau et les donjons voulus. Les tranches de niveau prennent les couleurs de difficulté du jeu.
 - **Demandez à rejoindre** avec tous les rôles que vous pouvez jouer. Le chef vous accepte dans l'un d'eux, et La Taverne envoie l'invitation de groupe. Les demandes attendent si le chef est hors ligne, et repartent à son retour.
 - **Mon groupe :** invitez des joueurs par leur nom (avec autocomplétion), suivez demandes et membres, et changez les rôles. Si quelqu'un part en cours de route, **Chercher un remplaçant** rouvre le groupe aux demandes.
+- **Les joueurs disponibles qui conviennent** s'affichent là où vous montez votre groupe : un compte à côté du donjon pendant la création (un clic pour en ajouter un aux invitations), et une liste avec des boutons **Inviter** sous les demandes dans Mon groupe.
+- Un groupe en cours est retiré de lui-même quand tout le monde est parti (après 5 minutes seul) ou après 3 heures, avec un avertissement avant. À la prochaine ouverture de La Taverne, le formulaire est déjà rempli pour le republier en un clic.
+- Dans la liste des groupes, les groupes en cours ou complets sont repliés sous leur propre titre.
 - **Alertes** dans la fenêtre de chat de votre choix, avec un son si vous voulez : un nouveau groupe qui vous convient, ou un groupe en cours qui cherche un remplaçant. **[Voir]** ouvre la liste sur ce groupe et le fait briller un instant.
-- **Annoncer dans le chat** envoie un message de La Taverne sur votre groupe (« ... cherche 1 Tank : ... ») aux joueurs qui utilisent La Taverne, avec un lien vers le groupe. Rien ne va dans le chat de guilde.
+- **Annoncer dans le chat** envoie un message de La Taverne sur votre groupe (« ... cherche 1 Tank : ... ») aux joueurs qui utilisent La Taverne, avec un lien vers le groupe. Rien ne va dans le chat de guilde. Pas dans les 5 premières minutes du groupe, puis une fois toutes les 5 minutes ; chaque joueur peut désactiver ces messages (**Options > Alertes**).
 - En passant le chef du groupe, votre groupe passe au nouveau chef s'il utilise La Taverne.
 
 ### Disponibilités
@@ -158,17 +166,19 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 - Ce que vous écrivez dans le chat de guilde arrive aussi aux guildes alliées, et le leur vous arrive, dans votre chat de guilde habituel (mêmes couleurs, horodatage, noms cliquables) et dans la fenêtre de guilde.
 - Les lignes des alliés commencent par le lynx et le tag de leur guilde (chacun peut être retiré, pour que les lignes alliées ressemblent à celles de votre guilde).
 - Les liens d'objets, de sorts et de quêtes restent de vrais liens. Une ligne qui arrive en retard indique quand elle a été écrite.
+- Les joueurs de votre liste d'ignorés restent cachés dans le chat partagé aussi.
 - Les joueurs alliés sont vérifiés : leur propre guilde confirme qu'ils en font partie. Un joueur pas encore confirmé est signalé, et les messages d'un imposteur sont ignorés.
 
 ### Alliance
 
-L'onglet **Alliance** a une carte par guilde : qui est en ligne avec La Taverne (avec sa version), les joueurs vus ces deux dernières semaines, et combien de groupes ouverts et de joueurs disponibles chaque guilde a en ce moment.
+L'onglet **Alliance** a une carte par guilde : qui est en ligne avec La Taverne (avec sa version, et une marque pour une ancienne), les joueurs vus ces deux dernières semaines, et combien de groupes ouverts et de joueurs disponibles chaque guilde a en ce moment. Triez les joueurs par nom, dernier signe ou version (pour voir qui doit mettre à jour), et affichez ou non ceux qui sont hors ligne.
 
 ### Carte du monde
 
 - Les membres de votre guilde et les joueurs alliés qui utilisent La Taverne s'affichent en points de la couleur de leur classe sur la carte du monde : un anneau vert pour votre guilde, bleu pour les alliés. Survolez un point pour le nom, la guilde, le niveau et l'endroit.
 - Les positions partent toutes les 10 secondes quand vous bougez (toutes les minutes à l'arrêt), et les points glissent entre les deux. Votre groupe et votre raid gardent les points du jeu.
-- **Le partage est actif**, à partir du premier avis dans le chat. Il ne partage jamais depuis un donjon, un raid ou un champ de bataille. Pour le désactiver, ou pour cacher les points de votre guilde ou des alliés : **Options > Carte**.
+- **Le partage est actif**, à partir du premier avis dans le chat. Il ne partage jamais depuis un donjon, un raid ou un champ de bataille. Pour le désactiver : **Options > Carte**.
+- Pour afficher ou cacher les points de votre guilde et des alliés : l'onglet lynx sur la carte du monde, le menu du clic droit sur le bouton de la minicarte, ou **Options > Carte**.
 
 ### Invitation automatique
 
@@ -196,7 +206,7 @@ Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de
 
 ### Compatible avec
 
-- **OpenMap :** les points s'affichent aussi sur la carte d'OpenMap, à tous les niveaux de zoom. Son menu reçoit les deux options de carte de La Taverne, et un joueur qui partage déjà sa position par OpenMap n'a pas de deuxième point.
+- **OpenMap :** les points s'affichent aussi sur la carte d'OpenMap, à tous les niveaux de zoom, et leurs infobulles ressemblent à celles d'OpenMap. Son menu reçoit les deux options de carte de La Taverne, et sa propre option « Membres de guilde sur la carte » cache aussi les points de guilde et d'alliés de La Taverne. Un joueur qui partage déjà sa position par OpenMap n'a pas de deuxième point.
 - **Chattynator :** le chat des guildes alliées s'affiche dans les fenêtres de Chattynator comme celui de votre guilde. Pour choisir l'onglet des messages de La Taverne, passez par les paramètres de l'onglet dans Chattynator (Add-ons).
 - **GuildUnion :** **Importer > Depuis GuildUnion** reprend ses guildes et ses tags, et les lignes des deux addons tiennent ensemble dans les infos de guilde. Tant que les deux sont installés, ne laissez qu'un seul des deux partager le chat de guilde (dans La Taverne : **Options**), sinon les lignes alliées s'affichent deux fois.
 - **Interface manette :** les menus et les fenêtres de confirmation de La Taverne fonctionnent avec elle, sans erreurs « action bloquée ».
