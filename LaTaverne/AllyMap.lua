@@ -299,15 +299,27 @@ local function ShowTooltip(pin)
     if not e then return end
     GameTooltip:SetOwner(pin, "ANCHOR_RIGHT")
     GameTooltip:AddLine(e.name, ClassColor(e.c))
+    local info = C_Map.GetMapInfo(e.m)
+    local ago = math.floor(GetTime() - e.at)
+    -- With OpenMap: its dots' look (Friends.lua's DotEnter), so all dots read alike: level, place,
+    -- then who they are in its light blue: "Guild", or the allied guild's name.
+    if OpenMapAPI then
+        if e.l and e.l > 0 then GameTooltip:AddLine((LEVEL or "Level") .. " " .. e.l, 1, 1, 1) end
+        GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
+        local who = GUILD or "Guild"
+        if e.scope == "ally" then who = e.guild or (e.tag and ("[" .. e.tag .. "]")) or who end
+        GameTooltip:AddLine(who, 0.6, 0.8, 1)
+        if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
+        GameTooltip:Show()
+        return
+    end
     if e.scope == "ally" then
         GameTooltip:AddLine((e.tag and ("[" .. e.tag .. "] ") or "") .. (e.guild or ""), TAG_COLOR[1], TAG_COLOR[2], TAG_COLOR[3])
     else
         GameTooltip:AddLine(GUILD or "Guild", GuildColor())
     end
     if e.l and e.l > 0 then GameTooltip:AddLine(L["Level %d"]:format(e.l), 1, 1, 1) end
-    local info = C_Map.GetMapInfo(e.m)
     GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
-    local ago = math.floor(GetTime() - e.at)
     if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
     GameTooltip:Show()
 end
