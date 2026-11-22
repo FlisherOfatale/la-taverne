@@ -63,7 +63,8 @@ local function Choose(item, row)
     if item.kind == "checkbox" then
         -- Switched in place: the menu stays open.
         if item.setSelected then item.setSelected() end
-        if row then row.check:SetShown(Checked(item)) end
+        -- row.item: setSelected may have filled the open menu again (a dropdown's GenerateMenu).
+        if row then row.check:SetShown(Checked(row.item)) end
         return
     end
     local dropdown = menu.dropdown
