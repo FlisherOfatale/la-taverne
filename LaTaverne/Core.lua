@@ -412,7 +412,7 @@ local AUTO_EVERY, AUTO_PAUSE = 2, 5 -- seconds
 local function AutoFill(f, elapsed)
     f.autoWait = f.autoWait - elapsed
     if f.autoWait > 0 then return end
-    f.autoWait = AUTO_EVERY
+    f.autoWait = f.autoEvery or AUTO_EVERY
     -- Not while the player is selecting, scrolling or copying.
     if f.holder:IsMouseOver() or (f.keyAt and GetTime() - f.keyAt < AUTO_PAUSE) then return end
     local text = f.autoFill() or ""
@@ -503,6 +503,15 @@ function ns.CloseTextDialog(kind)
     if textDialog and textDialog:IsShown() and textDialog.kind == kind then textDialog:Hide() end
 end
 
+-- Select all of the text window's text, ready for Ctrl+C (a Copy button). Its auto-fill waits a
+-- moment, as after a key in it, so the selection stays.
+function ns.SelectTextDialog()
+    if not (textDialog and textDialog:IsShown()) then return end
+    textDialog.keyAt = GetTime()
+    textDialog.edit:SetFocus()
+    textDialog.edit:HighlightText()
+end
+
 function ns.TextDialog(opts)
     if not textDialog then BuildTextDialog() end
     local f = textDialog
@@ -578,8 +587,9 @@ function ns.TextDialog(opts)
         f.holder:SetPoint("TOPLEFT", f.hint, "BOTTOMLEFT", -2, -10)
     end
     -- opts.autoFill = function() return text end: the text box is filled again every AUTO_EVERY
-    -- seconds when the text changed (message log's auto-refresh).
-    f.autoFill, f.autoWait, f.followBottom = opts.autoFill, AUTO_EVERY, false
+    -- seconds (opts.autoEvery: another period) when the text changed (message log's auto-refresh).
+    f.autoEvery = opts.autoEvery
+    f.autoFill, f.autoWait, f.followBottom = opts.autoFill, opts.autoEvery or AUTO_EVERY, false
     f:SetScript("OnUpdate", opts.autoFill and AutoFill or nil)
     -- The text box goes down to the bottom when there's no button under it.
     f.holder:SetPoint("BOTTOMRIGHT", -10, opts.button and 44 or 10)

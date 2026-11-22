@@ -62,10 +62,28 @@ addon shares their lines. The relay fills in for the others: in each guild, one 
 | `Minimap.lua` | speech-bubble badge while I relay; one tooltip line per guild |
 | `Core.lua`, `Locale.lua` | `relay = { help, told }` defaults; every string in French |
 | `Dev.lua`, `Tests.lua` | `/taverne dev say`; `/taverne probe` (phase 0 measurements) |
+| `Comm.lua` | `lastSend` (parts and bytes of the last send), `WatchParts` (ChatThrottleLib's callback: parts held back or refused) |
+| `DebugUI.lua` | "Guild relay" button (the live window) |
+
+## Monitoring
+- Each client measures its own sending on the relay prefix: messages (parts) and bytes over the
+  last 10 s, minute and 10 min, budget % (messages in the last minute against the game's 1 a
+  second), the busiest minute, messages per line, the coordination share (`RLY` among all), and
+  parts ChatThrottleLib held back 1 s or more, or refused (throttled).
+- Budget at 70 % or more for 2 min: one warning, marked "!!" in the message log. A holder of two
+  jobs or more then hands over the ones marked `shed` (the map job, later; chat is never shed).
+- The beacon carries `sent`, `mq`, `b` (bytes), `p` (parts), `th` (throttled) since the previous
+  one: every guild sees every relay's load.
+- The hello carries `tr` (tier for chat, 0-3, or `x` and `tw` why): the count of candidates per
+  tier. Only in hellos sent anyway, never one just because the tier changed.
+- Stability, from the beacons heard: uptime this hour (fresh beacon while that guild has a La
+  Taverne player online) and holder changes (planned: after an `off`; unplanned: it went quiet).
 
 ## Commands
-- `/taverne relay`: the full report in the copy window (me, every guild's relay, my view of the
-  election, buffer, queue, counts). Paste it when reporting a problem.
+- `/taverne relay` (or the Debug tab's "Guild relay" button): the live window, filled again
+  every 3 s, in both modes. Every guild's relay with its load and stability, my guild's
+  candidates per tier, me and the election, my sending, the counts since login, the last 20
+  relay events. Copy selects it all: paste it when reporting a problem.
 - `/taverne probe`: phase 0 measurements (chat readable or secret, throttles, logout, resting).
 - Test mode: `/taverne dev say Firstname Lastname: text`: a test guild member without La Taverne
   says a line (the relay passes it on). Only the test guild's fake chat is relayed in test mode,
@@ -85,7 +103,10 @@ addon shares their lines. The relay fills in for the others: in each guild, one 
    "turned off by the officers".
 7. Profanity filter on one PC (real guild): a La Taverne author's swear word shows once on the
    allied side.
-8. Bring back `/taverne relay`, the message log and `/taverne errors` from each PC.
+8. Bring back `/taverne relay` (Copy), the message log and `/taverne errors` from each PC.
+9. Live window: the allied PC sees the holder's load from its beacon (messages, bytes, budget);
+   the candidates per tier fill in within 5 min of a login; a handover counts as planned, a
+   killed game as unplanned.
 
 ## What's left
 **Phase 2: map relay.** Dots on the allied guilds' maps for members without La Taverne.

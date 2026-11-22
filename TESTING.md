@@ -18,6 +18,11 @@ To start the vouching tests from a clean slate (keeps every setting):
 - [ ] Away check (nothing to set up, just play with script errors on): no "secret boolean" error
       from `Vouch.lua` or `Players.lua` after fights and boss encounters.
 
+- [ ] Guild relay live window: `/taverne relay` (and the Debug tab's "Guild relay" button)
+      opens a window that fills itself again every 3 s; Copy selects it all. With you relaying:
+      your guild's row, "Who can relay" counts you, "What you send" counts messages after a
+      `/taverne dev say` (test mode) or a guildmate's line, the last events list "I hold chat".
+
 ## 2. Alone: useful, not urgent
 - [ ] Probe: `/taverne probe roster` with the guild window's "show offline members" box unticked
       (are offline members still readable? if not, an alt's snapshot is partial).
@@ -31,6 +36,9 @@ To start the vouching tests from a clean slate (keeps every setting):
       record expires.
 
 ## 3. With a second player: essential
+- [ ] Guild relay live window, two PCs: the other PC sees the holder's "last minute" figures
+      (from its beacon) and counts the candidates per tier within 5 minutes; a handover shows as
+      a planned holder change, a killed game as unplanned.
 - [ ] Guild relay, two candidates (same guild, both on this version): exactly one relays
       (`/taverne relay` on both).
 - [ ] Guild relay: `/taverne dev say Firstname Lastname: text` (test mode) shows once on the

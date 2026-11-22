@@ -746,6 +746,30 @@ end
 local PART_IDS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 local partId = 0
 
+-- What the last SendAlly handed to the game: parts (one addon message each) and bytes (with the
+-- prefix), both channels during a key change. Relay.lua reads it to measure its own sending.
+Comm.lastSend = { parts = 0, bytes = 0 }
+
+-- Parts on a watched prefix report back once ChatThrottleLib really sends them (it holds them
+-- while its budget or the game's throttle says wait): fn(didSend, waited seconds). Relay.lua.
+local partWatch = {}
+function Comm:WatchParts(prefix, fn) partWatch[prefix] = fn end
+
+local function PartDone(arg, didSend)
+    local fn = partWatch[arg.prefix]
+    if fn then fn(didSend and true or false, GetTime() - arg.at) end
+end
+
+local function SendPart(prio, prefix, msg, id)
+    if partWatch[prefix] then
+        CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id, nil, PartDone, { prefix = prefix, at = GetTime() })
+    else
+        CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id)
+    end
+    local sent = Comm.lastSend
+    sent.parts, sent.bytes = sent.parts + 1, sent.bytes + #msg + #prefix
+end
+
 local function SendOnChannel(ch, text, prio, prefix)
     local id = ChannelId(ch)
     if not id then
@@ -754,7 +778,7 @@ local function SendOnChannel(ch, text, prio, prefix)
     end
     prefix = prefix or ALLY_PREFIX
     if #text <= PART_SIZE then
-        CTL:SendAddonMessage(prio, prefix, "0" .. text, "CHANNEL", id)
+        SendPart(prio, prefix, "0" .. text, id)
     else
         -- Each message of several parts gets its own letter after the mark, so two of them
         -- sent at once (different priorities, mixed by ChatThrottleLib) stay apart.
@@ -764,7 +788,7 @@ local function SendOnChannel(ch, text, prio, prefix)
         while pos <= len do
             local chunk = text:sub(pos, pos + PART_SIZE - 1)
             local mark = (pos == 1) and "1" or ((pos + PART_SIZE > len) and "3" or "2")
-            CTL:SendAddonMessage(prio, prefix, mark .. tag .. chunk, "CHANNEL", id)
+            SendPart(prio, prefix, mark .. tag .. chunk, id)
             pos = pos + PART_SIZE
         end
     end
@@ -796,6 +820,7 @@ function Comm:SendAlly(msgType, payload, priority, noQueue, prefix)
     allySerial = allySerial + 1
     payload.n = math.random(1, 1000000) * 1000 + allySerial % 1000
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
+    Comm.lastSend.parts, Comm.lastSend.bytes = 0, 0
     if SendAllyText(text, priority, prefix) then
         Trace("out", "ally", msgType, nil, #text, "sent", payload)
         return true

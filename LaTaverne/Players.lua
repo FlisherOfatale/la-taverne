@@ -526,7 +526,8 @@ end)
 -- My guildmates' hellos on the alliance channel (Vouch.lua: when they join it, when they answer
 -- an allied hello, every 4-4.5 minutes, and when something they say changes). Comm.lua already
 -- counted them as running La Taverne; this keeps what they say about themselves: away (afk), and
--- the relay fields (Relay.lua): rl = relay switch on, cap = jobs they can do, rp = relay protocol.
+-- the relay fields (Relay.lua): rl = relay switch on, cap = jobs they can do, rp = relay protocol,
+-- tr = their tier for the chat job (0-3, or "x" can't, then tw = why: a short code).
 -- Only while there's an alliance: no alliance channel, no hellos.
 ns.Comm:On("HI", function(sender, p, isSelf)
     if isSelf then return end
@@ -541,6 +542,8 @@ ns.Comm:On("HI", function(sender, p, isSelf)
         rl = (p.rl == 1 or p.rl == true) or nil,
         cap = type(p.cap) == "string" and #p.cap <= 64 and p.cap or nil,
         rp = tonumber(p.rp),
+        tr = (p.tr == "x" or tonumber(p.tr)) and p.tr or nil,
+        tw = type(p.tw) == "string" and #p.tw <= 16 and p.tw or nil,
     }
     -- Saved too: after my next login, what they said last stands in until they say it again.
     local item = (Memory() or {})[key]
@@ -589,7 +592,7 @@ function Players:RunsAddon(name)
 end
 
 -- Guildmates whose hello I heard in the last maxAge seconds (online in the roster):
--- { name, t, afk, rl, cap, rp }. For Relay.lua (who else can relay right now). While the hellos
+-- { name, t, afk, rl, cap, rp, tr, tw }. For Relay.lua (who else can relay right now). While the hellos
 -- aren't all in, also those remembered from last time and not heard yet: { name, rl, cap,
 -- probable = true }.
 function Players:GetGuildHellos(maxAge)
@@ -599,7 +602,8 @@ function Players:GetGuildHellos(maxAge)
         local h = entry.hello
         local member = h and now - h.t < maxAge and ns.Guild:GetMember(entry.name)
         if member and member.online then
-            out[#out + 1] = { name = entry.name, t = h.t, afk = h.afk, rl = h.rl, cap = h.cap, rp = h.rp }
+            out[#out + 1] = { name = entry.name, t = h.t, afk = h.afk, rl = h.rl, cap = h.cap, rp = h.rp,
+                tr = h.tr, tw = h.tw }
             listed[key] = true
         end
     end

@@ -32,6 +32,11 @@
 -- while the holder isn't heard: the job is free, and the new holder sends the owed lines
 -- (replay). A line the holder missed while relaying others: one of the others sends it (gap
 -- fill). Receivers drop copies (AllyChat.lua).
+--
+-- Monitoring: every client measures its own sending on the relay prefix (messages, bytes,
+-- budget, throttled); the beacon shares the holder's figures, the hello each player's tier (for
+-- the count of candidates per tier); stability (uptime, holder changes) is counted from the
+-- beacons heard. /taverne relay (and the Debug tab) shows it all in a live window.
 local ADDON, ns = ...
 local Relay = ns.NewModule("Relay")
 local L = ns.L
@@ -65,10 +70,17 @@ local BUFFER_AGE_FIGHT, BUFFER_MAX_FIGHT = 180, 100 -- in or just after my fight
 local COPY_WINDOW = 10        -- two copies of one line: their times differ by this much at most
 local EARLY_COPY_KEEP = 30    -- a copy heard before the guild line itself: kept this long
 local BURST, REFILL = 8, 1    -- my own budget on the relay prefix: 8 at once, then 1 a second
+local BUDGET_WARN = 70        -- messages a minute on the relay prefix, % of the game's 1 a second...
+local BUDGET_WARN_FOR = 120   -- ...held this long: a warning (and a job handed over, see Shed)
+local SLOW_PART = 1           -- a part held back this long before going out: counted as throttled
+local EVENTS_MAX = 20         -- relay events kept for the live window
+local LIVE_EVERY = 3          -- the live window's refresh
 
--- Jobs: name, what HI says I can do (cap), claim delay offset, message priority.
+-- Jobs: name, what HI says I can do (cap), claim delay offset. shed: handed to someone else
+-- first when I'm too busy and hold another job too (the map job, later); chat is never shed, it
+-- queues.
 local JOBS = {
-    chat = { name = "chat", cap = "c1", offset = 0 },
+    chat = { name = "chat", cap = "c1", offset = 0, shed = false },
 }
 local JOB_ORDER = { "chat" }
 
@@ -105,15 +117,18 @@ local newerTold = false
 --   free: an election is open. stall: it started because the holder stalled (void if heard again)
 --   claims: [key] = { name, key, tier, prev, rp, rank, at }; claimAt, settleAt, quiet
 --   electionStart, lastClaimHeard, askedAt, lastBeacon, lastAnswer, lastBeaconAgain
---   betterSince, challenged: the challenge watch. report: { sent, maxq } since my last beacon
+--   betterSince, challenged: the challenge watch. report, since my last beacon: { sent (items),
+--   maxq, b (bytes), p (parts: one addon message each), th (parts throttled or refused) }
 local jobs = {}
+local function NewReport() return { sent = 0, maxq = 0, b = 0, p = 0, th = 0 } end
 for _, job in ipairs(JOB_ORDER) do
     jobs[job] = { claims = {}, lastBeacon = 0, lastAnswer = 0, lastBeaconAgain = 0, challenged = 0,
-        report = { sent = 0, maxq = 0 } }
+        report = NewReport() }
 end
 
 -- Every guild's relays, as heard from beacons and releases (mine too):
--- [guild lowercase] = { [job] = { name, tier, since, rp, heard (server time), sent, maxq } or { why, heard } }
+-- [guild lowercase] = { [job] = { name, tier, since, rp, heard (server time), sent, maxq, b, p, th }
+--   or { why, heard } }
 local status = {}
 
 local listeners = {}
@@ -128,9 +143,15 @@ local function Changed()
     end)
 end
 
-local function Note(text, unusual)
-    ns.Comm:LogNote("relay: " .. text, unusual)
+-- Relay events: in the message log (English, like its other lines) and the last few for the live
+-- window, where fmt is translated (Locale.lua) and the values aren't. unusual: marked "!!".
+local events = {}
+local function Record(unusual, fmt, ...)
+    ns.Comm:LogNote("relay: " .. format(fmt, ...), unusual)
+    events[#events + 1] = { t = time(), fmt = fmt, args = { n = select("#", ...), ... } }
+    if #events > EVENTS_MAX then table.remove(events, 1) end
 end
+local function Note(fmt, ...) Record(nil, fmt, ...) end
 
 -- Where I stand ---------------------------------------------------------------------------------
 
@@ -227,6 +248,103 @@ local function HeldLately(st)
     return st.lastHeld ~= nil and GetTime() - st.lastHeld < PREV
 end
 
+-- Measuring ------------------------------------------------------------------------------------
+-- Rings of 60 slots (seconds or minutes), each { i (its second or minute), m (messages: parts,
+-- each its own addon message), b (bytes), up, online (seconds), planned, unplanned }.
+
+local function Slot(ring, index)
+    local pos = index % 60 + 1
+    local s = ring[pos]
+    if not s or s.i ~= index then
+        s = { i = index, m = 0, b = 0, up = 0, online = 0, planned = 0, unplanned = 0 }
+        ring[pos] = s
+    end
+    return s
+end
+
+-- A field added up over the last n slots up to index (slots not written since count 0).
+local function Sum(ring, index, n, field)
+    local total = 0
+    for i = index - n + 1, index do
+        local s = ring[i % 60 + 1]
+        if s and s.i == i then total = total + s[field] end
+    end
+    return total
+end
+
+-- My sending on the relay prefix, counted as it's handed to the game (Comm.lastSend): per
+-- second and per minute; the busiest 60 s this session (peak); parts per relayed item; RLY among
+-- everything I sent (coordination share); parts held back SLOW_PART or more before going out
+-- (held) or refused (failed); budget warnings.
+local meter = { sec = {}, min = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
+    held = 0, failed = 0, warnings = 0 }
+
+local function Measure(kind, job, parts, bytes)
+    local now = math.floor(GetTime())
+    local s = Slot(meter.sec, now)
+    s.m, s.b = s.m + parts, s.b + bytes
+    local m = Slot(meter.min, math.floor(now / 60))
+    m.m, m.b = m.m + parts, m.b + bytes
+    meter.all = meter.all + 1
+    if kind == "RLY" then
+        meter.rly = meter.rly + 1
+    else
+        meter.items = meter.items + 1
+        meter.parts = meter.parts + parts
+        if parts > meter.maxParts then meter.maxParts = parts end
+    end
+    -- The beacon's report: what I sent for a job I hold.
+    local st = job and jobs[job]
+    if st and st.holding then
+        st.report.b, st.report.p = st.report.b + bytes, st.report.p + parts
+    end
+end
+
+-- ChatThrottleLib tells when it really sent each part (Comm.lua): one held back a second or more
+-- (its budget, or the game's throttle), or refused, counts as throttled.
+ns.Comm:WatchParts(PREFIX, function(didSend, waited)
+    if didSend and waited < SLOW_PART then return end
+    if didSend then meter.held = meter.held + 1 else meter.failed = meter.failed + 1 end
+    for _, job in ipairs(JOB_ORDER) do
+        local st = jobs[job]
+        if st.holding then st.report.th = st.report.th + 1 end
+    end
+end)
+
+-- Stability per guild and job, from the beacons heard: [guild lowercase][job] = { min = ring
+-- (up: seconds with a fresh beacon, online: seconds with a La Taverne player of that guild
+-- online, planned / unplanned: holder changes), holder (key), off (an "off" heard since) }.
+-- A change is planned when the last holder said "off" first, unplanned when it just went quiet.
+local stability = {}
+
+local function Track(g, job)
+    stability[g] = stability[g] or {}
+    local t = stability[g][job]
+    if not t then
+        t = { min = {} }
+        stability[g][job] = t
+    end
+    return t
+end
+
+local function MinuteSlot(t)
+    return Slot(t.min, math.floor(GetTime() / 60))
+end
+
+local function NoteChange(g, job, entry)
+    local t = Track(g, job)
+    if entry.name then
+        local key = ns.NameKey(entry.name)
+        if t.holder and t.holder ~= key then
+            local s = MinuteSlot(t)
+            if t.off then s.planned = s.planned + 1 else s.unplanned = s.unplanned + 1 end
+        end
+        t.holder, t.off = key, nil
+    else
+        t.off = true
+    end
+end
+
 -- Status --------------------------------------------------------------------------------------
 
 local function NoteStatus(guild, job, entry)
@@ -234,6 +352,7 @@ local function NoteStatus(guild, job, entry)
     local g = strtrim(guild):lower()
     status[g] = status[g] or {}
     entry.heard = GetServerTime()
+    NoteChange(g, job, entry)
     status[g][job] = entry
     Changed()
 end
@@ -294,9 +413,14 @@ function Relay:GetJobs() return JOB_ORDER end
 local function SendRLY(op, job, fields)
     local payload = fields or {}
     payload.op, payload.j, payload.rp = op, job, RP
-    return ns.Comm:SendAlly("RLY", payload, "ALERT", true, PREFIX)
+    if not ns.Comm:SendAlly("RLY", payload, "ALERT", true, PREFIX) then return false end
+    Measure("RLY", job, ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
+    return true
 end
 
+-- The beacon carries what I sent for the job since the previous one (sent, mq, b, p, th): every
+-- guild sees every relay's load. (The report starts again before it goes: the beacon itself
+-- counts in the next one.)
 local function Beacon(job)
     local st = jobs[job]
     if SendingPaused() then return end -- the tick sends it once the fight is over
@@ -304,8 +428,9 @@ local function Beacon(job)
     local tier = Tier(job) or 3
     st.beaconTier = tier -- what the others know of me (two holders compare these)
     local report = st.report
-    SendRLY("hold", job, { tier = tier, since = st.since, sent = report.sent, mq = report.maxq })
-    report.sent, report.maxq = 0, 0
+    st.report = NewReport()
+    SendRLY("hold", job, { tier = tier, since = st.since, sent = report.sent, mq = report.maxq,
+        b = report.b, p = report.p, th = report.th })
     NoteStatus(ns.Guild:GetName(), job, { name = ns.FullName("player"), tier = tier, since = st.since, rp = RP })
 end
 
@@ -360,7 +485,7 @@ local function MarkFree(job, stall, why)
     -- why: a new election (logged, counted); none: the same one, started again.
     if why then
         stats.elections = stats.elections + 1
-        Note(format("%s is free (%s)", job, why))
+        Note("%s is free (%s)", job, why)
     end
     ScheduleClaim(job)
     Changed()
@@ -374,9 +499,9 @@ local function Take(job)
     st.heldTier = Tier(job)
     st.lastHeld = GetTime()
     st.betterSince = nil
-    st.report.sent, st.report.maxq = 0, 0
+    st.report = NewReport()
     stats.took = stats.took + 1
-    Note(format("I hold %s (tier %s)", job, tostring(st.heldTier)))
+    Note("I hold %s (tier %s)", job, tostring(st.heldTier))
     -- Now, or (sending paused) as soon as it can: the tick beacons once lastBeacon is old.
     st.lastBeacon, st.beaconTier = 0, nil
     Beacon(job)
@@ -396,7 +521,7 @@ local function Release(job, why, silent)
     st.holding = false
     st.lastHeld = GetTime()
     stats.released = stats.released + 1
-    Note(format("I give %s up (%s)", job, tostring(why)))
+    Note("I give %s up (%s)", job, tostring(why))
     local hooks = JobHooks[job]
     if hooks and hooks.onRelease then hooks.onRelease() end
     if silent then
@@ -422,7 +547,7 @@ local function Claim(job)
     st.settleAt = now + SETTLE
     st.lastClaimHeard = now
     stats.claims = stats.claims + 1
-    Note(format("I claim %s (tier %d)", job, tier))
+    Note("I claim %s (tier %d)", job, tier)
 end
 
 -- My turn to claim: unless I heard a claim as good as mine meanwhile (it'll win or settle it).
@@ -520,7 +645,7 @@ local function HeardFrom(job, key, q, isLine)
     if isLine then h.lastLine = GetTime() end
     -- A stall election is void once the holder is heard again: it was only busy (a fight).
     if st.free and st.stall then
-        Note(format("%s: %s is back, no new relay", job, h.name))
+        Note("%s: %s is back, no new relay", job, h.name)
         CloseElection(job)
         Changed()
     end
@@ -548,7 +673,7 @@ local function OnGuildRLY(sender, p)
     if p.op == "hold" then
         if not tier then return end
         NoteStatus(ns.Guild:GetName(), job, { name = sender, tier = tier, since = tonumber(p.since), rp = rp,
-            sent = tonumber(p.sent), maxq = tonumber(p.mq) })
+            sent = tonumber(p.sent), maxq = tonumber(p.mq), b = tonumber(p.b), p = tonumber(p.p), th = tonumber(p.th) })
         if st.holding then
             -- Two holders: the worse one stops (silently), the better one says so at once.
             -- Both sides compare the tiers of their last beacons (what the other one heard),
@@ -614,7 +739,7 @@ local function OnAllyRLY(sender, p)
         local tier = ValidTier(p.tier)
         if not tier then return end
         NoteStatus(p.g, p.j, { name = sender, tier = tier, since = tonumber(p.since), rp = tonumber(p.rp),
-            sent = tonumber(p.sent), maxq = tonumber(p.mq) })
+            sent = tonumber(p.sent), maxq = tonumber(p.mq), b = tonumber(p.b), p = tonumber(p.p), th = tonumber(p.th) })
     elseif p.op == "off" then
         NoteStatus(p.g, p.j, { why = type(p.why) == "string" and p.why:sub(1, 16) or nil })
     end
@@ -635,13 +760,19 @@ ns.Comm:On("HI", function(_, p, isSelf)
     if not isSelf then Relay:NoteProtocol(p.rp, true) end
 end)
 
--- What my hello says about relaying (Vouch.lua): switch on (rl), jobs I can do (cap), protocol.
+-- What my hello says about relaying (Vouch.lua): switch on (rl), jobs I can do (cap), protocol,
+-- and my tier for the chat job (tr: 0-3, or "x" can't and tw why), for my guildmates' count of
+-- candidates per tier (the live window). Only in the hellos sent anyway (every 4-4.5 min, and
+-- when being away or the switch changes): a tier changing (fights) never sends one.
 function Relay:HelloFields(payload)
     payload.rl = ns.db.relay.help and 1 or nil
     local caps = {}
     for _, job in ipairs(JOB_ORDER) do caps[#caps + 1] = JOBS[job].cap end
     payload.cap = table.concat(caps, ",")
     payload.rp = RP
+    local tier, why = Tier("chat")
+    payload.tr = tier or "x"
+    payload.tw = not tier and why or nil
 end
 
 -- Chat job ----------------------------------------------------------------------------------------
@@ -761,6 +892,7 @@ local function SendLine(e, waiting, gapFill)
     local payload = { a = e.author, m = e.text, c = e.class, id = e.guid, t = e.t, q = waiting or 0, rp = RP,
         gf = gapFill and 1 or nil }
     if not ns.Comm:SendAlly("RCHAT", payload, "ALERT", true, PREFIX) then return false end
+    Measure("RCHAT", "chat", ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
     local now = GetTime()
     if not e.covered then
         e.covered, e.by = now, "me"
@@ -865,7 +997,7 @@ local function WatchChat(job, st, tier)
                 Refill()
                 if tokens >= Cost(e) and SendLine(e, 0, true) then
                     tokens = tokens - Cost(e)
-                    Note(format("%s missed a line from %s: sent it", h.name, e.author))
+                    Note("%s missed a line from %s: sent it", h.name, e.author)
                 end
             end
         end
@@ -984,10 +1116,72 @@ local function TickJob(job)
         if now - st.betterSince >= TAKEOVER_AFTER + spot and now - st.challenged >= TAKEOVER_AFTER then
             st.challenged = now
             SendRLY("claim", job, { tier = tier, ch = 1 })
-            Note(format("%s: %s is tier %d, I'm %d: asking for it", job, h.name, h.tier, tier))
+            Note("%s: %s is tier %d, I'm %d: asking for it", job, h.name, h.tier, tier)
         end
     else
         st.betterSince = nil
+    end
+end
+
+-- Too busy: messages on the relay prefix at BUDGET_WARN % of the game's limit or more for
+-- BUDGET_WARN_FOR: one warning (marked "!!" in the message log), and while I hold two jobs or
+-- more, a job that can be shed goes to someone else (chat never: it queues).
+local function Shed()
+    local held = 0
+    for _, job in ipairs(JOB_ORDER) do
+        if jobs[job].holding then held = held + 1 end
+    end
+    if held < 2 then return end
+    for i = #JOB_ORDER, 1, -1 do
+        local job = JOB_ORDER[i]
+        if JOBS[job].shed and jobs[job].holding then
+            Release(job, "busy")
+            return
+        end
+    end
+end
+
+local function WatchBudget()
+    local now = GetTime()
+    local last = Sum(meter.sec, math.floor(now), 60, "m")
+    if last > meter.peak then meter.peak = last end
+    local pct = math.floor(last * 100 / 60)
+    if pct < BUDGET_WARN then
+        meter.busySince, meter.warned = nil, false
+        return
+    end
+    meter.busySince = meter.busySince or now
+    if meter.warned or now - meter.busySince < BUDGET_WARN_FOR then return end
+    meter.warned = true
+    meter.warnings = meter.warnings + 1
+    Record("relay busy", "busy: %d%% of the game's limit for %d s", pct, BUDGET_WARN_FOR)
+    Shed()
+end
+
+-- Uptime: each second, for every guild with a La Taverne player online (mine: me), whether its
+-- relay's beacon is fresh. Which guilds have players online is read again every 15 s (the
+-- allied players list isn't small).
+local onlineGuilds, onlineAt = {}, nil
+local function TrackUptime()
+    if not ns.Alliance:IsActive() then return end
+    local now = GetTime()
+    if not onlineAt or now - onlineAt >= 15 then
+        onlineAt = now
+        wipe(onlineGuilds)
+        for _, pl in ipairs(ns.Vouch:GetPlayers()) do
+            if pl.online and type(pl.guild) == "string" then onlineGuilds[strtrim(pl.guild):lower()] = true end
+        end
+    end
+    local online = onlineGuilds
+    for _, g in ipairs(ns.Alliance:GetGuilds()) do
+        local key = strtrim(g.name):lower()
+        if online[key] or ns.Guild:IsMyGuild(g.name) then
+            for _, job in ipairs(JOB_ORDER) do
+                local s = MinuteSlot(Track(key, job))
+                s.online = s.online + 1
+                if Relay:GetStatus(g.name, job) then s.up = s.up + 1 end
+            end
+        end
     end
 end
 
@@ -995,6 +1189,8 @@ local function Tick()
     Prune()
     for _, job in ipairs(JOB_ORDER) do TickJob(job) end
     Pump()
+    WatchBudget()
+    TrackUptime()
 end
 
 function Relay:OnLogin()
@@ -1142,6 +1338,7 @@ local WHY = {
     chat = "allied chat off", info = "Guild Info not read yet", officers = "turned off by the officers",
     newer = "a newer relay is in use", instance = "in an instance", raid = "in a raid group",
     away = "away", logout = "logged out", better = "a better relay took over", ["two holders"] = "another relay",
+    busy = "too busy", old = "La Taverne without the relay",
 }
 -- A reason code (CantReason, a release's why) as text for the player.
 function Relay.WhyText(why)
@@ -1173,8 +1370,11 @@ function Relay:MyStateText()
     return format(L["Ready to relay (%s)"], text)
 end
 
--- /taverne relay: everything about the relay, in the copy window (to paste in a message to the
--- author). English only, like the other reports.
+-- The live window (/taverne relay, the Debug tab) ---------------------------------------------
+-- Everything about the relay, filled again every LIVE_EVERY seconds, in both modes (test mode
+-- carries only the test guild's lines, so the real guild's load shows only outside it). Top
+-- first: every guild's relay, my guild's candidates per tier, me and the election, my sending,
+-- the counts since login, the last events. Copy selects it all (to paste in a message).
 local function Plain(text)
     return (tostring(text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
@@ -1183,64 +1383,207 @@ local function Since(t)
     return t and date("%H:%M", t) or "?"
 end
 
-ns.commands.relay = function()
-    local Log = ns.Log
-    wipe(ns.log)
-    Log("La Taverne", ns.version, "relay", date("%Y-%m-%d %H:%M:%S"), "protocol", RP)
-    local myGuild = ns.Guild:GetName()
-    Log("me:", Plain(Relay:MyStateText()), "| switch", ns.db.relay.help and "on" or "off",
-        "| guild info", ns.Alliance:IsInfoKnown() and "read" or "not read yet",
-        "| rule", tostring(ns.Alliance.RelayLine(ns.Alliance:GetRelayRule()) or "none (every job)"),
-        newerRp and ("| newer protocol in my guild: " .. newerRp) or "")
-    local others, away = Relay:CountOthers("chat")
-    Log("others in my guild who can relay now:", others, away > 0 and ("(" .. away .. " away)") or "")
+local function Pct(a, b)
+    return b > 0 and math.floor(a * 100 / b + 0.5) or 0
+end
+
+-- This hour for a guild and job: uptime %, planned and unplanned holder changes, and the seconds
+-- it had a La Taverne player online (0: nothing to say). nil: never heard of.
+local function Stability(g, job)
+    local t = stability[g] and stability[g][job]
+    if not t then return nil end
+    local idx = math.floor(GetTime() / 60)
+    local online = Sum(t.min, idx, 60, "online")
+    return Pct(Sum(t.min, idx, 60, "up"), online), Sum(t.min, idx, 60, "planned"),
+        Sum(t.min, idx, 60, "unplanned"), online
+end
+
+-- My guild's candidates for a job, per tier: me now, the others as their last hello said (up to
+-- 4.5 min old). tiers[0..3]; cant[why] (switched off, an instance..., "old": La Taverne without
+-- the relay); unknown: their hello didn't say a tier (an earlier test version); probable: not
+-- heard since my login, probably can (Players.lua).
+local function TierCounts(job)
+    local cap = JOBS[job].cap
+    local tiers, cant, unknown, probable = { [0] = 0, 0, 0, 0 }, {}, 0, 0
+    local function Add(tr, tw)
+        local t = ValidTier(tr)
+        if t then
+            tiers[t] = tiers[t] + 1
+        elseif tr == "x" then
+            local why = tw or "unknown"
+            cant[why] = (cant[why] or 0) + 1
+        else
+            unknown = unknown + 1
+        end
+    end
+    local mine, why = Tier(job)
+    Add(mine or "x", not mine and why or nil)
+    for _, h in ipairs(ns.Players:GetGuildHellos(HELLO_FRESH)) do
+        if h.probable then
+            probable = probable + 1
+        elseif not h.cap then
+            cant.old = (cant.old or 0) + 1
+        elseif not h.rl then
+            cant.off = (cant.off or 0) + 1
+        else
+            local can = false
+            for c in tostring(h.cap):gmatch("[^,]+") do
+                if strtrim(c) == cap then can = true end
+            end
+            if can then Add(h.tr, h.tw) else cant.old = (cant.old or 0) + 1 end
+        end
+    end
+    return tiers, cant, unknown, probable
+end
+
+local function ReportText()
+    local out = {}
+    local function Add(text) out[#out + 1] = text end
+    local now, server = GetTime(), GetServerTime()
+    Add(format(L["La Taverne %s, guild relay, %s (relay protocol %d)"], tostring(ns.version), date("%H:%M:%S"), RP))
+
     -- Every guild's relay, as heard.
+    Add("")
+    Add(L["Relays"])
+    if not ns.Alliance:IsActive() then Add("    " .. L["No Guild Alliance: nothing to relay."]) end
     for _, g in ipairs(ns.Alliance:GetGuilds()) do
+        local key = strtrim(g.name):lower()
+        local label = "[" .. (g.tag or "?") .. "]" .. (ns.Guild:IsMyGuild(g.name) and (" " .. L["(your guild)"]) or "")
         for _, job in ipairs(JOB_ORDER) do
             local entry, why = Relay:GetStatus(g.name, job)
-            local mine = ns.Guild:IsMyGuild(g.name) and " (mine)" or ""
+            local head = "    " .. label .. " " .. Relay.JobText(job) .. ": "
             if entry then
-                local heard = GetServerTime() - entry.heard
-                Log(format("[%s]%s %s: %s, tier %s, since %s, heard %d s ago, vouch %s, since its previous beacon %s sent, max queue %s",
-                    g.tag or "?", mine, job, entry.name, tostring(entry.tier), Since(entry.since), heard,
-                    ns.IsMe(entry.name) and "me" or mine ~= "" and "my guild" or tostring(ns.Vouch:GetState(entry.name)),
-                    tostring(entry.sent or "?"), tostring(entry.maxq or "?")))
+                Add(head .. format(L["%s (%s), heard %d s ago, relaying since %s"],
+                    ns.IsMe(entry.name) and L["you"] or entry.name, Relay.TierText(entry.tier),
+                    server - entry.heard, Since(entry.since)))
+                if entry.p then
+                    Add("        " .. format(L["last minute: %d lines, %d messages (%d bytes), budget about %d%%, max queue %d, throttled %d"],
+                        entry.sent or 0, entry.p, entry.b or 0, Pct(entry.p, BEACON_EVERY), entry.maxq or 0, entry.th or 0))
+                elseif entry.sent then
+                    Add("        " .. format(L["last minute: %d lines, max queue %d"], entry.sent, entry.maxq or 0))
+                end
             else
-                if mine ~= "" and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job) then why = "officers" end
-                Log(format("[%s]%s %s: none%s, La Taverne players online: %s", g.tag or "?", mine, job,
-                    why and (" (" .. why .. ")") or "", Relay:HasPlayersOnline(g.name) and "yes" or "no"))
+                if ns.Guild:IsMyGuild(g.name) and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job) then
+                    why = "officers"
+                end
+                Add(head .. (why and format(L["nobody (%s)"], Relay.WhyText(why)) or L["nobody"]) .. ", "
+                    .. (Relay:HasPlayersOnline(g.name) and L["La Taverne players online"] or L["no La Taverne player online"]))
+            end
+            local up, planned, unplanned, online = Stability(key, job)
+            if up and online > 0 then
+                Add("        " .. format(L["this hour: up %d%% of the time, holder changes: %d planned, %d unplanned"],
+                    up, planned, unplanned))
             end
         end
     end
-    -- My view of my guild's election.
-    local now = GetTime()
+
+    -- My guild's candidates per tier.
+    for _, job in ipairs(JOB_ORDER) do
+        local tiers, cant, unknown, probable = TierCounts(job)
+        Add("")
+        Add(format(L["Who can relay in %s (%s): you now, the others as of their last hello (up to 5 min old)"],
+            MyGuildLabel(), Relay.JobText(job)))
+        local parts = {}
+        for t = 0, 3 do parts[#parts + 1] = Relay.TierText(t) .. " " .. tiers[t] end
+        Add("    " .. table.concat(parts, ", "))
+        parts = {}
+        for code, n in pairs(cant) do parts[#parts + 1] = Relay.WhyText(code) .. " " .. n end
+        table.sort(parts)
+        if #parts > 0 then Add("    " .. L["can't:"] .. " " .. table.concat(parts, ", ")) end
+        if unknown > 0 then Add("    " .. format(L["tier not said: %d"], unknown)) end
+        if probable > 0 then Add("    " .. format(L["not heard since you logged in, probably can: %d"], probable)) end
+    end
+
+    -- Me, and my view of my guild's election.
+    Add("")
+    Add(L["You"])
+    Add("    " .. Plain(Relay:MyStateText()) .. "; " .. (ns.db.relay.help and L["switch on"] or L["switch off"]) .. "; "
+        .. (ns.Alliance:IsInfoKnown() and L["Guild Info read"] or L["Guild Info not read yet"]) .. "; "
+        .. format(L["officers' line: %s"], tostring(ns.Alliance.RelayLine(ns.Alliance:GetRelayRule()) or L["none (every job allowed)"])))
+    if newerRp then Add("    " .. format(L["A newer relay protocol is in use in your guild: %d."], newerRp)) end
     for _, job in ipairs(JOB_ORDER) do
         local st = jobs[job]
         local h = st.holder
-        local n = 0
-        for _ in pairs(st.claims) do n = n + 1 end
-        Log(format("%s: holding %s, holder %s, free %s%s%s, claims %d%s%s", job,
-            st.holding and ("yes since " .. Since(st.since) .. ", tier " .. tostring(st.heldTier)) or "no",
-            h and format("%s (tier %s, heard %d s ago, q %d)", h.name, tostring(h.tier), math.floor(now - h.heard), h.q or 0) or "none",
-            st.free and "yes" or "no", st.stall and " (stall)" or "", st.quiet and " quiet" or "", n,
-            st.claimAt and format(", my claim in %.1f s", st.claimAt - now) or "",
-            st.settleAt and format(", settling in %.1f s", st.settleAt - now) or ""))
+        local claims = 0
+        for _ in pairs(st.claims) do claims = claims + 1 end
+        local line
+        if st.holding then
+            line = format(L["%s: you hold it since %s (%s)"], Relay.JobText(job), Since(st.since), Relay.TierText(st.heldTier))
+        elseif h then
+            line = format(L["%s: %s holds it (%s), heard %d s ago, %d waiting"], Relay.JobText(job), h.name,
+                Relay.TierText(h.tier), math.floor(now - h.heard), h.q or 0)
+        else
+            line = format(L["%s: nobody holds it"], Relay.JobText(job))
+        end
+        if st.free then
+            line = line .. "; " .. format(L["election open: %d claims"], claims)
+            if st.stall then line = line .. " " .. L["(the holder went quiet)"] end
+            if st.claimAt then line = line .. ", " .. format(L["your claim in %.1f s"], st.claimAt - now) end
+            if st.settleAt then line = line .. ", " .. format(L["settling in %.1f s"], st.settleAt - now) end
+            if st.quiet then line = line .. ", " .. L["you stay quiet (a claim as good as yours)"] end
+        end
+        Add("    " .. line)
     end
+
+    -- My sending on the relay prefix.
+    local sec, minute = math.floor(now), math.floor(now / 60)
+    local last = Sum(meter.sec, sec, 60, "m")
+    Add("")
+    Add(L["What you send for the relay"])
+    Add("    " .. format(L["messages (bytes): last 10 s %d (%d), last minute %d (%d), last 10 min %d (%d)"],
+        Sum(meter.sec, sec, 10, "m"), Sum(meter.sec, sec, 10, "b"), last, Sum(meter.sec, sec, 60, "b"),
+        Sum(meter.min, minute, 10, "m"), Sum(meter.min, minute, 10, "b")))
+    Add("    " .. format(L["budget %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"],
+        Pct(last, 60), BUDGET_WARN, BUDGET_WARN_FOR / 60, meter.warnings, meter.peak))
+    Add("    " .. format(L["messages per line: average %.1f, max %d; coordination %d%% of what you sent; held back 1 s or more %d, refused %d"],
+        meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts, Pct(meter.rly, meter.all), meter.held, meter.failed))
     local owed = 0
     for _, e in ipairs(buffer) do
         if not e.covered then owed = owed + 1 end
     end
-    Log(format("buffer %d lines (%d not covered), early copies %d, queue %d, budget %.1f / %d, sending %s",
-        #buffer, owed, #earlyCopies, #queue, tokens, BURST, SendingPaused() and "paused" or "ok"))
+    Add("    " .. format(L["lines kept %d (%d not passed on yet), queue %d, burst left %.1f of %d, sending %s"],
+        #buffer, owed, #queue, tokens, BURST, SendingPaused() and L["paused (a fight)"] or L["ok"]))
+
+    -- Counts since login.
     local s = stats
-    Log(format("guild lines %d, needed a relay %d (%d%%), within %d s %d (%d%%), late %d, lost %d, covered by their author %d",
-        s.lines, s.needed, s.lines > 0 and math.floor(s.needed * 100 / s.lines) or 0, STALL_OWED, s.onTime,
-        s.needed > 0 and math.floor(s.onTime * 100 / s.needed) or 0, s.late, s.lost, s.byAuthor))
-    Log(format("as the relay: sent %d (gap fills %d), wait avg %.1f s, max %.1f s, max queue %d",
+    Add("")
+    Add(L["Since you logged in"])
+    Add("    " .. format(L["guild lines %d, needed a relay %d (%d%%), passed on within %d s %d (%d%%), late %d, lost %d, sent by their author %d"],
+        s.lines, s.needed, Pct(s.needed, s.lines), STALL_OWED, s.onTime, Pct(s.onTime, s.needed), s.late, s.lost, s.byAuthor))
+    Add("    " .. format(L["as the relay: sent %d (gap fills %d), wait average %.1f s, max %.1f s, max queue %d"],
         s.sent, s.gapFills, s.sent > 0 and s.waitTotal / s.sent or 0, s.waitMax, s.maxQueue))
-    Log(format("took %d, gave up %d, stalls %d, elections %d, my claims %d",
+    Add("    " .. format(L["took it %d, gave it up %d, stalls %d, elections %d, your claims %d"],
         s.took, s.released, s.stalls, s.elections, s.claims))
     local a = ns.AllyChat.stats
-    Log(format("received: relayed lines accepted %d, copies dropped %d, refused %d", a.relayed or 0, a.copies or 0, a.refused or 0))
-    ns.ShowCopyWindow()
+    Add("    " .. format(L["received: relayed lines %d, copies dropped %d, refused %d"], a.relayed or 0, a.copies or 0, a.refused or 0))
+
+    -- The last events, newest first.
+    Add("")
+    Add(L["Last events"])
+    if #events == 0 then Add("    " .. L["none yet"]) end
+    for i = #events, 1, -1 do
+        local e = events[i]
+        local ok, text = pcall(format, L[e.fmt], unpack(e.args, 1, e.args.n))
+        Add("    " .. date("%H:%M:%S", e.t) .. "  " .. (ok and text or e.fmt))
+    end
+    return table.concat(out, "\n")
 end
+
+function Relay:ShowLive()
+    ns.TextDialog({
+        kind = "relay",
+        title = L["Guild relay"],
+        width = 760,
+        hint = L["Filled again every 3 seconds (it waits while the mouse is over the text). Copy selects it all: then Ctrl+C."],
+        text = ReportText(),
+        button = L["Copy"],
+        onButton = function()
+            ns.SelectTextDialog()
+            return false
+        end,
+        autoFill = ReportText,
+        autoEvery = LIVE_EVERY,
+    })
+end
+
+ns.commands.relay = function() Relay:ShowLive() end
