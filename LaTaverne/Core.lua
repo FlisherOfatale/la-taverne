@@ -493,6 +493,30 @@ function ns.TextDialog(opts)
     f.onButton = opts.onButton
     f.button:SetShown(opts.button ~= nil)
     if opts.button then f.button:SetText(opts.button) end
+    -- A checkbox left of that button (message log: Auto-refresh, next to Refresh):
+    -- opts.buttonCheck = { text, checked, onClick = function(checked), tooltip = { lines } }.
+    local bc = opts.buttonCheck
+    if bc and not f.buttonCheck and ns.UIKit then
+        f.buttonCheck = ns.UIKit.NewCheckbox(f.button:GetParent(), "", function(self)
+            if self.onCheck then self.onCheck(self:GetChecked() and true or false) end
+        end)
+        f.buttonCheck:SetScript("OnEnter", function(self)
+            if self.tip then ns.UIKit.ShowTooltip(self, self.tip) end
+        end)
+        f.buttonCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    if f.buttonCheck then
+        f.buttonCheck:SetShown(bc ~= nil and opts.button ~= nil)
+        if bc then
+            f.buttonCheck.Text:SetText(bc.text)
+            f.buttonCheck:SetChecked(bc.checked and true or false)
+            f.buttonCheck.onCheck, f.buttonCheck.tip = bc.onClick, bc.tooltip
+            -- Its label ends a little before the button.
+            local labelWidth = f.buttonCheck.Text:GetStringWidth() or 0
+            f.buttonCheck:ClearAllPoints()
+            f.buttonCheck:SetPoint("RIGHT", f.button, "LEFT", -(labelWidth + 16), 0)
+        end
+    end
     -- A second button, bottom left, that fills the text box (e.g. "From GuildUnion"):
     -- opts.extra = { text, fill = function() return text end, enabled, tooltip = { lines } }.
     if not f.extra then

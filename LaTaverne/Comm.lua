@@ -1013,14 +1013,7 @@ function Comm:OnLogin()
     end)
 end
 
--- /taverne msglog [on | off | show]: no argument switches it on or off and shows it.
-ns.commands.msglog = function(arg)
-    arg = strtrim(arg or ""):lower()
-    if arg == "on" or arg == "off" then
-        Comm:SetLogging(arg == "on")
-        ns.Print("message log " .. arg)
-        return
-    end
-    if arg == "" then Comm:SetLogging(not Comm:IsLogging()) end
+-- /taverne msglog: opens the message log window (on or off: its Recording box, or the Debug tab).
+ns.commands.msglog = function()
     if ns.ShowMessageLog then ns.ShowMessageLog() end
 end
