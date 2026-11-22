@@ -301,19 +301,27 @@ ns.On("CHAT_MSG_CHANNEL_NOTICE", function(notice, _, _, _, _, _, _, _, baseName)
         ns.Print("could not join the hidden channel " .. ch.name .. " (" .. notice .. "). Messages there are disabled until the next reload."
             .. (ns.GamepadUI() and (" " .. ns.L["Close the password window with Cancel (B)."]) or ""))
     elseif notice == "YOU_LEFT" then
+        -- Dropped by the game (not by me: LeaveChannel forgets the channel first): back in shortly.
         ch.ready = false
+        Comm:LogNote("dropped from " .. ch.name .. ": joining again")
+        C_Timer.After(2, function() Comm:Reconnect(ch) end)
     end
 end)
 
 -- A freshly joined channel rejects messages for a moment (InvalidChannel), so send a tiny
 -- probe on a prefix nobody listens to until the game accepts it.
 local function Probe(ch)
-    if channels[ch.role] ~= ch or ch.failed then return end
+    if channels[ch.role] ~= ch or ch.failed then
+        ch.probing = false
+        return
+    end
     local id = ChannelId(ch)
     if id then
         local result = C_ChatInfo.SendAddonMessage(PROBE_PREFIX, "p", "CHANNEL", id)
         if result == 0 or result == true then
-            ch.ready = true
+            ch.probing = false
+            if ch.lost then Comm:LogNote("back in " .. ch.name) end
+            ch.ready, ch.lost = true, nil
             HideChannel(ch.name)
             FlushQueue()
             Comm:LeaveStrayChannels()
@@ -326,8 +334,24 @@ local function Probe(ch)
     if ch.tries < 40 then
         C_Timer.After(0.5, function() Probe(ch) end)
     else
-        ns.Print("could not join the hidden channel " .. ch.name)
+        ch.probing = false
+        -- Said once; the watchdog (Comm:Reconnect, every 15 s) keeps trying.
+        if not ch.warned then
+            ch.warned = true
+            ns.Print("could not join the hidden channel " .. ch.name .. " (trying again)")
+        end
     end
+end
+
+-- A channel of mine that isn't ready (the game dropped me, or a send found it gone): join it
+-- again if I'm not in it any more, then probe until it takes messages. Not a channel refused
+-- for its password or a ban (that would bring the password popup back).
+function Comm:Reconnect(ch)
+    if not ch or channels[ch.role] ~= ch or ch.failed or ch.ready or ch.probing then return end
+    ch.lost = true
+    if GetChannelName(ch.name) == 0 then JoinTemporaryChannel(ch.name, ch.password) end
+    ch.tries, ch.probing = 0, true
+    C_Timer.After(0.5, function() Probe(ch) end)
 end
 
 -- Join (or rejoin) a hidden channel for a role. Replaces what the role had before.
@@ -335,7 +359,7 @@ function Comm:JoinChannel(role, name, password)
     local old = channels[role]
     if old and old.name == name and (old.ready or not old.failed) then return end
     if old and old.name ~= name then self:LeaveChannel(role) end
-    local ch = { role = role, name = name, password = password, ready = false, failed = false, tries = 0 }
+    local ch = { role = role, name = name, password = password, ready = false, failed = false, tries = 0, probing = true }
     channels[role] = ch
     if GetChannelName(name) == 0 then
         JoinTemporaryChannel(name, password)
@@ -742,6 +766,11 @@ function Comm:OnLogin()
     C_Timer.After(JOIN_DELAY, function()
         loggedIn = true
         ns.Alliance:Refresh() -- joins the test guild channel and the alliance channel
+    end)
+    -- Watchdog: a channel that stopped being ready (dropped by the game, gone during a loading
+    -- screen) joins again; before this it stayed "connecting" until a reload.
+    C_Timer.NewTicker(15, function()
+        for _, ch in pairs(channels) do Comm:Reconnect(ch) end
     end)
 end
 
