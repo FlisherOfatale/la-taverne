@@ -753,13 +753,14 @@ local partId = 0
 Comm.lastSend = { parts = 0, bytes = 0 }
 
 -- Parts on a watched prefix report back once ChatThrottleLib really sends them (it holds them
--- while its budget or the game's throttle says wait): fn(didSend, waited seconds). Relay.lua.
+-- while its budget or the game's throttle says wait): fn(didSend, waited seconds, the game's
+-- result code). Relay.lua.
 local partWatch = {}
 function Comm:WatchParts(prefix, fn) partWatch[prefix] = fn end
 
-local function PartDone(arg, didSend)
+local function PartDone(arg, didSend, result)
     local fn = partWatch[arg.prefix]
-    if fn then fn(didSend and true or false, GetTime() - arg.at) end
+    if fn then fn(didSend and true or false, GetTime() - arg.at, result) end
 end
 
 local function SendPart(prio, prefix, msg, id)

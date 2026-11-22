@@ -961,6 +961,7 @@ if GetLocale() == "frFR" then
     L["busy: %d%% of the game's limit for %d s"] = "occupé : %d %% de la limite du jeu pendant %d s"
     -- Relay, map job (OpenMap positions of members without La Taverne)
     L["Map positions"] = "Positions sur la carte"
+    L["game codes:"] = "codes du jeu :"
     L["map: %d%% of the game's limit: slower steps"] = "carte : %d %% de la limite du jeu : rythme ralenti"
     L["map: back to normal steps"] = "carte : retour au rythme normal"
     L["map: still %d%% of the game's limit after %d s: handed over"] = "carte : encore %d %% de la limite du jeu après %d s : laissée à un autre"
@@ -968,7 +969,8 @@ if GetLocale() == "frFR" then
     L["map: players kept %d (heard in the last minute %d), stops owed %d, steps %s"] = "carte : joueurs gardés %d (entendus dans la dernière minute %d), arrêts à signaler %d, rythme %s"
     L["slowed (busy)"] = "ralenti (occupé)"
     L["normal"] = "normal"
-    L["map: places heard %d, skipped (they run La Taverne) %d, refused %d; as the relay: batches %d, positions %d, stops %d"] = "carte : positions entendues %d, ignorées (ils utilisent La Taverne) %d, refusées %d ; comme relais : lots %d, positions %d, arrêts %d"
+    L["map, heard from OpenMap: %d positions from %d players without La Taverne (to pass on); skipped %d from %d players with La Taverne (they share their own); refused %d"] = "carte, entendu d'OpenMap : %d positions de %d joueurs sans La Taverne (à transmettre) ; ignorées %d de %d joueurs avec La Taverne (ils partagent la leur) ; refusées %d"
+    L["map, sent by you as the relay: %d positions in %d messages, %d players stopped sharing"] = "carte, envoyé par vous comme relais : %d positions en %d messages, %d joueurs ont arrêté de partager"
     L["received: relayed positions %d, refused %d"] = "reçu : positions relayées %d, refusées %d"
     L["Passed on by %s (guild relay)"] = "Transmis par %s (relais de guilde)"
     L["Map positions: the places your members without La Taverne share through OpenMap (its option Share where you are), passed on to the allied guilds' maps. Your own guild already sees them through OpenMap."] = "Positions sur la carte : les positions que vos membres sans La Taverne partagent avec OpenMap (son option Partager votre position), transmises aux cartes des guildes alliées. Votre propre guilde les voit déjà avec OpenMap."

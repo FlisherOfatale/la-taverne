@@ -119,6 +119,8 @@ Relay.stats = {
     -- the relay: batches, positions and stops passed on
     mapHeard = 0, mapSkipped = 0, mapBad = 0, mapBatches = 0, mapSent = 0, mapOffs = 0,
 }
+-- The players behind those messages (OpenMap sends one every 10 s while moving): [key] = true.
+local mapHeardFrom, mapSkippedFrom = {}, {}
 local stats = Relay.stats
 
 -- State --------------------------------------------------------------------------------------
@@ -302,10 +304,10 @@ end
 -- My sending on the relay prefix, counted as it's handed to the game (Comm.lastSend): per
 -- second and per minute; the busiest 60 s this session (peak); parts per relayed item; RLY among
 -- everything I sent (coordination share); parts held back SLOW_PART or more before going out
--- (held) or refused (failed); budget warnings.
+-- (held) or refused (failed, and failCodes: [the game's result code] = count); budget warnings.
 -- prefix: [prefix] = ring of seconds, the same per prefix (the game's limit is per prefix).
 local meter = { sec = {}, min = {}, prefix = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
-    held = 0, failed = 0, warnings = 0 }
+    held = 0, failed = 0, failCodes = {}, warnings = 0 }
 for _, job in ipairs(JOB_ORDER) do meter.prefix[JOBS[job].prefix] = {} end
 
 local function Measure(kind, job, parts, bytes)
@@ -334,9 +336,15 @@ end
 -- ChatThrottleLib tells when it really sent each part (Comm.lua): one held back a second or more
 -- (its budget, or the game's throttle), or refused, counts as throttled.
 for _, job in ipairs(JOB_ORDER) do
-    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited)
+    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited, result)
         if didSend and waited < SLOW_PART then return end
-        if didSend then meter.held = meter.held + 1 else meter.failed = meter.failed + 1 end
+        if didSend then
+            meter.held = meter.held + 1
+        else
+            meter.failed = meter.failed + 1
+            local code = tostring(result)
+            meter.failCodes[code] = (meter.failCodes[code] or 0) + 1
+        end
         local st = jobs[job]
         if st.holding then st.report.th = st.report.th + 1 end
     end)
@@ -1113,6 +1121,7 @@ function Relay:MapPlace(author, m, x, y, class, level)
     -- They run La Taverne: they share their own place (AllyMap.lua), nothing to pass on.
     if ns.Players:RunsAddon(author) then
         stats.mapSkipped = stats.mapSkipped + 1
+        mapSkippedFrom[key] = true
         places[key] = nil
         return
     end
@@ -1135,6 +1144,7 @@ function Relay:MapPlace(author, m, x, y, class, level)
     e.c, e.l = class or e.c, level or e.l
     gone[key] = nil
     stats.mapHeard = stats.mapHeard + 1
+    mapHeardFrom[key] = true
 end
 
 -- They stopped sharing (OpenMap's L0).
@@ -1703,7 +1713,8 @@ end
 -- My guild's candidates for a job, per tier: me now, the others as their last hello said (up to
 -- 4.5 min old). tiers[0..3]; cant[why] (switched off, an instance..., "old": La Taverne without
 -- the relay); unknown: their hello didn't say a tier (an earlier test version); probable: not
--- heard since my login, probably can (Players.lua).
+-- heard since my login, and their last hello before it said they could (Players.lua); the
+-- others not heard yet count where their last hello put them (off, or without the relay).
 local function TierCounts(job)
     local cap = JOBS[job].cap
     local tiers, cant, unknown, probable = { [0] = 0, 0, 0, 0 }, {}, 0, 0
@@ -1721,18 +1732,20 @@ local function TierCounts(job)
     local mine, why = Tier(job)
     Add(mine or "x", not mine and why or nil)
     for _, h in ipairs(ns.Players:GetGuildHellos(HELLO_FRESH)) do
-        if h.probable then
+        local can = false
+        for c in tostring(h.cap or ""):gmatch("[^,]+") do
+            if strtrim(c) == cap then can = true end
+        end
+        if h.probable and h.rl and can then
             probable = probable + 1
         elseif not h.cap then
             cant.old = (cant.old or 0) + 1
         elseif not h.rl then
             cant.off = (cant.off or 0) + 1
+        elseif not can then
+            cant.old = (cant.old or 0) + 1
         else
-            local can = false
-            for c in tostring(h.cap):gmatch("[^,]+") do
-                if strtrim(c) == cap then can = true end
-            end
-            if can then Add(h.tr, h.tw) else cant.old = (cant.old or 0) + 1 end
+            Add(h.tr, h.tw)
         end
     end
     return tiers, cant, unknown, probable
@@ -1840,8 +1853,13 @@ local function ReportText()
         Sum(meter.min, minute, 10, "m"), Sum(meter.min, minute, 10, "b")))
     Add("    " .. format(L["budget: chat %d%%, map %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"],
         PrefixPct(PREFIX, now), PrefixPct(MAP_PREFIX, now), BUDGET_WARN, BUDGET_WARN_FOR / 60, meter.warnings, meter.peak))
+    -- Refused: the game's result codes too (Enum.SendAddonMessageResult: 7 invalid channel...).
+    local codes = {}
+    for code, n in pairs(meter.failCodes) do codes[#codes + 1] = code .. " x" .. n end
+    table.sort(codes)
     Add("    " .. format(L["messages per line: average %.1f, max %d; coordination %d%% of what you sent; held back 1 s or more %d, refused %d"],
-        meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts, Pct(meter.rly, meter.all), meter.held, meter.failed))
+        meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts, Pct(meter.rly, meter.all), meter.held, meter.failed)
+        .. (#codes > 0 and (" (" .. L["game codes:"] .. " " .. table.concat(codes, ", ") .. ")") or ""))
     local owed = 0
     for _, e in ipairs(buffer) do
         if not e.covered then owed = owed + 1 end
@@ -1869,8 +1887,13 @@ local function ReportText()
         s.took, s.released, s.stalls, s.elections, s.claims))
     local a = ns.AllyChat.stats
     Add("    " .. format(L["received: relayed lines %d, copies dropped %d, refused %d"], a.relayed or 0, a.copies or 0, a.refused or 0))
-    Add("    " .. format(L["map: places heard %d, skipped (they run La Taverne) %d, refused %d; as the relay: batches %d, positions %d, stops %d"],
-        s.mapHeard, s.mapSkipped, s.mapBad, s.mapBatches, s.mapSent, s.mapOffs))
+    local heardFrom, skippedFrom = 0, 0
+    for _ in pairs(mapHeardFrom) do heardFrom = heardFrom + 1 end
+    for _ in pairs(mapSkippedFrom) do skippedFrom = skippedFrom + 1 end
+    Add("    " .. format(L["map, heard from OpenMap: %d positions from %d players without La Taverne (to pass on); skipped %d from %d players with La Taverne (they share their own); refused %d"],
+        s.mapHeard, heardFrom, s.mapSkipped, skippedFrom, s.mapBad))
+    Add("    " .. format(L["map, sent by you as the relay: %d positions in %d messages, %d players stopped sharing"],
+        s.mapSent, s.mapBatches, s.mapOffs))
     local m = ns.AllyMap.stats
     Add("    " .. format(L["received: relayed positions %d, refused %d"], m.relayed or 0, m.relayedRefused or 0))
 
