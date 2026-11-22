@@ -207,11 +207,22 @@ local function OpenMapDraws(e)
     return db.friends ~= false and IsFriend(e)
 end
 
--- Whether a dot of ours shows for this one; false and "openmap" when OpenMap draws them already.
+-- OpenMap's map is on and its own "Guild members on the map" is off: the player doesn't want
+-- guild dots there, so ours hide too (instead of taking the place of OpenMap's), the allied
+-- guilds' as well (they count as the guild, here as everywhere in La Taverne).
+local function OpenMapHidesGuild()
+    if not OpenMapStitched() then return false end
+    local db = OpenMapSettings()
+    return db ~= nil and db.guild == false
+end
+
+-- Whether a dot of ours shows for this one; false and "openmap" when OpenMap draws them already
+-- (or OpenMap's guild switch is off).
 local function Visible(e)
     local s = Settings()
     if e.scope == "guild" and not s.showGuild then return false end
     if e.scope == "ally" and not s.showAllies then return false end
+    if OpenMapHidesGuild() then return false, "openmap" end
     if GetTime() - e.at > GONE_AFTER then return false end
     if InMyGroup(e) then return false end
     if OpenMapDraws(e) then return false, "openmap" end
@@ -617,6 +628,17 @@ function AllyMap:OnLogin()
     ns.On("GROUP_ROSTER_UPDATE", Refresh)                 -- (my group's own dots are the game's)
     C_Timer.NewTicker(TICK, Tick)
     C_Timer.NewTicker(PRUNE_EVERY, Prune)
+    -- OpenMap's guild switch doesn't tell us when it changes: while the map is open, look each
+    -- second, and redraw at once (otherwise each dot waited for its player's next position).
+    local openMapHid = false
+    C_Timer.NewTicker(1, function()
+        if not MapShown() then return end
+        local hid = OpenMapHidesGuild()
+        if hid ~= openMapHid then
+            openMapHid = hid
+            Refresh()
+        end
+    end)
     -- Sharing is on by default: said once, so nobody shares without knowing it.
     C_Timer.After(15, function()
         local s = Settings()
@@ -638,6 +660,10 @@ ns.commands.map = function()
     local st = AllyMap.stats
     ns.Print(format("map: sent %d, off %d, received %d, rejected %d, expired %d, drawn %d, left to OpenMap %d",
         st.sent, st.offSent, st.received, st.rejected, st.expired, st.drawn, st.skippedOpenMap))
+    local om = OpenMapSettings()
+    ns.Print(format("map: OpenMap %s, its map %s, its guild switch %s: La Taverne's guild and allied dots %s",
+        OpenMapAPI and "loaded" or "not loaded", OpenMapStitched() and "on" or "off",
+        om and (om.guild == false and "off" or "on") or "?", OpenMapHidesGuild() and "hidden" or "follow La Taverne's switches"))
     local now = GetTime()
     for _, e in pairs(live) do
         ns.Print(format("  %s (%s%s) map %d %.1f, %.1f, %d s ago", e.name, e.scope, e.tag and (" " .. e.tag) or "",
