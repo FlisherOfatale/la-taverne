@@ -277,6 +277,8 @@ if GetLocale() == "frFR" then
     L["What you send. The others are what you receive, by player."] = "Ce que vous envoyez. Les autres sont ce que vous recevez, par joueur."
     L["Untick what you don't want to see. The counts at the top stay complete, and the text says what's left out. Kept for next time."] = "Décochez ce que vous ne voulez pas voir. Les comptes en haut restent complets, et le texte dit ce qui est laissé de côté. Gardé pour la prochaine fois."
     L["Auto-refresh"] = "Actualisation automatique"
+    L["Always record"] = "Toujours enregistrer"
+    L["The log starts on its own at every login and after a /reload (this choice is kept). You get the first messages after logging in, and when something goes wrong the log is already there to copy. It only keeps the last 300 lines, in memory: it costs next to nothing."] = "Le journal démarre de lui-même à chaque connexion et après un /reload (ce choix est gardé). Vous avez les premiers messages après la connexion, et quand quelque chose ne va pas, le journal est déjà là à copier. Il ne garde que les 300 dernières lignes, en mémoire : ça ne coûte presque rien."
     L["New messages show by themselves, every 2 seconds. It waits while the mouse is over the text, or a moment after a key in it, so you can select and copy."] = "Les nouveaux messages s'affichent d'eux-mêmes, toutes les 2 secondes. En pause tant que la souris est sur le texte, ou un moment après une touche dedans, pour pouvoir sélectionner et copier."
 
     L["General"] = "Général"

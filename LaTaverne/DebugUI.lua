@@ -462,6 +462,7 @@ function ns.ShowMessageLog()
     ns.TextDialog({
         kind = "msglog",
         title = L["Message log"],
+        width = 720,
         hint = hint,
         text = MsgLogText(),
         button = L["Refresh"],
@@ -473,10 +474,21 @@ function ns.ShowMessageLog()
             { text = senders == 0 and L["Senders: all"] or L["Senders: %d hidden"]:format(senders),
               generator = SendersMenu, width = 160, tooltip = { L["Senders"], FILTER_TIP } },
         },
-        check = {
-            text = L["Auto-refresh"], checked = dev.msgLogAuto,
-            onClick = function(on) dev.msgLogAuto = on ns.ShowMessageLog() end,
-            tooltip = { L["Auto-refresh"], L["New messages show by themselves, every 2 seconds. It waits while the mouse is over the text, or a moment after a key in it, so you can select and copy."] },
+        checks = {
+            {
+                text = L["Auto-refresh"], checked = dev.msgLogAuto,
+                onClick = function(on) dev.msgLogAuto = on ns.ShowMessageLog() end,
+                tooltip = { L["Auto-refresh"], L["New messages show by themselves, every 2 seconds. It waits while the mouse is over the text, or a moment after a key in it, so you can select and copy."] },
+            },
+            {
+                text = L["Always record"], checked = dev.msgLogAlways,
+                onClick = function(on)
+                    dev.msgLogAlways = on
+                    if on and not ns.Comm:IsLogging() then ns.Comm:SetLogging(true) end
+                    ns.ShowMessageLog()
+                end,
+                tooltip = { L["Always record"], L["The log starts on its own at every login and after a /reload (this choice is kept). You get the first messages after logging in, and when something goes wrong the log is already there to copy. It only keeps the last 300 lines, in memory: it costs next to nothing."] },
+            },
         },
         autoFill = dev.msgLogAuto and MsgLogText or nil,
     })

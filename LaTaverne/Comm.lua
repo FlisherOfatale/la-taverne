@@ -794,7 +794,7 @@ end
 -- Test mode: the log is always on from the start (still only the last LOG_MAX lines), so a
 -- problem is there to copy without having thought of starting it. It can still be stopped.
 function Comm:OnInit()
-    if ns.Guild:IsSandbox() then self:SetLogging(true) end
+    if ns.Guild:IsSandbox() or (ns.db.dev and ns.db.dev.msgLogAlways) then self:SetLogging(true) end
 end
 
 function Comm:OnLogin()

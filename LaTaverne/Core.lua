@@ -205,6 +205,7 @@ local DEFAULTS = {
         msgLogHiddenTypes = {},
         msgLogHiddenSenders = {},
         msgLogAuto = false,
+        msgLogAlways = false, -- the message log records from every login (not only in test mode)
     },
 }
 
@@ -406,17 +407,19 @@ local function AutoFill(f, elapsed)
     f.edit:SetText(text)
 end
 
--- A row under the hint (message log): dropdowns (Menu.lua) and a checkbox.
+-- A row under the hint (message log): dropdowns (Menu.lua) and checkboxes.
 local function SetupTools(f, opts)
-    local menus, check = opts.menus or {}, opts.check
+    local menus = opts.menus or {}
+    local checks = opts.checks or (opts.check and { opts.check }) or {}
     local tools = f.tools
     if not tools then
-        if #menus == 0 and not check then return false end
+        if #menus == 0 and #checks == 0 then return false end
         tools = CreateFrame("Frame", nil, f.Inset or f)
         tools:SetPoint("TOPLEFT", f.hint, "BOTTOMLEFT", -2, -8)
         tools:SetPoint("RIGHT", -12, 0)
         tools:SetHeight(26)
         tools.menus = {}
+        tools.checks = {}
         f.tools = tools
     end
     for i, def in ipairs(menus) do
@@ -438,27 +441,39 @@ local function SetupTools(f, opts)
         dd:Show()
     end
     for i = #menus + 1, #tools.menus do tools.menus[i]:Hide() end
-    if check and not tools.check and ns.UIKit then
-        tools.check = ns.UIKit.NewCheckbox(tools, "", function(self)
-            if tools.onCheck then tools.onCheck(self:GetChecked() and true or false) end
-        end)
-        tools.check:SetScript("OnEnter", function(self)
-            if tools.checkTip then ns.UIKit.ShowTooltip(self, tools.checkTip) end
-        end)
-        tools.check:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    if tools.check then
-        tools.check:SetShown(check ~= nil)
-        if check then
-            tools.check:ClearAllPoints()
-            local last = tools.menus[#menus]
-            if last then tools.check:SetPoint("LEFT", last, "RIGHT", 12, 0) else tools.check:SetPoint("LEFT", 0, 0) end
-            tools.check.Text:SetText(check.text)
-            tools.check:SetChecked(check.checked and true or false)
-            tools.onCheck, tools.checkTip = check.onClick, check.tooltip
+    -- Checkboxes after the dropdowns, each after the label of the one before.
+    local after = tools.menus[#menus]
+    for i, def in ipairs(checks) do
+        local cb = tools.checks[i]
+        if not cb and ns.UIKit then
+            cb = ns.UIKit.NewCheckbox(tools, "", function(self)
+                if self.onCheck then self.onCheck(self:GetChecked() and true or false) end
+            end)
+            cb:SetScript("OnEnter", function(self)
+                if self.tip then ns.UIKit.ShowTooltip(self, self.tip) end
+            end)
+            cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            tools.checks[i] = cb
+        end
+        if cb then
+            cb:ClearAllPoints()
+            local label = after and (after.Text or after.text)
+            if label and i > 1 then
+                cb:SetPoint("LEFT", label, "RIGHT", 16, 0)
+            elseif after then
+                cb:SetPoint("LEFT", after, "RIGHT", 12, 0)
+            else
+                cb:SetPoint("LEFT", 0, 0)
+            end
+            cb.Text:SetText(def.text)
+            cb:SetChecked(def.checked and true or false)
+            cb.onCheck, cb.tip = def.onClick, def.tooltip
+            cb:Show()
+            after = cb
         end
     end
-    local shown = #menus > 0 or check ~= nil
+    for i = #checks + 1, #tools.checks do tools.checks[i]:Hide() end
+    local shown = #menus > 0 or #checks > 0
     tools:SetShown(shown)
     return shown
 end
@@ -503,6 +518,7 @@ function ns.TextDialog(opts)
     -- A row of tools under the hint (message log): opts.menus = { { text, generator, width,
     -- tooltip = { lines } } } (dropdowns, text: the label), opts.check = { text, checked,
     -- onClick = function(checked), tooltip = { lines } }.
+    f:SetWidth(opts.width or 600) -- (the message log asks for more: its row of tools)
     if SetupTools(f, opts) then
         f.holder:SetPoint("TOPLEFT", f.tools, "BOTTOMLEFT", 0, -6)
     else
