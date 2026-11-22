@@ -56,7 +56,14 @@ To start the vouching tests from a clean slate (keeps every setting):
 - [ ] Vouching: auto-invite in "Right away" mode: an allied player not checked yet (or disputed)
       is queued for a click, not invited.
 
+- [ ] Map job, two PCs in allied test guilds: `/taverne dev walk Firstname Lastname` on one;
+      the other sees the dot (tooltip "Passed on by ..."), moving about every 30 s; stopped:
+      gone within ~10 s. Each guild's own PC shows no relayed dot for its own guild.
+
 ## 4. With a second player: later
+- [ ] Map job, real guild: a guildmate without La Taverne sharing through OpenMap ("Share where
+      you are"): the allied guild sees their dot; one with La Taverne and OpenMap: never relayed
+      (they share their own).
 - [ ] Relayed line mark: the guild window (Communities) and the test guild window show the same
       mark, also after closing and reopening them. With Chattynator: the mark shows there too.
 - [ ] Guild relay, real guild, profanity filter on for one player: a La Taverne author's swear
@@ -65,6 +72,9 @@ To start the vouching tests from a clean slate (keeps every setting):
       guild: do the lines match (in English and French clients)?
 
 ## Done
+- 2026-11-22: map job, alone (test mode, `/taverne dev walk`, a pretend ally in the test Guild
+  Info): you hold "Map positions" with chat, places heard every 10 s, a position passed on about
+  every 30 s, a stop counted, map budget 5 %, nothing refused. (No dot on your own map: by design.)
 - 2026-11-22: vouching, marks in lists: after the clean slate, allied players "online, not
   checked yet"; a nameplate turns one "confirmed" live, no `/reload`.
 - 2026-11-22: minimap tooltip: one relay line per guild ("you (city)" for mine, orange "nobody"

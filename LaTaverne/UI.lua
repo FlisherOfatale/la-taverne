@@ -3574,6 +3574,7 @@ local function BuildOfficerPanel()
     relayHeader:SetPoint("TOPLEFT", below, "TOPLEFT", 8, -116)
     NewInfoIcon(p, { L["Guild relay"],
         L["Members who don't run La Taverne can't share their guild chat with the allied guilds themselves. One La Taverne player of your guild passes it on for them (the relay), picked on its own among those online."],
+        L["Map positions: the places your members without La Taverne share through OpenMap (its option Share where you are), passed on to the allied guilds' maps. Your own guild already sees them through OpenMap."],
         L["Saved in the Guild Info, for your guild only: Export doesn't send it."],
         L["Each player can also stop relaying, in Options."] }):SetPoint("LEFT", relayHeader, "RIGHT", 6, 0)
     NewLabel(p, L["For members without La Taverne"]):SetPoint("TOPLEFT", below, "TOPLEFT", 16, -150)
@@ -4078,11 +4079,16 @@ local function BuildNetworkPanel()
     -- of that guild with La Taverne is online (who could relay).
     local function RelayTooltip(g, job, entry, playersOnline)
         local lines = { format(L["Relay: %s"], ns.Relay.JobText(job)),
-            L["One La Taverne player of the guild passes on the guild chat of its members without La Taverne to the allied guilds: the relay. Picked on its own: players in a city first, then elsewhere, then those who just fought; in a raid group or away for long only as a last resort."] }
+            job == "map" and L["One La Taverne player of the guild passes on to the allied guilds the map positions of its members who share them through OpenMap without La Taverne: the relay. Picked on its own, as for the guild chat."]
+            or L["One La Taverne player of the guild passes on the guild chat of its members without La Taverne to the allied guilds: the relay. Picked on its own: players in a city first, then elsewhere, then those who just fought; in a raid group or away for long only as a last resort."] }
         local _, why = ns.Relay:GetStatus(g.name, job)
         if entry then
             if entry.since then lines[#lines + 1] = format(L["Relaying since %s."], date("%H:%M", entry.since)) end
-            if entry.sent then lines[#lines + 1] = format(L["Lately: %d lines sent, %d waiting at most."], entry.sent, entry.maxq or 0) end
+            if entry.sent and job == "map" then
+                lines[#lines + 1] = format(L["Lately: %d positions sent, %d waiting at most."], entry.sent, entry.maxq or 0)
+            elseif entry.sent then
+                lines[#lines + 1] = format(L["Lately: %d lines sent, %d waiting at most."], entry.sent, entry.maxq or 0)
+            end
         elseif why == "officers" or (g.mine and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job)) then
             lines[#lines + 1] = L["Turned off by the guild's officers (Guild Info)."]
         elseif g.mine then
@@ -4599,6 +4605,7 @@ local function BuildOptionsPanel()
     WithTooltip(relayUI.help, { L["Help relay for my guild"],
         L["Members of your guild who don't run La Taverne can't share their guild chat with the allied guilds. One La Taverne player of the guild passes their lines on for them (the relay), picked on its own among those who help: players in a city first, never in a dungeon or raid."],
         L["Only La Taverne players of the allied guilds see the relayed lines. Nothing is written in the real guild chat."],
+        L["The relay also passes on, to the allied guilds' maps, the places of your members who share them through OpenMap without La Taverne."],
         L["A few small messages a minute, on their own channel."] })
     relayUI.state = NewLabel(c, "", "GameFontHighlightSmall")
     relayUI.state:SetPoint("TOPLEFT", CONTROL_X, rowY - 4)

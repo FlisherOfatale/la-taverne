@@ -12,6 +12,9 @@
 -- OpenMap's is used, except reading its saved "share" switches to avoid a second dot where
 -- OpenMap already draws the same player (both share through it).
 -- My party or raid is left to the game's own dots. A dot goes after GONE_AFTER without news.
+-- Relayed positions (RMAP, Relay.lua): an allied guild's relay passes on its members who share
+-- through OpenMap without La Taverne. Shown like the allied guilds' other dots, a little behind
+-- (every 30 s to 2 min, so they last RELAYED_GONE), never over a player's own position.
 local ADDON, ns = ...
 local AllyMap = ns.NewModule("AllyMap")
 local L = ns.L
@@ -30,7 +33,11 @@ local FULL_EVERY = 60   -- seconds between messages that also carry class, level
 local PIN = "LaTaverneAllyMapPin"
 local TAG_COLOR = { 0.56, 0.72, 0.91 } -- allied guild ring (the tag's colour in allied chat)
 
-AllyMap.stats = { sent = 0, offSent = 0, received = 0, rejected = 0, expired = 0, drawn = 0, skippedOpenMap = 0 }
+local RELAYED_GONE = 300 -- seconds without news before a relayed dot goes
+local RELAYED_MAX = 25   -- players read from one relayed batch (the relay sends 20 at most)
+
+AllyMap.stats = { sent = 0, offSent = 0, received = 0, rejected = 0, expired = 0, drawn = 0, skippedOpenMap = 0,
+    relayed = 0, relayedRefused = 0 }
 
 local function IsSecret(value)
     return issecretvalue ~= nil and issecretvalue(value)
@@ -223,7 +230,7 @@ local function Visible(e)
     if e.scope == "guild" and not s.showGuild then return false end
     if e.scope == "ally" and not s.showAllies then return false end
     if OpenMapHidesGuild() then return false, "openmap" end
-    if GetTime() - e.at > GONE_AFTER then return false end
+    if GetTime() - e.at > (e.lease or GONE_AFTER) then return false end
     if InMyGroup(e) then return false end
     if OpenMapDraws(e) then return false, "openmap" end
     return true
@@ -310,6 +317,7 @@ local function ShowTooltip(pin)
         if e.scope == "ally" then who = e.guild or (e.tag and ("[" .. e.tag .. "]")) or who end
         GameTooltip:AddLine(who, 0.6, 0.8, 1)
         if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
+        if e.relayedBy then GameTooltip:AddLine(L["Passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
         GameTooltip:Show()
         return
     end
@@ -321,6 +329,7 @@ local function ShowTooltip(pin)
     if e.l and e.l > 0 then GameTooltip:AddLine(L["Level %d"]:format(e.l), 1, 1, 1) end
     GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
     if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
+    if e.relayedBy then GameTooltip:AddLine(L["Passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
     GameTooltip:Show()
 end
 
@@ -563,10 +572,97 @@ end
 ns.Comm:On("POS", function(sender, p, isSelf) OnPosition(sender, p, isSelf, "guild") end)
 ns.Comm:OnAlly("POS", function(sender, p, isSelf) OnPosition(sender, p, isSelf, "ally") end)
 
+-- A player's name in a relayed batch: no codes, separators or link characters.
+local function ValidName(name)
+    return type(name) == "string" and not IsSecret(name) and #name <= 48 and name:find("%S") ~= nil
+        and not name:find("[%c|%[%]:,;]")
+end
+
+-- One entry of a relayed batch: "name,map,x,y" or "name,map,x,y,class,level" (x and y: 3
+-- base-36 digits, 1/46655 of the map; class and level may be empty).
+local function ReadRelayed(item)
+    local name, m, x, y = item:match("^([^,]+),(%d+),(%w%w%w),(%w%w%w)$")
+    local c, l
+    if not name then
+        name, m, x, y, c, l = item:match("^([^,]+),(%d+),(%w%w%w),(%w%w%w),(%u*),(%d*)$")
+        if not name then return nil end
+    end
+    m, x, y = tonumber(m), tonumber(x, 36), tonumber(y, 36)
+    if not ValidName(name) or not x or not y then return nil end
+    local p = { m = m, x = x / 46655, y = y / 46655 }
+    if c and c ~= "" then p.c = c end
+    if l and l ~= "" then p.l = tonumber(l) end
+    if not ValidPayload(p) then return nil end
+    return name, p
+end
+
+-- An allied guild's relay (Relay.lua): d, the places; o, the players who stopped. My guild's
+-- batches never come here (Comm.lua reads them as my guild's: only the relay hears them).
+ns.Comm:OnAlly("RMAP", function(sender, p, isSelf)
+    if isSelf or type(sender) ~= "string" or not ns.Relay or type(p.g) ~= "string" then return end
+    local rp = tonumber(p.rp) or 0
+    if rp > ns.Relay.RP then
+        ns.Relay:NoteProtocol(rp, false)
+        return
+    end
+    if rp < ns.Relay.RP - 1 then return end
+    local st = AllyMap.stats
+    local guild = strtrim(p.g):lower()
+    local now = GetTime()
+    local touched = {}
+    if type(p.o) == "string" and #p.o <= 1500 then
+        local n = 0
+        for name in p.o:gmatch("[^;]+") do
+            n = n + 1
+            if n > RELAYED_MAX then break end
+            local key = ValidName(name) and ns.NameKey(name)
+            local e = key and live[key]
+            -- (only a dot this guild's relay put there: a player's own one stays)
+            if e and e.relayedBy and e.relayGuild == guild then
+                live[key] = nil
+                touched[#touched + 1] = e
+            end
+        end
+    end
+    if type(p.d) == "string" and #p.d <= 3000 then
+        local n = 0
+        for item in p.d:gmatch("[^;]+") do
+            n = n + 1
+            if n > RELAYED_MAX then break end
+            local name, place = ReadRelayed(item)
+            local key = name and ns.NameKey(name)
+            -- Nobody of my guild, nor me: my guild's places never come from an allied guild.
+            if not key or ns.IsMe(name) or ns.Guild:IsMember(name) then
+                st.relayedRefused = st.relayedRefused + 1
+            else
+                local old = live[key]
+                -- Their own position (they run La Taverne) wins while it's fresh.
+                if not (old and not old.relayedBy and now - old.at <= GONE_AFTER) then
+                    local same = old and old.relayedBy and old.relayGuild == guild
+                    local e = {
+                        key = key, name = name, scope = "ally",
+                        guild = (p.g:gsub("|", "||")), tag = ns.Alliance:GetTag(p.g) or "?",
+                        m = place.m, x = place.x, y = place.y,
+                        c = place.c or (same and old.c) or nil, l = place.l or (same and old.l) or nil,
+                        om = true, -- (they share through OpenMap: mine may draw them already, a friend)
+                        at = now, lease = RELAYED_GONE, relayedBy = sender, relayGuild = guild,
+                    }
+                    live[key] = e
+                    touched[#touched + 1] = e
+                    st.relayed = st.relayed + 1
+                end
+            end
+        end
+    end
+    if MapShown() then
+        for _, e in ipairs(touched) do provider:UpdateOne(e) end
+    end
+end)
+
 local function Prune()
     local now, gone = GetTime(), false
     for key, e in pairs(live) do
-        if now - e.at > GONE_AFTER then
+        if now - e.at > (e.lease or GONE_AFTER) then
             live[key] = nil
             gone = true
             AllyMap.stats.expired = AllyMap.stats.expired + 1
@@ -799,15 +895,15 @@ ns.commands.map = function()
         OpenMapAPI and ("API v" .. tostring(OpenMapAPI.version)) or "absent", OpenMapStitched() and "yes" or "no"))
     ns.Print(m and format("map: here = map %d, %.1f, %.1f", m, x * 100, y * 100) or "map: here = unknown (instance, or the game won't say)")
     local st = AllyMap.stats
-    ns.Print(format("map: sent %d, off %d, received %d, rejected %d, expired %d, drawn %d, left to OpenMap %d",
-        st.sent, st.offSent, st.received, st.rejected, st.expired, st.drawn, st.skippedOpenMap))
+    ns.Print(format("map: sent %d, off %d, received %d, rejected %d, expired %d, drawn %d, left to OpenMap %d, relayed %d (refused %d)",
+        st.sent, st.offSent, st.received, st.rejected, st.expired, st.drawn, st.skippedOpenMap, st.relayed, st.relayedRefused))
     local om = OpenMapSettings()
     ns.Print(format("map: OpenMap %s, its map %s, its guild switch %s: La Taverne's guild and allied dots %s",
         OpenMapAPI and "loaded" or "not loaded", OpenMapStitched() and "on" or "off",
         om and (om.guild == false and "off" or "on") or "?", OpenMapHidesGuild() and "hidden" or "follow La Taverne's switches"))
     local now = GetTime()
     for _, e in pairs(live) do
-        ns.Print(format("  %s (%s%s) map %d %.1f, %.1f, %d s ago", e.name, e.scope, e.tag and (" " .. e.tag) or "",
-            e.m, e.x * 100, e.y * 100, math.floor(now - e.at)))
+        ns.Print(format("  %s (%s%s%s) map %d %.1f, %.1f, %d s ago", e.name, e.scope, e.tag and (" " .. e.tag) or "",
+            e.relayedBy and (", relayed by " .. e.relayedBy) or "", e.m, e.x * 100, e.y * 100, math.floor(now - e.at)))
     end
 end

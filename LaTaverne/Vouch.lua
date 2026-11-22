@@ -52,7 +52,8 @@ Vouch.EXEMPT = { VQ = true, VA = true }
 -- Map positions (every few seconds from each ally) too, and without refreshing the window for
 -- each one ("quiet": only when the player is new).
 -- The relay's coordination (RLY: claims, beacons, Relay.lua) only says who relays: quiet too.
-Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet" }
+-- So do the positions a relay passes on (RMAP, every 30 s to 2 min).
+Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet", RMAP = "quiet" }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer, shown,
 -- hidden }. state, by, source, t: the answers (state: "checking", "confirmed", "unverified",

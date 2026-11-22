@@ -938,7 +938,7 @@ if GetLocale() == "frFR" then
     L["you stay quiet (a claim as good as yours)"] = "vous restez en retrait (une candidature aussi bonne que la vôtre)"
     L["What you send for the relay"] = "Ce que vous envoyez pour le relais"
     L["messages (bytes): last 10 s %d (%d), last minute %d (%d), last 10 min %d (%d)"] = "messages (octets) : 10 dernières s %d (%d), dernière minute %d (%d), 10 dernières min %d (%d)"
-    L["budget %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"] = "budget %d %% de la limite du jeu (alerte à %d %% pendant %d min : %d jusqu'ici), minute la plus chargée %d messages"
+    L["budget: chat %d%%, map %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"] = "budget : chat %d %%, carte %d %% de la limite du jeu (alerte à %d %% pendant %d min : %d jusqu'ici), minute la plus chargée %d messages"
     L["messages per line: average %.1f, max %d; coordination %d%% of what you sent; held back 1 s or more %d, refused %d"] = "messages par ligne : moyenne %.1f, max %d ; coordination %d %% de ce que vous avez envoyé ; retenus 1 s ou plus %d, refusés %d"
     L["lines kept %d (%d not passed on yet), queue %d, burst left %.1f of %d, sending %s"] = "lignes gardées %d (%d pas encore transmises), file %d, rafale restante %.1f sur %d, envoi %s"
     L["paused (a fight)"] = "en pause (un combat)"
@@ -959,6 +959,22 @@ if GetLocale() == "frFR" then
     L["%s missed a line from %s: sent it"] = "%s a manqué une ligne de %s : envoyée"
     L["%s: %s is tier %d, I'm %d: asking for it"] = "%s : %s est au rang %d, moi %d : je le demande"
     L["busy: %d%% of the game's limit for %d s"] = "occupé : %d %% de la limite du jeu pendant %d s"
+    -- Relay, map job (OpenMap positions of members without La Taverne)
+    L["Map positions"] = "Positions sur la carte"
+    L["map: %d%% of the game's limit: slower steps"] = "carte : %d %% de la limite du jeu : rythme ralenti"
+    L["map: back to normal steps"] = "carte : retour au rythme normal"
+    L["map: still %d%% of the game's limit after %d s: handed over"] = "carte : encore %d %% de la limite du jeu après %d s : laissée à un autre"
+    L["last minute: %d positions, %d messages (%d bytes), budget about %d%%, most waiting %d, throttled %d"] = "dernière minute : %d positions, %d messages (%d octets), budget environ %d %%, en attente au plus %d, retenus %d"
+    L["map: players kept %d (heard in the last minute %d), stops owed %d, steps %s"] = "carte : joueurs gardés %d (entendus dans la dernière minute %d), arrêts à signaler %d, rythme %s"
+    L["slowed (busy)"] = "ralenti (occupé)"
+    L["normal"] = "normal"
+    L["map: places heard %d, skipped (they run La Taverne) %d, refused %d; as the relay: batches %d, positions %d, stops %d"] = "carte : positions entendues %d, ignorées (ils utilisent La Taverne) %d, refusées %d ; comme relais : lots %d, positions %d, arrêts %d"
+    L["received: relayed positions %d, refused %d"] = "reçu : positions relayées %d, refusées %d"
+    L["Passed on by %s (guild relay)"] = "Transmis par %s (relais de guilde)"
+    L["Map positions: the places your members without La Taverne share through OpenMap (its option Share where you are), passed on to the allied guilds' maps. Your own guild already sees them through OpenMap."] = "Positions sur la carte : les positions que vos membres sans La Taverne partagent avec OpenMap (son option Partager votre position), transmises aux cartes des guildes alliées. Votre propre guilde les voit déjà avec OpenMap."
+    L["One La Taverne player of the guild passes on to the allied guilds the map positions of its members who share them through OpenMap without La Taverne: the relay. Picked on its own, as for the guild chat."] = "Un joueur de la guilde qui utilise La Taverne transmet aux guildes alliées les positions sur la carte de ses membres qui les partagent avec OpenMap sans La Taverne : le relais. Choisi tout seul, comme pour le chat de guilde."
+    L["Lately: %d positions sent, %d waiting at most."] = "Ces derniers temps : %d positions envoyées, %d en attente au plus."
+    L["The relay also passes on, to the allied guilds' maps, the places of your members who share them through OpenMap without La Taverne."] = "Le relais transmet aussi, aux cartes des guildes alliées, les positions de vos membres qui les partagent avec OpenMap sans La Taverne."
 end
 
 -- Role helpers ----------------------------------------------------------------------

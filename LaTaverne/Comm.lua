@@ -23,9 +23,11 @@ local PROBE_PREFIX = "LaTaverneProbe"
 -- The guild relay (Relay.lua) talks on its own prefix, on the same alliance channel and with the
 -- same checks: the game limits messages per prefix, so relaying never slows down groups,
 -- positions and the chat of La Taverne users. Old versions never registered it: they don't
--- receive any of it.
+-- receive any of it. The relay's map job (positions of guildmates who share them through
+-- OpenMap without La Taverne) has its own too, so it never slows the relayed chat down.
 Comm.RELAY_PREFIX = "LaTaverneR"
-local ALLY_PREFIXES = { [ALLY_PREFIX] = true, [Comm.RELAY_PREFIX] = true }
+Comm.MAP_PREFIX = "LaTaverneM"
+local ALLY_PREFIXES = { [ALLY_PREFIX] = true, [Comm.RELAY_PREFIX] = true, [Comm.MAP_PREFIX] = true }
 local PROTOCOL = 1
 local JOIN_DELAY = 8   -- seconds after login, so the game's own channels (General, Trade...) keep their numbers
 local MAX_QUEUE = 50
@@ -52,7 +54,7 @@ local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, re
 -- Positions on the map (AllyMap.lua) go every few seconds from everyone, and relayed guild lines
 -- (Relay.lua) one per line: only counted, never listed, or they'd push everything else out of
 -- the log. [type] = its counter.
-local QUIET_TYPES = { POS = "positions", RCHAT = "relayed" }
+local QUIET_TYPES = { POS = "positions", RCHAT = "relayed", RMAP = "positions", OMLOC = "positions" }
 -- My guildmates' hellos (Vouch.lua), heard on the alliance channel: one every 4-4.5 minutes from
 -- each of them, a lot in a big guild. And their own copies of their guild lines (AllyChat.lua),
 -- read only by the relay: one per line. Only counted too. [type] = its counter.
@@ -811,7 +813,8 @@ end
 local allySerial = 0
 
 -- Send to the allied guilds. Payload always gets the sender's guild name.
--- noQueue: as for Comm:Send. prefix: Comm.RELAY_PREFIX for the relay, nil otherwise.
+-- noQueue: as for Comm:Send. prefix: Comm.RELAY_PREFIX or Comm.MAP_PREFIX for the relay, nil
+-- otherwise.
 function Comm:SendAlly(msgType, payload, priority, noQueue, prefix)
     if ns.reloadPending then return false end
     payload = payload or {}
@@ -882,7 +885,7 @@ local partial = {} -- [sender#channel] = { text, time }
 -- answered, nothing of my guild goes through vouching, and my guild's lines are never shown
 -- twice). "relay": only while something reads it (Relay.lua loaded); otherwise my guild's copy,
 -- ignored as before, and not an unknown message in the message log.
-local OWN_GUILD_ON_ALLY = { POS = true, HI = true, CHAT = "relay", RCHAT = "relay", RLY = "relay" }
+local OWN_GUILD_ON_ALLY = { POS = true, HI = true, CHAT = "relay", RCHAT = "relay", RLY = "relay", RMAP = "relay" }
 local seen = {}    -- [sender .. "#" .. n] = time, to drop copies sent on two channels
 
 local function AlreadySeen(sender, n)

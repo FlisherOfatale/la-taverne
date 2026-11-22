@@ -1,13 +1,14 @@
 # Guild relay: handover notes
 
-Status (2026-11-21): **phase 1 (guild chat) written and reviewed, not tested in game yet.**
-Phases 2 and 3 and a second pass on phase 1 are still to do (see "What's left"). These notes are
+Status (2026-11-22): **phase 1 (guild chat) written, solo tests passing; monitoring (part C) and phase 2 (map) written, not tested in game yet.**
+Phase 3 and a second pass on phase 1 are still to do (see "What's left"). These notes are
 for whoever continues (Oylex or Flisher). Not in the addon zip (`.pkgmeta` ignores this file).
 
 ## What it does
 Today an allied guild only sees the guild chat of players who run La Taverne: each player's own
 addon shares their lines. The relay fills in for the others: in each guild, one La Taverne player
-(the **relay**) passes on the guild lines of members **without** La Taverne to the allied guilds.
+(the **relay**) passes on the guild lines of members **without** La Taverne to the allied guilds,
+and (map job) the map positions of members without La Taverne who share them through OpenMap.
 
 - Relayed lines look exactly like other allied lines (tag, lynx, links rebuilt).
 - One direction only: nothing is ever written in the real guild chat.
@@ -19,7 +20,9 @@ addon shares their lines. The relay fills in for the others: in each guild, one 
 ## How it works (short)
 - **Prefix** `LaTaverneR`, on the alliance channel, same checks as `LaTaverneA` (its own message
   budget, so groups, positions and chat of La Taverne users are never slowed down).
-- **Jobs**: each job has its own relay per guild. Only `chat` exists now; `map` is phase 2.
+- **Jobs**: each job has its own relay per guild: `chat` (prefix `LaTaverneR`) and `map`
+  (prefix `LaTaverneM`, claim offset +5 s). Holding one job makes a candidate one tier worse
+  for the other, so they spread over players.
 - **Tier** (each client for itself, nothing broadcast): 0 city (resting), 1 world, 2 fought in
   the last 5 min, 3 last resort (raid group, or away 20 min). **Can't**: switch off, officers'
   line off, Guild Info not read yet, alliance or channel not ready, allied chat off, a newer
@@ -64,14 +67,41 @@ addon shares their lines. The relay fills in for the others: in each guild, one 
 | `Dev.lua`, `Tests.lua` | `/taverne dev say`; `/taverne probe` (phase 0 measurements) |
 | `Comm.lua` | `lastSend` (parts and bytes of the last send), `WatchParts` (ChatThrottleLib's callback: parts held back or refused) |
 | `DebugUI.lua` | "Guild relay" button (the live window) |
+| `AllyMap.lua` | `RMAP` receive: relayed dots (allied guilds only, 300 s lease, never over a player's own `POS`), "Passed on by" tooltip line |
+| `Comm.lua`, `Vouch.lua` | `LaTaverneM` prefix; my guild's `RMAP` read by the relay only; `RMAP` passive ("quiet") for vouching |
+| `Dev.lua` | `/taverne dev walk` (test mode: a fake OpenMap sharer) |
+
+## Map job
+- **Source**: OpenMap's own messages to the guild (`OpenMapLoc`, `L1 map x y class level`
+  tab-separated, `L0` stopped), heard by every candidate; La Taverne registers the prefix, so
+  OpenMap needn't be installed on the relay. Players who run La Taverne are skipped: they share
+  their own place (`POS`). Test mode: never the real guild's; `/taverne dev walk` stands in.
+- **Batches** (`RMAP`, BULK): at most every 10 s, 20 players most recently moved first. A player
+  is in it when moved more than 1 % of the map since the place last passed on (at most every
+  30 s), or still (every 120 s); everyone with class and level every 180 s and when a new holder
+  takes the job. `d = "name,map,x,y[,class,level];..."` (x, y: 3 base-36 digits), `o` the names
+  that stopped (L0, or no word for 150 s), `q` players still due, `rp`.
+- **Busy** (map prefix ≥ 70 % of the game's 1 message a second): steps doubled at once, back to
+  normal under 50 %; still ≥ 70 % 2 min later, the map job is handed over (`why = busy`) and not
+  claimed back for 10 min. The chat prefix busy for 2 min (warning) also sheds the map job when
+  the holder has both.
+- **Stall**: a watcher hears places come in while the holder is silent 90 s (it beacons every
+  60 s): stall election, void if the holder is heard again.
+- **Receivers**: allied guilds only (my own guild sees OpenMap's own dots, faster). Relayed dots
+  last 300 s and glide like the others; a player's own fresh `POS` always wins; refused: names in
+  my guild, bad values. They count as allied players' OpenMap sharing (`om`), so my own OpenMap
+  drawing a friend keeps one dot.
+- **Officers**: the Setup page has a "Map positions" box next to "Guild chat" (`LT:r:chat` = chat
+  only).
 
 ## Monitoring
 - Each client measures its own sending on the relay prefix: messages (parts) and bytes over the
   last 10 s, minute and 10 min, budget % (messages in the last minute against the game's 1 a
   second), the busiest minute, messages per line, the coordination share (`RLY` among all), and
   parts ChatThrottleLib held back 1 s or more, or refused (throttled).
-- Budget at 70 % or more for 2 min: one warning, marked "!!" in the message log. A holder of two
-  jobs or more then hands over the ones marked `shed` (the map job, later; chat is never shed).
+- Budget per prefix (the game limits each prefix on its own). Chat at 70 % or more for 2 min:
+  one warning, marked "!!" in the message log; a holder of both jobs then hands the map job over
+  (chat is never shed). Map: see "Map job".
 - The beacon carries `sent`, `mq`, `b` (bytes), `p` (parts), `th` (throttled) since the previous
   one: every guild sees every relay's load.
 - The hello carries `tr` (tier for chat, 0-3, or `x` and `tw` why): the count of candidates per
@@ -88,6 +118,9 @@ addon shares their lines. The relay fills in for the others: in each guild, one 
 - Test mode: `/taverne dev say Firstname Lastname: text`: a test guild member without La Taverne
   says a line (the relay passes it on). Only the test guild's fake chat is relayed in test mode,
   never the real guild chat.
+- Test mode: `/taverne dev walk Firstname Lastname`: a test guild member without La Taverne
+  shares their place through OpenMap, walking a circle around where you stood (one place every
+  10 s); again to stop. `/taverne map` lists the dots, relayed ones with who passed them on.
 
 ## Testing (not done yet)
 1. Two PCs in the same test guild, a third in an allied test guild (or 2 PCs, one per guild),
@@ -107,16 +140,15 @@ addon shares their lines. The relay fills in for the others: in each guild, one 
 9. Live window: the allied PC sees the holder's load from its beacon (messages, bytes, budget);
    the candidates per tier fill in within 5 min of a login; a handover counts as planned, a
    killed game as unplanned.
+10. Map job: `/taverne dev walk Firstname Lastname` on a PC of one test guild: the allied PC
+   shows the dot (`/taverne map`: "relayed by ..."), moving every 30 s or so, gone within 10 s of
+   walking again (stop); the relay's own guild shows none from the relay.
 
 ## What's left
-**Phase 2: map relay.** Dots on the allied guilds' maps for members without La Taverne.
-- A `map` job in `Relay.lua` (state kind: one batch every 10 s with the changes, everything
-  every 60 s, `off` after 150 s without news), claim offset +5 s, the chat relay counts one tier
-  worse when claiming it (jobs spread over players).
-- Source: register OpenMap's prefix `OpenMapLoc` (works without OpenMap installed); skip players
-  who run La Taverne (they send their own `POS`); parse defensively (not a public format).
-- `RMAP` on its own prefix (`LaTaverneM`), BULK priority; `AllyMap.lua` draws them as allied dots.
-- Its own box on the Setup page (`LT:r:chat,map`), status rows, tooltip.
+**Phase 2: map relay.** Written (2026-11-22, not tested in game), see "Map job". Later, only if
+the live window shows a high map budget: short ids instead of names (full refresh carries name,
+class, level, id; updates only the id). Allied guilds whose players are all on a version without
+the map job show "nobody" (orange) for it on the Alliance page until they update.
 
 **Phase 3, only if testing shows a need.** A compact format instead of AceSerializer; several
 waiting lines packed in one message; catch-up: the last 30 min of allied lines for a player who

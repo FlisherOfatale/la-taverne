@@ -1,10 +1,11 @@
 -- Guild relay: in each guild, one La Taverne player (the relay) passes on to the allied guilds
--- what members without La Taverne can't share themselves. For now: guild chat. Members with La
--- Taverne still send their own lines (AllyChat.lua); the relay only fills in for the others.
+-- what members without La Taverne can't share themselves: guild chat, and the map positions of
+-- those who share them through OpenMap. Members with La Taverne still send their own lines
+-- (AllyChat.lua) and positions (AllyMap.lua); the relay only fills in for the others.
 -- Relayed lines are shown exactly like other allied lines, and never posted in real guild chat.
 -- (Design and reasons: .plans/guild-relay.md, not in the addon.)
 --
--- Jobs: each job (chat now, map positions later) has its own relay per guild. Every La Taverne
+-- Jobs: each job (chat, map positions) has its own relay per guild. Every La Taverne
 -- player is a candidate unless they turned it off (Options) or their officers did (LT:r line,
 -- Alliance.lua). Each client ranks itself (tier) from what it's doing, nothing to broadcast:
 --   0 city   resting (city or inn), not in a raid group, no fight for 5 min
@@ -33,6 +34,12 @@
 -- (replay). A line the holder missed while relaying others: one of the others sends it (gap
 -- fill). Receivers drop copies (AllyChat.lua).
 --
+-- Map job: every candidate keeps the latest place of each guildmate who shares it through
+-- OpenMap and doesn't run La Taverne (OpenMap's own messages to the guild). The holder passes
+-- them on in batches (RMAP, own prefix): a player at most every 30 s while moving, 2 min while
+-- still, everyone every 3 min; slower when busy, then handed over. Only for the allied guilds:
+-- my own guild sees OpenMap's own dots.
+--
 -- Monitoring: every client measures its own sending on the relay prefix (messages, bytes,
 -- budget, throttled); the beacon shares the holder's figures, the hello each player's tier (for
 -- the count of candidates per tier); stability (uptime, holder changes) is counted from the
@@ -44,6 +51,8 @@ local L = ns.L
 Relay.RP = 1 -- relay protocol: raised only for a change older relays can't follow
 local RP = Relay.RP
 local PREFIX = ns.Comm.RELAY_PREFIX
+local MAP_PREFIX = ns.Comm.MAP_PREFIX
+local OPENMAP_PREFIX = "OpenMapLoc" -- OpenMap's positions (Map/Friends.lua), heard on the guild channel
 
 -- Timings (seconds) ---------------------------------------------------------------------------
 local TICK = 1
@@ -75,14 +84,26 @@ local BUDGET_WARN_FOR = 120   -- ...held this long: a warning (and a job handed 
 local SLOW_PART = 1           -- a part held back this long before going out: counted as throttled
 local EVENTS_MAX = 20         -- relay events kept for the live window
 local LIVE_EVERY = 3          -- the live window's refresh
+local BUSY_REST = 600         -- a job handed over for being too busy: not claimed back for this long
+-- Map job
+local MAP_BATCH = 10          -- a batch at most this often (the steps below say who's in it)
+local MAP_MOVING = 30         -- a player passed on at most this often while moving...
+local MAP_STILL = 120         -- ...and while standing still
+local MAP_FULL = 180          -- everyone again, with class and level
+local MAP_MOVED = 0.01        -- moved less than this (1 % of the map) since the last place passed on: still
+local MAP_GONE = 150          -- no word from their OpenMap this long: gone (OpenMap's own wait)
+local MAP_CAP = 20            -- players in one batch, most recently moved first (and as many stops)
+local MAP_STALL = 90          -- the holder not heard this long (it beacons every 60 s) while places come in
+local MAP_SLOW_BELOW = 50     -- slowed down (steps doubled): back to normal under this % of the budget
 
--- Jobs: name, what HI says I can do (cap), claim delay offset. shed: handed to someone else
--- first when I'm too busy and hold another job too (the map job, later); chat is never shed, it
--- queues.
+-- Jobs: name, what HI says I can do (cap), claim delay offset, prefix (the game limits messages
+-- per prefix: each job has its own). shed: handed to someone else first when I'm too busy and
+-- hold another job too; chat is never shed, it queues.
 local JOBS = {
-    chat = { name = "chat", cap = "c1", offset = 0, shed = false },
+    chat = { name = "chat", cap = "c1", offset = 0, shed = false, prefix = PREFIX },
+    map = { name = "map", cap = "m1", offset = 5, shed = true, prefix = MAP_PREFIX },
 }
-local JOB_ORDER = { "chat" }
+local JOB_ORDER = { "chat", "map" }
 
 local function IsSecret(v) return issecretvalue ~= nil and issecretvalue(v) end
 
@@ -94,6 +115,9 @@ Relay.stats = {
     byAuthor = 0,        -- lines covered by the author's own copy
     sent = 0, gapFills = 0, waitTotal = 0, waitMax = 0, maxQueue = 0, -- as the relay
     took = 0, released = 0, stalls = 0, elections = 0, claims = 0,
+    -- map: places heard from OpenMap, skipped (they run La Taverne), refused (bad values); as
+    -- the relay: batches, positions and stops passed on
+    mapHeard = 0, mapSkipped = 0, mapBad = 0, mapBatches = 0, mapSent = 0, mapOffs = 0,
 }
 local stats = Relay.stats
 
@@ -182,7 +206,7 @@ local function CantReason(job)
     if loggingOut then return "logout" end
     if not ns.Alliance:IsActive() then return "alliance" end
     if not ns.Comm:IsAllyReady() then return "channel" end
-    if not ns.AllyChat.Enabled() then return "chat" end
+    if job == "chat" and not ns.AllyChat.Enabled() then return "chat" end
     if not ns.Alliance:IsInfoKnown() then return "info" end
     if not ns.Alliance:RelayAllows(job) then return "officers" end
     if newerRp then
@@ -210,6 +234,9 @@ Relay.Tier = function(_, job) return Tier(job) end
 local function ClaimTier(job)
     local tier, why = Tier(job)
     if not tier then return nil, why end
+    -- Handed over for being too busy: not claimed back for a while.
+    local rest = jobs[job].restUntil
+    if rest and GetTime() < rest then return nil, "busy" end
     for other, st in pairs(jobs) do
         if other ~= job and st.holding then return math.min(3, tier + 1) end
     end
@@ -276,13 +303,17 @@ end
 -- second and per minute; the busiest 60 s this session (peak); parts per relayed item; RLY among
 -- everything I sent (coordination share); parts held back SLOW_PART or more before going out
 -- (held) or refused (failed); budget warnings.
-local meter = { sec = {}, min = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
+-- prefix: [prefix] = ring of seconds, the same per prefix (the game's limit is per prefix).
+local meter = { sec = {}, min = {}, prefix = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
     held = 0, failed = 0, warnings = 0 }
+for _, job in ipairs(JOB_ORDER) do meter.prefix[JOBS[job].prefix] = {} end
 
 local function Measure(kind, job, parts, bytes)
     local now = math.floor(GetTime())
     local s = Slot(meter.sec, now)
     s.m, s.b = s.m + parts, s.b + bytes
+    local ps = Slot(meter.prefix[JOBS[job or "chat"].prefix], now)
+    ps.m, ps.b = ps.m + parts, ps.b + bytes
     local m = Slot(meter.min, math.floor(now / 60))
     m.m, m.b = m.m + parts, m.b + bytes
     meter.all = meter.all + 1
@@ -302,14 +333,14 @@ end
 
 -- ChatThrottleLib tells when it really sent each part (Comm.lua): one held back a second or more
 -- (its budget, or the game's throttle), or refused, counts as throttled.
-ns.Comm:WatchParts(PREFIX, function(didSend, waited)
-    if didSend and waited < SLOW_PART then return end
-    if didSend then meter.held = meter.held + 1 else meter.failed = meter.failed + 1 end
-    for _, job in ipairs(JOB_ORDER) do
+for _, job in ipairs(JOB_ORDER) do
+    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited)
+        if didSend and waited < SLOW_PART then return end
+        if didSend then meter.held = meter.held + 1 else meter.failed = meter.failed + 1 end
         local st = jobs[job]
         if st.holding then st.report.th = st.report.th + 1 end
-    end
-end)
+    end)
+end
 
 -- Stability per guild and job, from the beacons heard: [guild lowercase][job] = { min = ring
 -- (up: seconds with a fresh beacon, online: seconds with a La Taverne player of that guild
@@ -410,10 +441,11 @@ function Relay:GetJobs() return JOB_ORDER end
 
 -- Messages out ----------------------------------------------------------------------------------
 
+-- On the job's own prefix ("ask", for every job: the chat one).
 local function SendRLY(op, job, fields)
     local payload = fields or {}
     payload.op, payload.j, payload.rp = op, job, RP
-    if not ns.Comm:SendAlly("RLY", payload, "ALERT", true, PREFIX) then return false end
+    if not ns.Comm:SendAlly("RLY", payload, "ALERT", true, job and JOBS[job].prefix or PREFIX) then return false end
     Measure("RLY", job, ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
     return true
 end
@@ -520,6 +552,7 @@ local function Release(job, why, silent)
     if not st.holding then return end
     st.holding = false
     st.lastHeld = GetTime()
+    if why == "busy" then st.restUntil = GetTime() + BUSY_REST end
     stats.released = stats.released + 1
     Note("I give %s up (%s)", job, tostring(why))
     local hooks = JobHooks[job]
@@ -1039,6 +1072,243 @@ ns.On("CHAT_MSG_GUILD", function(text, author, _, _, _, _, _, _, _, _, _, guid)
     Relay:GuildLine(author, text, nil, guid)
 end)
 
+-- Map job ---------------------------------------------------------------------------------------
+-- Every candidate keeps the latest place of each guildmate who shares it through OpenMap (its
+-- "Share where you are": OpenMapLoc on the guild channel) and doesn't run La Taverne: those who
+-- do share their own place (AllyMap.lua). A state job: the holder sends one batch (RMAP) every
+-- MAP_BATCH at most, with up to MAP_CAP players, most recently moved first: whoever moved more
+-- than MAP_MOVED since the place it last passed on (at most every MAP_MOVING), or stood still
+-- (every MAP_STILL), and everyone with class and level every MAP_FULL. Stopped sharing (OpenMap's
+-- L0, or no word for MAP_GONE): in the batch's "off" list. Too busy on the map prefix: slower
+-- steps (doubled), then the job goes to someone else. For the allied guilds only: my own guild
+-- sees OpenMap's own dots (faster), my guild's RMAP is never drawn (Comm.lua reads it as my
+-- guild's, only here).
+-- places: [key] = { name, m, x, y, c, l, heard, moved (GetTime of its last move), sent = { m, x,
+--   y, at } (the last place I passed on), full (class and level owed: new, changed, full refresh) }
+-- gone: [key] = name, an "off" owed by the holder.
+local places, gone = {}, {}
+local mapBatchAt, mapFullAt = 0, 0
+local mapSlow, mapBusySince = false, nil
+
+local function MapStep(seconds) return mapSlow and seconds * 2 or seconds end
+
+local function ValidPlace(m, x, y)
+    if type(m) ~= "number" or m < 1 or m > 1000000 or m ~= math.floor(m) then return false end
+    if type(x) ~= "number" or type(y) ~= "number" or not (x >= 0 and x <= 1 and y >= 0 and y <= 1) then return false end
+    local ok, info = pcall(C_Map.GetMapInfo, m)
+    return ok and info ~= nil
+end
+
+-- A name that fits in a batch: no separators, codes or link characters.
+local function ValidMapName(name)
+    return type(name) == "string" and not IsSecret(name) and #name <= 48 and name:find("%S") ~= nil
+        and not name:find("[%c|%[%]:,;]")
+end
+
+-- A guildmate's place, from their OpenMap (test mode: a walker, /taverne dev walk).
+function Relay:MapPlace(author, m, x, y, class, level)
+    if not ValidMapName(author) or ns.IsMe(author) or not ns.Alliance:IsActive() then return end
+    local key = ns.NameKey(author)
+    if not key then return end
+    -- They run La Taverne: they share their own place (AllyMap.lua), nothing to pass on.
+    if ns.Players:RunsAddon(author) then
+        stats.mapSkipped = stats.mapSkipped + 1
+        places[key] = nil
+        return
+    end
+    m, x, y, level = tonumber(m), tonumber(x), tonumber(y), tonumber(level)
+    if not ValidPlace(m, x, y) then
+        stats.mapBad = stats.mapBad + 1
+        return
+    end
+    if type(class) ~= "string" or #class > 20 or not class:match("^%u+$") then class = nil end
+    if not level or level < 1 or level > 200 or level ~= math.floor(level) then level = nil end
+    local now = GetTime()
+    local e = places[key]
+    if not e then
+        e = { name = author, full = true }
+        places[key] = e
+    end
+    if e.m ~= m or math.abs(x - e.x) > 0.002 or math.abs(y - e.y) > 0.002 then e.moved = now end
+    if (class and class ~= e.c) or (level and level ~= e.l) then e.full = true end
+    e.m, e.x, e.y, e.heard = m, x, y, now
+    e.c, e.l = class or e.c, level or e.l
+    gone[key] = nil
+    stats.mapHeard = stats.mapHeard + 1
+end
+
+-- They stopped sharing (OpenMap's L0).
+function Relay:MapStop(author)
+    if not ValidMapName(author) then return end
+    local key = ns.NameKey(author)
+    local e = key and places[key]
+    if not e then return end
+    places[key] = nil
+    gone[key] = e.name
+end
+
+local function PruneMap(now)
+    for key, e in pairs(places) do
+        if now - e.heard > MAP_GONE then
+            places[key] = nil
+            gone[key] = e.name
+        end
+    end
+end
+
+-- x or y (0..1) as 3 base-36 digits (1/46655 of the map).
+local B36 = "0123456789abcdefghijklmnopqrstuvwxyz"
+local function Coord(v)
+    local n = math.floor(v * 46655 + 0.5)
+    local a, b, c = math.floor(n / 1296) + 1, math.floor(n / 36) % 36 + 1, n % 36 + 1
+    return B36:sub(a, a) .. B36:sub(b, b) .. B36:sub(c, c)
+end
+
+local function MapDue(e, now)
+    if e.full or not e.sent then return true end
+    local s = e.sent
+    local moved = s.m ~= e.m or math.abs(e.x - s.x) > MAP_MOVED or math.abs(e.y - s.y) > MAP_MOVED
+    return now - s.at >= MapStep(moved and MAP_MOVING or MAP_STILL) - 0.5
+end
+
+-- As the holder: the next batch, once it's time and there's something to say. d = "name,map,x,y"
+-- (",class,level" added when owed) joined by ";"; o = the names that stopped, joined by ";";
+-- q = players still due after this batch.
+local function PumpMap()
+    local now = GetTime()
+    PruneMap(now)
+    local st = jobs.map
+    if not st.holding then
+        wipe(gone)
+        return
+    end
+    if now - mapBatchAt < MapStep(MAP_BATCH) - 0.5 or SendingPaused() or not ns.Comm:IsAllyReady() then return end
+    if now - mapFullAt >= MapStep(MAP_FULL) then
+        mapFullAt = now
+        for _, e in pairs(places) do e.full = true end
+    end
+    local due = {}
+    for _, e in pairs(places) do
+        if MapDue(e, now) then due[#due + 1] = e end
+    end
+    local offs = {}
+    for key in pairs(gone) do
+        if #offs >= MAP_CAP then break end
+        offs[#offs + 1] = key
+    end
+    if #due == 0 and #offs == 0 then return end
+    table.sort(due, function(a, b) return (a.moved or 0) > (b.moved or 0) end)
+    local items, names = {}, {}
+    for i = 1, math.min(#due, MAP_CAP) do
+        local e = due[i]
+        local item = format("%s,%d,%s,%s", e.name, e.m, Coord(e.x), Coord(e.y))
+        if e.full then item = item .. "," .. (e.c or "") .. "," .. (e.l and tostring(e.l) or "") end
+        items[#items + 1] = item
+    end
+    for i, key in ipairs(offs) do names[i] = gone[key] end
+    local waiting = math.max(0, #due - MAP_CAP)
+    local payload = { d = #items > 0 and table.concat(items, ";") or nil,
+        o = #names > 0 and table.concat(names, ";") or nil, q = waiting, rp = RP }
+    if not ns.Comm:SendAlly("RMAP", payload, "BULK", true, MAP_PREFIX) then return end
+    Measure("RMAP", "map", ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
+    mapBatchAt = now
+    for i = 1, #items do
+        local e = due[i]
+        e.sent, e.full = { m = e.m, x = e.x, y = e.y, at = now }, nil
+    end
+    for _, key in ipairs(offs) do gone[key] = nil end
+    stats.mapBatches = stats.mapBatches + 1
+    stats.mapSent = stats.mapSent + #items
+    stats.mapOffs = stats.mapOffs + #names
+    local report = st.report
+    report.sent = report.sent + #items
+    if waiting > report.maxq then report.maxq = waiting end
+end
+
+-- Watching the holder (not me): silent MAP_STALL while places come in (it beacons every minute,
+-- and sends a batch whenever someone moves): it may be gone, the job is free (a stall election,
+-- void if it's heard again).
+local function WatchMap(job, st)
+    local h = st.holder
+    local now = GetTime()
+    if now - h.heard < MAP_STALL then return end
+    for _, e in pairs(places) do
+        if now - e.heard < MAP_STALL then
+            stats.stalls = stats.stalls + 1
+            MarkFree(job, true, format("%s silent %d s with places to pass on", h.name, math.floor(now - h.heard)))
+            return
+        end
+    end
+end
+
+JobHooks.map = {
+    onTake = function() mapBatchAt, mapFullAt = 0, 0 end, -- everyone at once (a full refresh)
+    onRelease = function() mapSlow, mapBusySince = false, nil end,
+    watch = WatchMap,
+}
+
+-- My guild's map relay's batches: it's still there.
+ns.Comm:On("RMAP", function(sender, p, isSelf)
+    if isSelf then return end
+    Relay:NoteProtocol(p.rp, true)
+    HeardFrom("map", ns.NameKey(sender), p.q)
+end)
+
+-- OpenMap's messages to my guild: "L1 map x y class level" (tab-separated), "L0" stopped.
+-- OpenMap needn't be installed here (OnLogin registers its prefix). Test mode: never the real
+-- guild's (walkers stand in, below).
+ns.On("CHAT_MSG_ADDON", function(prefix, text, channel, sender)
+    if IsSecret(prefix) or IsSecret(text) or IsSecret(channel) or IsSecret(sender) then return end
+    if prefix ~= OPENMAP_PREFIX or channel ~= "GUILD" or ns.Guild:IsSandbox() then return end
+    if type(text) ~= "string" or #text > 120 or type(sender) ~= "string" then return end
+    local kind, m, x, y, class, level = strsplit("\t", text, 6)
+    if kind == "L1" then
+        Relay:MapPlace(sender, m, x, y, class, level)
+    elseif kind == "L0" then
+        Relay:MapStop(sender)
+    end
+end)
+
+-- Test mode: a made-up test guild member without La Taverne who shares through OpenMap, walking
+-- a circle around where I stood (/taverne dev walk). Every test guild candidate hears it (OMLOC on
+-- the test guild's channel), as OpenMap's messages reach a real guild.
+ns.Comm:On("OMLOC", function(sender, p, isSelf)
+    if isSelf or not ns.Guild:IsSandbox() then return end
+    if p.off then Relay:MapStop(p.as) else Relay:MapPlace(p.as, p.m, p.x, p.y, p.c, p.l) end
+end)
+
+local FAKE_CLASSES = { "WARRIOR", "MAGE", "PRIEST", "HUNTER", "ROGUE", "DRUID", "PALADIN", "WARLOCK", "SHAMAN" }
+local walkers = {}
+-- Started (true, true), stopped (true, false), or not possible (false: not test mode, a bad name,
+-- or the game won't say where I am).
+function Relay:FakeWalk(name)
+    if not ns.Guild:IsSandbox() then return false end
+    name = strtrim(name or "")
+    if not ValidMapName(name) or ns.IsMe(name) then return false end
+    local key = ns.NameKey(name)
+    if walkers[key] then
+        walkers[key]:Cancel()
+        walkers[key] = nil
+        ns.Comm:Send("OMLOC", { as = name, off = true }, "NORMAL")
+        Relay:MapStop(name)
+        return true, false
+    end
+    local m, x, y = ns.AllyMap.Here()
+    if not m then return false end
+    local class = FAKE_CLASSES[Hash(name) % #FAKE_CLASSES + 1]
+    local angle = math.random() * 2 * math.pi
+    local function Step()
+        angle = angle + 0.17 -- (a lap in about 6 minutes, at one place every 10 s like OpenMap)
+        local px = math.min(1, math.max(0, x + math.cos(angle) * 0.03))
+        local py = math.min(1, math.max(0, y + math.sin(angle) * 0.03))
+        ns.Comm:Send("OMLOC", { as = name, m = m, x = px, y = py, c = class, l = 60 }, "BULK", true)
+        Relay:MapPlace(name, m, px, py, class, 60)
+    end
+    Step()
+    walkers[key] = C_Timer.NewTicker(10, Step)
+    return true, true
+end
+
 -- Every second -------------------------------------------------------------------------------
 
 local function TickJob(job)
@@ -1141,21 +1411,48 @@ local function Shed()
     end
 end
 
+-- Messages on a prefix in the last 60 s, as a % of the game's limit (1 a second per prefix).
+local function PrefixPct(prefix, now)
+    return math.floor(Sum(meter.prefix[prefix], math.floor(now), 60, "m") * 100 / 60)
+end
+
+-- The chat prefix: a warning, and a job handed over (Shed). The map prefix: slower steps at once,
+-- and still busy BUDGET_WARN_FOR later, the map job handed over (chat untouched).
 local function WatchBudget()
     local now = GetTime()
     local last = Sum(meter.sec, math.floor(now), 60, "m")
     if last > meter.peak then meter.peak = last end
-    local pct = math.floor(last * 100 / 60)
+    local pct = PrefixPct(PREFIX, now)
     if pct < BUDGET_WARN then
         meter.busySince, meter.warned = nil, false
-        return
+    else
+        meter.busySince = meter.busySince or now
+        if not meter.warned and now - meter.busySince >= BUDGET_WARN_FOR then
+            meter.warned = true
+            meter.warnings = meter.warnings + 1
+            Record("relay busy", "busy: %d%% of the game's limit for %d s", pct, BUDGET_WARN_FOR)
+            Shed()
+        end
     end
-    meter.busySince = meter.busySince or now
-    if meter.warned or now - meter.busySince < BUDGET_WARN_FOR then return end
-    meter.warned = true
-    meter.warnings = meter.warnings + 1
-    Record("relay busy", "busy: %d%% of the game's limit for %d s", pct, BUDGET_WARN_FOR)
-    Shed()
+    if not jobs.map.holding then return end
+    pct = PrefixPct(MAP_PREFIX, now)
+    if pct >= BUDGET_WARN then
+        mapBusySince = mapBusySince or now
+        if not mapSlow then
+            mapSlow = true
+            Note("map: %d%% of the game's limit: slower steps", pct)
+        elseif now - mapBusySince >= BUDGET_WARN_FOR then
+            meter.warnings = meter.warnings + 1
+            Record("relay busy", "map: still %d%% of the game's limit after %d s: handed over", pct, BUDGET_WARN_FOR)
+            Release("map", "busy")
+        end
+    else
+        mapBusySince = nil
+        if mapSlow and pct < MAP_SLOW_BELOW then
+            mapSlow = false
+            Note("map: back to normal steps")
+        end
+    end
 end
 
 -- Uptime: each second, for every guild with a La Taverne player online (mine: me), whether its
@@ -1189,12 +1486,17 @@ local function Tick()
     Prune()
     for _, job in ipairs(JOB_ORDER) do TickJob(job) end
     Pump()
+    PumpMap()
     WatchBudget()
     TrackUptime()
 end
 
 function Relay:OnLogin()
     lastRefill = GetTime()
+    -- OpenMap's positions reach me even without OpenMap (the map job).
+    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+        pcall(C_ChatInfo.RegisterAddonMessagePrefix, OPENMAP_PREFIX)
+    end
     awaySince = ns.IsAway() and GetTime() or nil
     ns.On("PLAYER_REGEN_DISABLED", function()
         fighting, lastFight = true, GetTime()
@@ -1350,7 +1652,7 @@ function Relay.TierText(tier)
     return L[TIER_NAMES[tier] or "unknown"]
 end
 
-local JOB_NAMES = { chat = "Guild chat" }
+local JOB_NAMES = { chat = "Guild chat", map = "Map positions" }
 function Relay.JobText(job)
     return L[JOB_NAMES[job] or tostring(job)]
 end
@@ -1456,7 +1758,10 @@ local function ReportText()
                 Add(head .. format(L["%s (%s), heard %d s ago, relaying since %s"],
                     ns.IsMe(entry.name) and L["you"] or entry.name, Relay.TierText(entry.tier),
                     server - entry.heard, Since(entry.since)))
-                if entry.p then
+                if entry.p and job == "map" then
+                    Add("        " .. format(L["last minute: %d positions, %d messages (%d bytes), budget about %d%%, most waiting %d, throttled %d"],
+                        entry.sent or 0, entry.p, entry.b or 0, Pct(entry.p, BEACON_EVERY), entry.maxq or 0, entry.th or 0))
+                elseif entry.p then
                     Add("        " .. format(L["last minute: %d lines, %d messages (%d bytes), budget about %d%%, max queue %d, throttled %d"],
                         entry.sent or 0, entry.p, entry.b or 0, Pct(entry.p, BEACON_EVERY), entry.maxq or 0, entry.th or 0))
                 elseif entry.sent then
@@ -1533,8 +1838,8 @@ local function ReportText()
     Add("    " .. format(L["messages (bytes): last 10 s %d (%d), last minute %d (%d), last 10 min %d (%d)"],
         Sum(meter.sec, sec, 10, "m"), Sum(meter.sec, sec, 10, "b"), last, Sum(meter.sec, sec, 60, "b"),
         Sum(meter.min, minute, 10, "m"), Sum(meter.min, minute, 10, "b")))
-    Add("    " .. format(L["budget %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"],
-        Pct(last, 60), BUDGET_WARN, BUDGET_WARN_FOR / 60, meter.warnings, meter.peak))
+    Add("    " .. format(L["budget: chat %d%%, map %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"],
+        PrefixPct(PREFIX, now), PrefixPct(MAP_PREFIX, now), BUDGET_WARN, BUDGET_WARN_FOR / 60, meter.warnings, meter.peak))
     Add("    " .. format(L["messages per line: average %.1f, max %d; coordination %d%% of what you sent; held back 1 s or more %d, refused %d"],
         meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts, Pct(meter.rly, meter.all), meter.held, meter.failed))
     local owed = 0
@@ -1543,6 +1848,14 @@ local function ReportText()
     end
     Add("    " .. format(L["lines kept %d (%d not passed on yet), queue %d, burst left %.1f of %d, sending %s"],
         #buffer, owed, #queue, tokens, BURST, SendingPaused() and L["paused (a fight)"] or L["ok"]))
+    local kept, recent, stops = 0, 0, 0
+    for _, e in pairs(places) do
+        kept = kept + 1
+        if now - e.heard < 60 then recent = recent + 1 end
+    end
+    for _ in pairs(gone) do stops = stops + 1 end
+    Add("    " .. format(L["map: players kept %d (heard in the last minute %d), stops owed %d, steps %s"],
+        kept, recent, stops, mapSlow and L["slowed (busy)"] or L["normal"]))
 
     -- Counts since login.
     local s = stats
@@ -1556,6 +1869,10 @@ local function ReportText()
         s.took, s.released, s.stalls, s.elections, s.claims))
     local a = ns.AllyChat.stats
     Add("    " .. format(L["received: relayed lines %d, copies dropped %d, refused %d"], a.relayed or 0, a.copies or 0, a.refused or 0))
+    Add("    " .. format(L["map: places heard %d, skipped (they run La Taverne) %d, refused %d; as the relay: batches %d, positions %d, stops %d"],
+        s.mapHeard, s.mapSkipped, s.mapBad, s.mapBatches, s.mapSent, s.mapOffs))
+    local m = ns.AllyMap.stats
+    Add("    " .. format(L["received: relayed positions %d, refused %d"], m.relayed or 0, m.relayedRefused or 0))
 
     -- The last events, newest first.
     Add("")
