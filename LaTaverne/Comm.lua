@@ -339,10 +339,16 @@ ns.On("CHAT_MSG_CHANNEL_NOTICE", function(notice, _, _, _, _, _, _, _, baseName)
         ns.Print("could not join the hidden channel " .. ch.name .. " (" .. notice .. "). Messages there are disabled until the next reload."
             .. (ns.GamepadUI() and (" " .. ns.L["Close the password window with Cancel (B)."]) or ""))
     elseif notice == "YOU_LEFT" then
-        -- Dropped by the game (not by me: LeaveChannel forgets the channel first): back in shortly.
-        ch.ready = false
-        Comm:LogNote("dropped from " .. ch.name .. ": joining again")
-        C_Timer.After(2, function() Comm:Reconnect(ch) end)
+        -- Dropped by the game (not by me: LeaveChannel forgets the channel first, and a ghost
+        -- rejoin marks it "leaving"): back in shortly. Every role on that channel.
+        local lower = ch.name:lower()
+        for _, c in pairs(channels) do
+            if c.name:lower() == lower and not c.leaving then
+                c.ready = false
+                Comm:LogNote("dropped from " .. c.name .. ": joining again")
+                C_Timer.After(2, function() Comm:Reconnect(c) end)
+            end
+        end
     end
 end)
 
@@ -390,6 +396,125 @@ function Comm:Reconnect(ch)
     if GetChannelName(ch.name) == 0 then JoinTemporaryChannel(ch.name, ch.password) end
     ch.tries, ch.probing = 0, true
     C_Timer.After(0.5, function() Probe(ch) end)
+end
+
+-- A "ghost" channel: the server dropped me without the game noticing. The game still gives the
+-- channel's number by its name (so it looks joined, even "ready"), but it's gone from the list of
+-- channels the server sends (the game's Channels window): nothing goes out or comes in. Seen when
+-- the game's chat server drops and comes back. Each check looks for it in that list; missing
+-- twice in a row: leave it and join again straight away (not asking the game "am I in it?": in
+-- this state it says yes). At most once a minute, five times in a row, then given up until it
+-- shows in the list again. Notes in the message log only.
+local GHOST_CHECKS, REJOIN_GAP, REJOIN_MAX = 2, 60, 5
+local GIVE_UP_FOR = 600 -- after REJOIN_MAX tries in a row: try again this much later (never for good)
+
+local function Secret(v) return issecretvalue ~= nil and issecretvalue(v) end
+
+-- In the server's channel list? true / false, nil when it can't be told: the list empty or not
+-- filled yet (just after login, while the game joins channels again after a chat server drop),
+-- or a folded group in the game's Channels window hiding its channels.
+local function Listed(id)
+    if not id or Secret(id) or not (GetNumDisplayChannels and GetChannelDisplayInfo) then return nil end
+    local ok, n = pcall(GetNumDisplayChannels)
+    if not ok or type(n) ~= "number" or Secret(n) or n == 0 then return nil end
+    local folded, channelsSeen = false, 0
+    for i = 1, n do
+        local ok2, _, header, collapsed, localID = pcall(GetChannelDisplayInfo, i)
+        if ok2 and not (Secret(header) or Secret(collapsed) or Secret(localID)) then
+            if header then
+                if collapsed then folded = true end
+            else
+                channelsSeen = channelsSeen + 1
+                if localID == id then return true end
+            end
+        end
+    end
+    -- Only "not there" when the list has other channels in it, all unfolded.
+    if folded or channelsSeen == 0 then return nil end
+    return false
+end
+
+-- Every one of my roles on this channel (sandbox tests can put two roles on one).
+local function SameChannel(name)
+    local out, lower = {}, name:lower()
+    for _, ch in pairs(channels) do
+        if ch.name:lower() == lower then out[#out + 1] = ch end
+    end
+    return out
+end
+
+local function RejoinGhost(ch)
+    local now = GetTime()
+    if ch.rejoinAt and now - ch.rejoinAt < REJOIN_GAP then return end
+    if (ch.rejoins or 0) >= REJOIN_MAX then
+        -- Not given up for good: a longer wait, then the tries start over.
+        if not ch.gaveUpAt then
+            ch.gaveUpAt = now
+            Comm:LogNote("ghost channel " .. ch.name .. ": still not in the server's list after " .. REJOIN_MAX
+                .. " tries, trying again in " .. GIVE_UP_FOR / 60 .. " min", "ghost channel")
+        end
+        if now - ch.gaveUpAt < GIVE_UP_FOR then return end
+        ch.rejoins, ch.gaveUpAt = 0, nil
+    end
+    ch.rejoins, ch.rejoinAt = (ch.rejoins or 0) + 1, now
+    Comm:LogNote("ghost channel " .. ch.name .. ": not in the server's list, leaving and joining again (" .. ch.rejoins .. ")", "ghost channel")
+    local same = SameChannel(ch.name)
+    -- (leaving: the "you left" notice is mine, not the game's; probing: nothing else joins meanwhile)
+    for _, c in ipairs(same) do c.ready, c.lost, c.probing, c.leaving = false, true, true, true end
+    pcall(LeaveChannelByName, ch.name)
+    -- Join once the leave went through (the game no longer gives the channel's number), so the join
+    -- isn't a no-op on a channel the game still thinks it's in; after a few seconds, join anyway.
+    local waited = 0
+    local function Join()
+        local alive = {}
+        for _, c in ipairs(same) do
+            if channels[c.role] == c and not c.failed then alive[#alive + 1] = c else c.probing, c.leaving = false, nil end
+        end
+        if #alive == 0 then return end
+        if GetChannelName(ch.name) ~= 0 and waited < 5 then
+            waited = waited + 1
+            C_Timer.After(1, Join)
+            return
+        end
+        for _, c in ipairs(alive) do c.leaving = nil end
+        pcall(JoinTemporaryChannel, ch.name, ch.password)
+        for _, c in ipairs(alive) do
+            c.tries = 0
+            C_Timer.After(0.5, function() Probe(c) end)
+        end
+    end
+    C_Timer.After(1, Join)
+end
+
+-- For /taverne ally: is this channel in the server's list ("yes", "NO (ghost)", "can't tell")?
+function Comm:ChannelListed(ch)
+    local id = ch and ChannelId(ch)
+    if not id then return "not joined" end
+    local listed = Listed(id)
+    return listed == true and "yes" or listed == false and "NO (ghost)" or "can't tell (list empty or a group folded)"
+end
+
+-- Two checks in a row with the channel missing from the list: rejoin it. A check that can't
+-- tell, or skips the channel, starts the count over (an old miss doesn't count much later).
+function Comm:CheckGhosts()
+    local done = {}
+    for _, ch in pairs(channels) do
+        local lower = ch.name:lower()
+        local id = not done[lower] and not ch.failed and not ch.probing and ChannelId(ch)
+        local listed = id and Listed(id)
+        if listed == true then
+            ch.ghost, ch.rejoins, ch.gaveUpAt = 0, 0, nil
+        elseif listed == false then
+            ch.ghost = (ch.ghost or 0) + 1
+            if ch.ghost >= GHOST_CHECKS then
+                ch.ghost = 0
+                done[lower] = true
+                RejoinGhost(ch)
+            end
+        else
+            ch.ghost = 0
+        end
+    end
 end
 
 -- Join (or rejoin) a hidden channel for a role. Replaces what the role had before.
@@ -809,6 +934,23 @@ function Comm:OnLogin()
     -- screen) joins again; before this it stayed "connecting" until a reload.
     C_Timer.NewTicker(15, function()
         for _, ch in pairs(channels) do Comm:Reconnect(ch) end
+        Comm:CheckGhosts()
+    end)
+    -- The game's chat server drops and comes back ("You have been disconnected from..."): our
+    -- channels can be left as ghosts then. Checked 15, 30 and 45 s after it's back. (Events that
+    -- may not exist on every client: registered with care, on a frame of their own.)
+    local chatServer = CreateFrame("Frame")
+    for _, event in ipairs({ "CHAT_SERVER_DISCONNECTED", "CHAT_SERVER_RECONNECTED" }) do
+        pcall(chatServer.RegisterEvent, chatServer, event)
+    end
+    chatServer:SetScript("OnEvent", function(_, event)
+        if event == "CHAT_SERVER_DISCONNECTED" then
+            Comm:LogNote("the game's chat server dropped")
+            return
+        end
+        Comm:LogNote("the game's chat server is back: checking the channels")
+        -- (the game joins its channels again first: checked a little later, two misses needed as always)
+        for _, delay in ipairs({ 15, 30, 45 }) do C_Timer.After(delay, function() Comm:CheckGhosts() end) end
     end)
 end
 

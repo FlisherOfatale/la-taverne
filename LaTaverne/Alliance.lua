@@ -444,7 +444,8 @@ ns.commands.ally = function()
     for _, role in ipairs({ "ally", "allyOld" }) do
         local ch = ns.Comm:GetChannel(role)
         if ch then
-            L("channel", role, ch.name, "ready", ch.ready and "yes" or "no", ch.failed and "(join FAILED)" or "")
+            L("channel", role, ch.name, "ready", ch.ready and "yes" or "no", ch.failed and "(join FAILED)" or "",
+                "in the server's list", ns.Comm:ChannelListed(ch), "rejoins", ch.rejoins or 0)
         end
     end
     local s = ns.AllyChat.stats
