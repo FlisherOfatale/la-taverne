@@ -384,16 +384,101 @@ function MockGuild:Toggle()
 end
 
 -- Message log window (Debug tab, /taverne msglog): Refresh reads it again, Clear starts over.
+-- Two filters, Types and Senders: what's unticked is left out of the lines (saved). Auto-refresh:
+-- read again every 2 seconds (saved).
+local function MsgLogText()
+    return ns.Comm:LogText(ns.db.dev.msgLogHiddenTypes, ns.db.dev.msgLogHiddenSenders)
+end
+
+local function CountHidden(set)
+    local n = 0
+    for _ in pairs(set) do n = n + 1 end
+    return n
+end
+
+-- One filter's menu: Show all, Hide all, then a checkbox per key (with its number of lines).
+-- Keys hidden earlier and not in the log now are still listed, to show them again.
+local function FilterMenu(root, title, hidden, counts, labels, tips)
+    local keys = {}
+    for key in pairs(counts) do keys[#keys + 1] = key end
+    for key in pairs(hidden) do if not counts[key] then keys[#keys + 1] = key end end
+    table.sort(keys, function(a, b)
+        if labels[a] or labels[b] then return labels[a] ~= nil and labels[b] == nil end
+        return a < b
+    end)
+    root:CreateTitle(title)
+    if #keys == 0 then
+        root:CreateButton(L["Nothing logged yet"]):SetEnabled(false)
+        return
+    end
+    root:CreateButton(L["Show all"], function() wipe(hidden) ns.ShowMessageLog() end)
+    root:CreateButton(L["Hide all"], function()
+        for _, key in ipairs(keys) do hidden[key] = true end
+        ns.ShowMessageLog()
+    end)
+    root:CreateDivider()
+    for _, key in ipairs(keys) do
+        local item = root:CreateCheckbox((labels[key] or key) .. "  |cff808080" .. (counts[key] or 0) .. "|r",
+            function() return not hidden[key] end,
+            function()
+                hidden[key] = not hidden[key] or nil
+                ns.ShowMessageLog()
+            end)
+        if tips[key] then
+            item:SetTooltip(function(tooltip)
+                tooltip:SetText(labels[key] or key)
+                tooltip:AddLine(tips[key], 1, 1, 1, true)
+            end)
+        end
+    end
+end
+
+local function TypesMenu(_, root)
+    local kinds = ns.Comm:LogCounts()
+    FilterMenu(root, L["Message types"], ns.db.dev.msgLogHiddenTypes, kinds,
+        { [ns.Comm.LOG_NOTES] = L["Notes"] },
+        { [ns.Comm.LOG_NOTES] = L["Lines that aren't a message: a question nobody answered, an error, a player sending a lot."] })
+end
+
+local function SendersMenu(_, root)
+    local _, who = ns.Comm:LogCounts()
+    FilterMenu(root, L["Senders"], ns.db.dev.msgLogHiddenSenders, who,
+        { [ns.Comm.LOG_ME] = L["Me (sent)"] },
+        { [ns.Comm.LOG_ME] = L["What you send. The others are what you receive, by player."] })
+end
+
 function ns.ShowMessageLog()
+    local dev = ns.db.dev
+    local types, senders = CountHidden(dev.msgLogHiddenTypes), CountHidden(dev.msgLogHiddenSenders)
+    local FILTER_TIP = L["Untick what you don't want to see. The counts at the top stay complete, and the text says what's left out. Kept for next time."]
+    local hint
+    if not ns.Comm:IsLogging() then
+        hint = L["Off: start it on the Debug tab (or /taverne msglog on). Copy with Ctrl+A, Ctrl+C."]
+    elseif dev.msgLogAuto then
+        hint = L["On: new messages show by themselves. Copy with Ctrl+A, Ctrl+C."]
+    else
+        hint = L["On: new messages show when you click Refresh. Copy with Ctrl+A, Ctrl+C."]
+    end
     ns.TextDialog({
         kind = "msglog",
         title = L["Message log"],
-        hint = ns.Comm:IsLogging() and L["On: new messages show when you click Refresh. Copy with Ctrl+A, Ctrl+C."]
-            or L["Off: start it on the Debug tab (or /taverne msglog on). Copy with Ctrl+A, Ctrl+C."],
-        text = ns.Comm:LogText(),
+        hint = hint,
+        text = MsgLogText(),
         button = L["Refresh"],
         onButton = function() ns.ShowMessageLog() return false end,
-        extra = { text = L["Clear"], fill = function() ns.Comm:ClearLog() return ns.Comm:LogText() end },
+        extra = { text = L["Clear"], fill = function() ns.Comm:ClearLog() return MsgLogText() end },
+        menus = {
+            { text = types == 0 and L["Types: all"] or L["Types: %d hidden"]:format(types),
+              generator = TypesMenu, width = 160, tooltip = { L["Message types"], FILTER_TIP } },
+            { text = senders == 0 and L["Senders: all"] or L["Senders: %d hidden"]:format(senders),
+              generator = SendersMenu, width = 160, tooltip = { L["Senders"], FILTER_TIP } },
+        },
+        check = {
+            text = L["Auto-refresh"], checked = dev.msgLogAuto,
+            onClick = function(on) dev.msgLogAuto = on ns.ShowMessageLog() end,
+            tooltip = { L["Auto-refresh"], L["New messages show by themselves, every 2 seconds. It waits while the mouse is over the text, or a moment after a key in it, so you can select and copy."] },
+        },
+        autoFill = dev.msgLogAuto and MsgLogText or nil,
     })
 end
 
