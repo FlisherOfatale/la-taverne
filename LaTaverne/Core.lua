@@ -71,6 +71,15 @@ function ns.FullName(unit)
     return name
 end
 
+-- Am I away (AFK)? true / false, or nil when the game won't say: in some states (a fight, an
+-- encounter) it gives a secret value that an addon can't even test.
+function ns.IsAway()
+    if not UnitIsAFK then return false end
+    local afk = UnitIsAFK("player")
+    if issecretvalue and issecretvalue(afk) then return nil end
+    return afk and true or false
+end
+
 -- Comparison key for a name: trimmed, lowercase.
 function ns.NameKey(name)
     if not name then return nil end
@@ -173,6 +182,8 @@ local DEFAULTS = {
         enabled = true,  -- share guild chat with the allied guilds
         showTag = true,  -- allied guild's tag in front of the name
         showLynx = true, -- the lynx in front of allied lines
+        markRelayed = true, -- relayed lines (authors without La Taverne): grey lynx, or a grey dot
+        markTold = false,   -- the line explaining that mark was shown once
     },
     allyLog = {},
     allyMap = {       -- guild and allied players on the world map (AllyMap.lua)

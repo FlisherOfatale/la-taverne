@@ -133,6 +133,10 @@ if GetLocale() == "frFR" then
     L["Share guild chat with the allied guilds"] = "Partager le chat de guilde avec les guildes alliées"
     L["Show the guild tag on allied messages"] = "Afficher le tag de la guilde sur les messages alliés"
     L["Show the lynx on allied messages"] = "Afficher le lynx sur les messages alliés"
+    L["Mark players who can't see your answers"] = "Marquer les joueurs qui ne voient pas vos réponses"
+    L["Allied players without La Taverne: their guild's relay passes their lines on, but your answers never reach them."] = "Joueurs alliés sans La Taverne : le relais de leur guilde transmet leurs messages, mais vos réponses ne leur parviennent jamais."
+    L["A grey lynx in front of their lines (a grey dot when the lynx is turned off)."] = "Un lynx gris devant leurs messages (un point gris quand le lynx est désactivé)."
+    L["Allied lines marked %s come from players without La Taverne: they can't see your answers. (Options, Shared guild chat)"] = "Les messages alliés marqués %s viennent de joueurs sans La Taverne : ils ne voient pas vos réponses. (Options, Chat de guilde partagé)"
     L["Allied with: %s"] = "Alliée avec : %s"
     L["No allied guild set up. Officers set it up in the Officers tab."] = "Aucune guilde alliée configurée. Les officiers la configurent dans l'onglet Officiers."
     L["Guild Alliance: off."] = "Alliance de guildes : désactivée."
@@ -544,8 +548,6 @@ if GetLocale() == "frFR" then
 
     -- Vouching (0.13)
 
-    L["%s says they're in [%s], but [%s] says no: their messages are ignored."] = "%s dit être dans [%s], mais [%s] dit que non : ses messages sont ignorés."
-    L["In [%s] (the game says so)"] = "Dans [%s] (selon le jeu)"
     L["Confirmed by %s"] = "Confirmé par %s"
     L["Not in [%s]"] = "Pas dans [%s]"
     L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."] = "Pas encore vérifié : personne de [%s] n'était en ligne pour confirmer qu'il en fait partie. Ses messages passent quand même ; c'est revérifié dès que quelqu'un de [%s] est en ligne."
@@ -554,7 +556,6 @@ if GetLocale() == "frFR" then
     L["Online. Checked once they post a group or talk."] = "En ligne. Vérifié dès qu'il publie un groupe ou parle."
     L["not checked yet"] = "pas encore vérifié"
     L["Allied players seen"] = "Joueurs alliés vus"
-    L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."] = "Les membres de leur guilde confirment qui ils sont. Les joueurs que leur guilde ne connaît pas sont ignorés."
     L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] = "Pas encore vérifié : personne de sa guilde n'était en ligne pour le confirmer. Il passe quand même, et sera revérifié plus tard."
     L["Questions about me"] = "Questions sur moi"
     L["Stay quiet (normal)"] = "Ne pas répondre (normal)"
@@ -565,6 +566,28 @@ if GetLocale() == "frFR" then
     L["Asked the allied guilds about %s: the answer shows in the Alliance tab."] = "Question envoyée aux guildes alliées sur %s : la réponse s'affiche dans l'onglet Alliance."
     L["No Guild Alliance: nobody to ask."] = "Pas d'alliance de guildes : personne à qui demander."
     L["Vouching test: each allied guild is asked whether this player is one of theirs. A member online answers from their roster."] = "Test de vérification : chaque guilde alliée est interrogée pour savoir si ce joueur en fait partie. Un membre en ligne répond d'après sa liste de membres."
+
+    -- Vouching by evidence (what the game shows, my characters' rosters)
+    L["Seen in [%s] by %s (%s), %s."] = "Vu dans [%s] par %s (%s), %s."
+    L["in the group"] = "dans le groupe"
+    L["target"] = "cible"
+    L["mouseover"] = "survol de la souris"
+    L["nameplate"] = "barre de nom"
+    L["guild roster"] = "liste des membres"
+    L["Not on the [%s] roster %s saw %s."] = "Absent de la liste des membres de [%s] vue par %s %s."
+    L["%s, a member of [%s], says this player isn't in it."] = "%s, membre de [%s], dit que ce joueur n'en fait pas partie."
+    L["%s says this player isn't in [%s], but %s isn't confirmed either."] = "%s dit que ce joueur n'est pas dans [%s], mais %s n'est pas confirmé non plus."
+    L["%s says they're in [%s]. %s Their messages are hidden."] = "%s dit être dans [%s]. %s Ses messages sont masqués."
+    L["Not in [%s]: %s"] = "Pas dans [%s] : %s"
+    L["Disputed: %s"] = "Contesté : %s"
+    L["Disputed"] = "Contesté"
+    L["disputed"] = "contesté"
+    L["%d hidden"] = "%d masqués"
+    L["%d messages hidden this session."] = "%d messages masqués pendant cette session."
+    L["waits for your click"] = "attend votre clic"
+    L["Their guild is checked: what the game shows (group, target, nameplate), your other characters' guild rosters, or their guild's members. Players shown in another guild are ignored."] = "Leur guilde est vérifiée : ce que montre le jeu (groupe, cible, barre de nom), les listes de membres vues par vos autres personnages, ou les membres de leur guilde. Les joueurs montrés dans une autre guilde sont ignorés."
+    L["Disputed: someone says they aren't in that guild, but nobody vouches for that someone. They still get through."] = "Contesté : quelqu'un dit qu'il n'est pas dans cette guilde, mais personne ne peut confirmer ce quelqu'un. Il passe quand même."
+    L["Auto-invite waits for your click for players not checked yet or disputed."] = "L'invitation automatique attend votre clic pour les joueurs pas encore vérifiés ou contestés."
 
     -- Filters, alerts, guild chat line (0.12)
 
@@ -723,7 +746,6 @@ if GetLocale() == "frFR" then
     L["All dungeons"] = "Tous les donjons"
     L["%d dungeons"] = "%d donjons"
     L["Availability"] = "Disponibilités"
-    L["My availability"] = "Ma disponibilité"
     L["Back"] = "Retour"
     L["See the other groups"] = "Voir les autres groupes"
     L["Open groups and invitations. Your group stays as it is."] = "Les groupes ouverts et les invitations. Votre groupe reste tel quel."
@@ -831,6 +853,7 @@ if GetLocale() == "frFR" then
     L["Nobody else in %s can relay right now."] = "Personne d'autre dans %s ne peut relayer en ce moment."
     L["If you stop, the allied guilds stop seeing the guild chat of your members without La Taverne."] = "Si vous arrêtez, les guildes alliées ne voient plus le chat de guilde de vos membres sans La Taverne."
     L["You logged in a few minutes ago: players say whether they can relay every 4 to 5 minutes, so some may not be counted yet."] = "Vous vous êtes connecté il y a quelques minutes : les joueurs disent s'ils peuvent relayer toutes les 4 à 5 minutes, certains ne sont peut-être pas encore comptés."
+    L["Probably %d more: they could relay last time, and haven't said so yet since you logged in (players say it every 4 to 5 minutes)."] = "Probablement %d de plus : ils pouvaient relayer la dernière fois, et ne l'ont pas encore redit depuis votre connexion (les joueurs le disent toutes les 4 à 5 minutes)."
     L["Stop relaying"] = "Arrêter de relayer"
     L["Keep helping"] = "Continuer d'aider"
     -- Setup page (officers)

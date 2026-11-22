@@ -34,6 +34,31 @@ local function RebuildRoster()
             rosterCount = rosterCount + 1
         end
     end
+    Guild.SaveSnapshot()
+end
+
+-- My guild's member names, dated, saved for the whole account so my other characters can vouch
+-- for them (Vouch.lua reads it; it also drops old ones): ns.db.rosterSnapshots[guild, lowercase]
+-- = { guild, t, by, count, partial, names = { [nameKey] = true } }. partial: nobody offline in
+-- the list (the game may only give the online members), so being missing from it proves
+-- nothing. Never in test mode. At most every 10 minutes, unless the member count changed.
+local SNAPSHOT_EVERY = 10 * 60
+function Guild.SaveSnapshot()
+    if Guild:IsSandbox() or rosterCount == 0 or not ns.db then return end
+    local mine = GetGuildInfo("player")
+    if type(mine) ~= "string" or mine == "" then return end
+    ns.db.rosterSnapshots = ns.db.rosterSnapshots or {}
+    local key = strtrim(mine):lower()
+    local old = ns.db.rosterSnapshots[key]
+    local now = GetServerTime()
+    if type(old) == "table" and old.count == rosterCount and now - (old.t or 0) < SNAPSHOT_EVERY then return end
+    local names, offline = {}, false
+    for nameKey, member in pairs(roster) do
+        names[nameKey] = true
+        if not member.online then offline = true end
+    end
+    ns.db.rosterSnapshots[key] = { guild = mine, t = now, by = ns.FullName("player"), count = rosterCount,
+        partial = not offline or nil, names = names }
 end
 
 function Guild:IsSandbox()

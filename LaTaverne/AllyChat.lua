@@ -91,12 +91,24 @@ end
 
 -- In front of an allied player's name: the Nation du Québec lynx (a line shared by La Taverne),
 -- then the guild's tag; each has its option, so allied lines can look like guild ones.
-local function TagText(tag)
+-- relayed: the line came through the guild relay (Relay.lua), so its author doesn't run La
+-- Taverne and never sees allied answers. Marked (its own option, on by default): a grey lynx in
+-- place of the gold one, or a grey dot when the lynx is off.
+local LYNX_ICON = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
+local LYNX_GREY = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon_grey:0|t "
+local GREY_DOT = "|TInterface\\FriendsFrame\\StatusIcon-Offline:0|t "
+
+local function MarkRelayed() return ns.db.allyChat.markRelayed ~= false end
+
+local function TagText(tag, relayed)
     if not tag then return "" end
     -- (also AllyChat.TagText, for the test guild window)
     local text = ""
+    local mark = relayed and MarkRelayed()
     if ns.db.allyChat.showLynx ~= false then
-        text = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
+        text = mark and LYNX_GREY or LYNX_ICON
+    elseif mark then
+        text = GREY_DOT
     end
     if ns.db.allyChat.showTag then text = text .. TAG_COLOR .. "[" .. tag .. "]|r " end
     return text
@@ -178,8 +190,8 @@ local function ShowInFrame(frame, author, class, guid, text, tagText, viaEvent)
     AllyChat.stats.fallback = AllyChat.stats.fallback + 1
 end
 
-local function ShowInChat(author, class, guid, text, tag)
-    local tagText = TagText(tag)
+local function ShowInChat(author, class, guid, text, tag, relayed)
+    local tagText = TagText(tag, relayed)
     local monitor = ChattynatorMonitor()
     if monitor then
         AllyChat.stats.chattynator = (AllyChat.stats.chattynator or 0) + 1
@@ -218,7 +230,7 @@ end
 
 local function WindowLine(entry)
     local link = "|Hplayer:" .. entry.a .. "|h[" .. ClassColored(entry.a, entry.c) .. "]|h"
-    return TimeStamp(entry.t) .. TagText(entry.tag) .. link .. ": " .. entry.m
+    return TimeStamp(entry.t) .. TagText(entry.tag, entry.r) .. link .. ": " .. entry.m
 end
 
 local function AddToWindow(entry)
@@ -290,12 +302,20 @@ end
 
 -- In test mode the lines also go to the test guild window; the game's chat windows only get
 -- them when the Debug tab's option says so.
-local function ShowLine(author, class, guid, text, tag)
+local function ShowLine(author, class, guid, text, tag, relayed)
     if ns.Guild:IsSandbox() then
-        if ns.MockGuild then ns.MockGuild:AddChat(author, class, text, tag) end
+        if ns.MockGuild then ns.MockGuild:AddChat(author, class, text, tag, relayed) end
         if not ns.db.dev.gameChat then return end
     end
-    ShowInChat(author, class, guid, text, tag)
+    ShowInChat(author, class, guid, text, tag, relayed)
+end
+
+-- The first marked line (relayed, the mark on): say once what the mark means.
+local function TellMark()
+    if ns.db.allyChat.markTold or not MarkRelayed() then return end
+    ns.db.allyChat.markTold = true
+    local icon = ns.db.allyChat.showLynx ~= false and LYNX_GREY or GREY_DOT
+    ns.Print(format(L["Allied lines marked %s come from players without La Taverne: they can't see your answers. (Options, Shared guild chat)"], strtrim(icon)))
 end
 
 -- Links typed in chat (items, spells, quests...). Unlike real chat, the server never checked
@@ -340,7 +360,7 @@ local function SafeText(text)
 end
 AllyChat.SafeText = SafeText
 
-local function Receive(author, payload, tag)
+local function Receive(author, payload, tag, relayed)
     local text = payload.m
     if type(text) ~= "string" or text == "" or IsSecret(text) then return end
     -- On my ignore list: the game hides their real chat on its side, but these lines don't go
@@ -360,10 +380,12 @@ local function Receive(author, payload, tag)
     end
     local class = type(payload.c) == "string" and payload.c or nil
     local guid = type(payload.id) == "string" and payload.id or nil
-    ShowLine(author, class, guid, shown, tag)
+    relayed = (tag and relayed) and true or nil
+    ShowLine(author, class, guid, shown, tag, relayed)
+    if relayed then TellMark() end
     if ns.Invites then ns.Invites:OnChat(author, text, tag and "ally" or "guild") end
     if tag then
-        local entry = { t = GetServerTime(), a = author, c = class, g = payload.g, tag = tag, m = shown }
+        local entry = { t = GetServerTime(), a = author, c = class, g = payload.g, tag = tag, m = shown, r = relayed }
         local log = ns.db.allyLog
         log[#log + 1] = entry
         Prune()
@@ -466,7 +488,7 @@ ns.Comm:OnAlly("RCHAT", function(sender, payload, isSelf)
     local guid = type(payload.id) == "string" and payload.id:match("^Player%-[%w%-]+$") or nil
     local class = type(payload.c) == "string" and payload.c:match("^%u+$") or nil
     AllyChat.stats.relayed = AllyChat.stats.relayed + 1
-    Receive(author, { m = payload.m, t = t, c = class, id = guid, g = payload.g }, ns.Alliance:GetTag(payload.g) or "?")
+    Receive(author, { m = payload.m, t = t, c = class, id = guid, g = payload.g }, ns.Alliance:GetTag(payload.g) or "?", true)
 end)
 
 -- Sandbox only: a fake guild mate typed in the fake guild chat. as: a test guild member without

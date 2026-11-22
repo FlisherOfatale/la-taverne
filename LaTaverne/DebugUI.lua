@@ -27,7 +27,7 @@ local function FormatChat(line)
         return TimeText(line.t) .. "|cffffd100" .. line.system .. "|r"
     end
     -- Same as the real chat: the lynx, then the tag if that option is on (Options, Shared guild chat).
-    local tag = ns.AllyChat.TagText(line.tag)
+    local tag = ns.AllyChat.TagText(line.tag, line.relayed)
     return TimeText(line.t) .. tag .. "[" .. K.ClassColored(line.author, line.class) .. "]: " .. line.text
 end
 
@@ -40,8 +40,8 @@ local function Append(line)
     end
 end
 
-function MockGuild:AddChat(author, class, text, tag)
-    Append({ t = time(), author = author, class = class, text = text, tag = tag })
+function MockGuild:AddChat(author, class, text, tag, relayed)
+    Append({ t = time(), author = author, class = class, text = text, tag = tag, relayed = relayed })
 end
 
 function MockGuild:AddSystem(text)

@@ -95,7 +95,6 @@ end
 
 local fighting, lastFight, awaySince = false, nil, nil
 local loggingOut = false -- the logout countdown: handed over, never claimed back
-local allyReadyAt        -- GetTime() my alliance channel got ready (the hellos I can have heard)
 local newerRp, newerAt -- a higher relay protocol heard in my guild (and when): I step aside
 local NEWER_FOR = 600   -- ...until it hasn't been heard for this long (hellos repeat it every 4-4.5 min)
 local newerTold = false
@@ -1000,7 +999,7 @@ end
 
 function Relay:OnLogin()
     lastRefill = GetTime()
-    awaySince = (UnitIsAFK and UnitIsAFK("player")) and GetTime() or nil
+    awaySince = ns.IsAway() and GetTime() or nil
     ns.On("PLAYER_REGEN_DISABLED", function()
         fighting, lastFight = true, GetTime()
     end)
@@ -1010,7 +1009,8 @@ function Relay:OnLogin()
     end)
     ns.On("PLAYER_FLAGS_CHANGED", function(unit)
         if unit ~= "player" then return end
-        local away = UnitIsAFK and UnitIsAFK("player")
+        local away = ns.IsAway()
+        if away == nil then return end -- the game won't say right now: as before
         if away and not awaySince then
             awaySince = GetTime()
         elseif not away then
@@ -1030,7 +1030,6 @@ function Relay:OnLogin()
     -- (each guild's holders answer).
     ns.Comm:OnReady(function(role)
         if role ~= "ally" then return end
-        allyReadyAt = GetTime()
         for _, job in ipairs(JOB_ORDER) do jobs[job].askedAt = nil end
     end)
     C_Timer.NewTicker(TICK, Tick)
@@ -1054,25 +1053,51 @@ function Relay:SetHelp(on)
 end
 
 -- How many other players of my guild can do this job right now: online, hello heard lately
--- (they're sent every 4-4.5 min), switch on, the job in what they can do. And how many of
--- them are away (they may be logged out soon), and whether the count is complete: my
--- guildmates don't answer my hello, so in my first minutes on the channel some aren't heard yet.
+-- (they're sent every 4-4.5 min), switch on, the job in what they can do; how many of them are
+-- away (they may be logged out soon); whether the count is complete (my guildmates don't answer
+-- my hello: in my first 5 minutes on the channel some aren't heard yet); and how many more
+-- probably can (Players.lua: online, and their last hello before my login said they could).
 local HELLO_FRESH = 9 * 60
-local HELLO_ALL = 300 -- on the channel this long: every guildmate's hello heard once
 function Relay:CountOthers(job)
     local cap = JOBS[job or "chat"].cap
-    local count, away = 0, 0
+    local count, away, probable = 0, 0, 0
     for _, h in ipairs(ns.Players:GetGuildHellos(HELLO_FRESH)) do
         local can = false
         for c in tostring(h.cap or ""):gmatch("[^,]+") do
             if strtrim(c) == cap then can = true end
         end
         if h.rl and can then
-            count = count + 1
-            if h.afk then away = away + 1 end
+            if h.probable then
+                probable = probable + 1
+            else
+                count = count + 1
+                if h.afk then away = away + 1 end
+            end
         end
     end
-    return count, away, allyReadyAt ~= nil and GetTime() - allyReadyAt >= HELLO_ALL
+    return count, away, ns.Players:HellosComplete(), probable
+end
+
+-- The lines about the others (Stop popup, Alliance page): who can, who probably can, and that the
+-- count isn't complete yet. guild: nil for "your guild".
+function Relay:OthersLines(guild)
+    local count, away, complete, probable = self:CountOthers("chat")
+    local lines = {}
+    if guild then
+        if count > 0 or complete then
+            lines[#lines + 1] = (away > 0 and format(L["Other players in %s who can relay right now: %d (%d away)."], guild, count, away))
+                or format(L["Other players in %s who can relay right now: %d."], guild, count)
+        end
+    else
+        lines[#lines + 1] = (away > 0 and format(L["Others in your guild who can relay right now: %d (%d away)."], count, away))
+            or format(L["Others in your guild who can relay right now: %d."], count)
+    end
+    if probable > 0 then
+        lines[#lines + 1] = format(L["Probably %d more: they could relay last time, and haven't said so yet since you logged in (players say it every 4 to 5 minutes)."], probable)
+    elseif not complete then
+        lines[#lines + 1] = L["You logged in a few minutes ago: players say whether they can relay every 4 to 5 minutes, so some may not be counted yet."]
+    end
+    return lines, count + probable > 0 or not complete
 end
 
 local function MyGuildLabel()
@@ -1092,13 +1117,9 @@ function Relay:AskToStop(onStop)
             break
         end
     end
-    local count, away, complete = self:CountOthers("chat")
-    if count > 0 or not complete then
-        if count > 0 then
-            lines[#lines + 1] = (away > 0 and format(L["Other players in %s who can relay right now: %d (%d away)."], guild, count, away))
-                or format(L["Other players in %s who can relay right now: %d."], guild, count)
-        end
-        if not complete then lines[#lines + 1] = L["You logged in a few minutes ago: players say whether they can relay every 4 to 5 minutes, so some may not be counted yet."] end
+    local others, maybeSomeone = self:OthersLines(guild)
+    if maybeSomeone then
+        for _, line in ipairs(others) do lines[#lines + 1] = line end
         lines[#lines + 1] = L["If none are left, the allied guilds stop seeing the guild chat of your members without La Taverne."]
     else
         lines[#lines + 1] = format(L["Nobody else in %s can relay right now."], guild)

@@ -429,7 +429,7 @@ local function MyState()
     return format("combat %s, %s, lockdown %s, restricted %s, away %s",
         (UnitAffectingCombat and UnitAffectingCombat("player")) and "yes" or "no",
         (kind and kind ~= "none") and kind or "outside", Lockdown(),
-        ns.Guild:Restricted() and "yes" or "no", (UnitIsAFK and UnitIsAFK("player")) and "yes" or "no")
+        ns.Guild:Restricted() and "yes" or "no", tostring(ns.IsAway()))
 end
 
 -- Where probe messages go: the alliance channel (what the relay will use), else the test guild's
@@ -701,7 +701,7 @@ end
 local LOGOUT_EVENTS = { "PLAYER_FLAGS_CHANGED", "PLAYER_CAMPING", "PLAYER_QUITING", "LOGOUT_CANCEL", "PLAYER_LOGOUT" }
 local logout = {}
 
-local function IsAway() return (UnitIsAFK and UnitIsAFK("player")) and true or false end
+local function IsAway() return ns.IsAway() and true or false end
 
 local function LogoutNote(text)
     local record = ns.db.probeLogout
@@ -786,6 +786,281 @@ local function RestStop()
     Note("rest off")
 end
 
+-- Vouching probes ---------------------------------------------------------------------------------
+-- What the new vouching (.plans/vouch-trust.md, "Check in game first") needs to know about the
+-- game: can La Taverne use /who, which units give a player's guild, the guild's join and leave
+-- lines, offline members in the roster, the sender's name on guild addon messages. Same output
+-- window as the relay probes. Nothing here is sent to other players, except "sender" (one tiny
+-- guild addon message on a prefix nobody else listens to).
+
+local function GuildText(unit)
+    local g = GetGuildInfo(unit)
+    if IsSecret(g) then return "SECRET" end
+    return q(g)
+end
+
+-- who <name>: can La Taverne look a player up with /who? Three tries, 8 s apart:
+-- 1. right away (typing the command counts as a click), with n-"<name>" (an exact name, spaces in it)
+-- 2. from a timer, no click at all, with the plain name
+-- 3. from a link clicked in chat, n-"<name>" again
+-- Each writes whether the game refused it, the results (name and guild exactly as the game gives
+-- them, level, zone), how long they took, whether the game's Who window opened, and the game's
+-- own chat lines meanwhile (a "wait before searching again" line, results written as text...).
+local who = {}
+
+local function WhoNote(...) Note("who:", ...) end
+
+local function WhoResults()
+    local api = C_FriendList
+    if not (api and api.GetNumWhoResults) then WhoNote("C_FriendList.GetNumWhoResults MISSING") return end
+    local shown, total = api.GetNumWhoResults()
+    WhoNote(format("results (try %s, after %s): %s shown, %s in all, Who window %s", tostring(who.try),
+        who.sentAt and format("%.1f s", GetTime() - who.sentAt) or "?", tostring(shown), tostring(total),
+        (FriendsFrame and FriendsFrame:IsShown()) and "OPEN" or "closed"))
+    for i = 1, math.min(tonumber(shown) or 0, 10) do
+        local info = api.GetWhoInfo and api.GetWhoInfo(i)
+        if type(info) == "table" then
+            WhoNote(format("  %s, guild %s, level %s, %s", q(info.fullName), q(info.fullGuildName),
+                tostring(info.level), tostring(info.area)))
+        end
+    end
+    who.sentAt = nil
+end
+
+local function WhoSend(try, filter, how)
+    who.try, who.sentAt = try, GetTime()
+    who.untilTime = GetTime() + 60
+    local api = C_FriendList
+    if api and api.SetWhoToUi then pcall(api.SetWhoToUi, true) end
+    local send = (api and api.SendWho) or SendWho
+    if not send then WhoNote("SendWho MISSING") return end
+    local ok, err = pcall(send, filter)
+    WhoNote(format("try %d (%s): %s -> %s", try, how, filter, ok and "sent" or ("error: " .. tostring(err))))
+end
+
+local function WhoEvent(_, event, a, b)
+    if not who.untilTime or GetTime() > who.untilTime then return end
+    if event == "WHO_LIST_UPDATE" then
+        WhoResults()
+    elseif event == "CHAT_MSG_SYSTEM" then
+        WhoNote("game line:", IsSecret(a) and "SECRET" or q(a))
+    else
+        WhoNote(event, tostring(a), tostring(b)) -- refused: blocked or forbidden
+    end
+end
+
+local function WhoRun(name)
+    name = strtrim(name or "")
+    if name == "" then
+        ns.Print("usage: /taverne probe who Firstname Lastname (someone online, from another guild if you can)")
+        return
+    end
+    who.name = name
+    if not who.frame then
+        who.frame = CreateFrame("Frame")
+        Listen(who.frame, { "WHO_LIST_UPDATE", "CHAT_MSG_SYSTEM", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" })
+        who.frame:SetScript("OnEvent", Safe(WhoEvent))
+    end
+    WhoNote("my guild", GuildText("player"), "looking up", q(name))
+    WhoSend(1, 'n-"' .. name .. '"', "typed command")
+    C_Timer.After(8, Safe(function() WhoSend(2, name, "timer, no click") end))
+    C_Timer.After(16, Safe(function()
+        ns.Print("who probe: click |Haddon:LaTaverneProbe:who|h|cff71d5ff[try 3: /who from a click]|r|h, then /taverne probe show")
+    end))
+end
+
+-- The link of try 3. Recent UIs hand "addon" links to EventRegistry, others only to SetItemRef:
+-- both listened to, one click handled once.
+local lastWhoClick = 0
+local function OnProbeLink(link)
+    if link ~= "addon:LaTaverneProbe:who" or not who.name then return end
+    if GetTime() - lastWhoClick < 0.5 then return end
+    lastWhoClick = GetTime()
+    WhoSend(3, 'n-"' .. who.name .. '"', "link click")
+end
+if EventRegistry and EventRegistry.RegisterCallback then
+    EventRegistry:RegisterCallback("SetItemRef", function(_, link) OnProbeLink(link) end, who)
+end
+if SetItemRef then
+    hooksecurefunc("SetItemRef", function(link) OnProbeLink(link) end)
+end
+
+-- plates: does the game give the guild of a player I'm not grouped with, from a nameplate, the
+-- mouseover or the target? Each player once per source (and again 1 s later if the guild didn't
+-- come at once: it may load late). Walk through a city with nameplates on.
+local plates = {}
+
+local function PlateSeen(source, unit)
+    if not (UnitExists(unit) and UnitIsPlayer(unit)) or UnitIsUnit(unit, "player") then return end
+    local name = GetUnitName(unit, true)
+    if IsSecret(name) or type(name) ~= "string" then
+        Note(source, "name SECRET or unreadable")
+        return
+    end
+    local key = source .. "#" .. name
+    if plates.seen[key] then return end
+    local guild = GuildText(unit)
+    local grouped = (UnitInParty(unit) or UnitInRaid(unit)) and "in my group" or "not grouped"
+    if guild == "[nil]" and not plates.retried[key] then
+        plates.retried[key] = true
+        C_Timer.After(1, Safe(function()
+            if not probes.plates then return end
+            if GetUnitName(unit, true) == name then
+                Note(source, q(name), "guild after 1 s", GuildText(unit), grouped)
+                plates.seen[key] = true
+            end
+        end))
+        return
+    end
+    plates.seen[key] = true
+    Note(source, q(name), "guild", guild, grouped, UnitIsFriend("player", unit) and "friendly" or "hostile")
+end
+
+local function PlatesEvent(_, event, unit)
+    if event == "NAME_PLATE_UNIT_ADDED" then
+        PlateSeen("nameplate", unit)
+    elseif event == "UPDATE_MOUSEOVER_UNIT" then
+        PlateSeen("mouseover", "mouseover")
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        PlateSeen("target", "target")
+    end
+end
+
+local function PlatesStart()
+    plates.seen, plates.retried = {}, {}
+    plates.frame = plates.frame or CreateFrame("Frame")
+    Listen(plates.frame, { "NAME_PLATE_UNIT_ADDED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_TARGET_CHANGED" })
+    plates.frame:SetScript("OnEvent", Safe(PlatesEvent))
+    Note("plates on, my guild", GuildText("player"), "nameplates shown",
+        tostring(GetCVar and GetCVar("nameplateShowFriends")), "(friendly)", tostring(GetCVar and GetCVar("nameplateShowEnemies")), "(enemy)")
+end
+
+local function PlatesStop()
+    if plates.frame then plates.frame:UnregisterAllEvents() end
+    Note("plates off")
+end
+
+-- guildlines: the game's lines when someone joins, leaves or is removed from my guild. Writes
+-- the game's own texts (as this client's language has them), each system line that matches one,
+-- and other system lines that speak of a guild (to catch a form the texts miss). Also each
+-- change of the roster's size. Have a test alt join and leave, or watch while officers recruit.
+local glines = {}
+
+-- A game text ("%s has joined the guild.") as a pattern that captures its names.
+local function TextPattern(text)
+    if type(text) ~= "string" then return nil end
+    local p = text:gsub("([%%%^%$%(%)%.%[%]%*%+%-%?])", "%%%1")
+    p = p:gsub("%%%%%d%%%$s", "(.+)"):gsub("%%%%s", "(.+)")
+    return "^" .. p .. "$"
+end
+
+local GUILD_TEXTS = { "ERR_GUILD_JOIN_S", "ERR_GUILD_LEAVE_S", "ERR_GUILD_REMOVE_SS", "ERR_GUILD_QUIT_S",
+    "ERR_GUILD_PROMOTE_SSS", "ERR_GUILD_DEMOTE_SSS" }
+
+local function GuildLinesEvent(_, event, text)
+    if event == "GUILD_ROSTER_UPDATE" then
+        local total = GetNumGuildMembers()
+        if total ~= glines.total then
+            Note("guildlines: roster size", tostring(glines.total), "->", tostring(total))
+            glines.total = total
+        end
+        return
+    end
+    if IsSecret(text) or type(text) ~= "string" then
+        Note("guildlines: system line SECRET or unreadable")
+        return
+    end
+    for _, key in ipairs(GUILD_TEXTS) do
+        local pattern = glines.patterns[key]
+        if pattern then
+            local a, b = text:match(pattern)
+            if a then
+                Note("guildlines: MATCH", key, q(a), b and q(b) or "")
+                return
+            end
+        end
+    end
+    local lower = text:lower()
+    if lower:find("guild", 1, true) or lower:find("guilde", 1, true) then
+        Note("guildlines: other guild line", q(text))
+    end
+end
+
+local function GuildLinesStart()
+    glines.patterns = {}
+    Note("guildlines on, language", tostring(GetLocale()), "my guild", GuildText("player"))
+    for _, key in ipairs(GUILD_TEXTS) do
+        local text = _G[key]
+        Note("  " .. key, text and q(text) or "MISSING")
+        glines.patterns[key] = TextPattern(text)
+    end
+    glines.total = GetNumGuildMembers()
+    glines.frame = glines.frame or CreateFrame("Frame")
+    Listen(glines.frame, { "CHAT_MSG_SYSTEM", "GUILD_ROSTER_UPDATE" })
+    glines.frame:SetScript("OnEvent", Safe(GuildLinesEvent))
+end
+
+local function GuildLinesStop()
+    if glines.frame then glines.frame:UnregisterAllEvents() end
+    Note("guildlines off")
+end
+
+-- roster: does the roster give the offline members too (an alt's snapshot of its guild needs
+-- them all)? Run it with the guild window's "show offline members" box on, then off.
+local function RosterRun()
+    local total, online, mobile = GetNumGuildMembers()
+    local showOffline = GetGuildRosterShowOffline and GetGuildRosterShowOffline()
+    Note(format("roster: %s members, %s online, %s on mobile; the guild window's 'show offline' box %s",
+        tostring(total), tostring(online), tostring(mobile), tostring(showOffline)))
+    local named, offline, secret = 0, 0, 0
+    for i = 1, tonumber(total) or 0 do
+        local name, _, _, _, _, _, _, _, isOnline = GetGuildRosterInfo(i)
+        if IsSecret(name) then
+            secret = secret + 1
+        elseif type(name) == "string" then
+            named = named + 1
+            if not isOnline then offline = offline + 1 end
+        end
+    end
+    Note(format("roster: %d readable, %d of them offline, %d secret", named, offline, secret))
+    Note("roster: run it again with the guild window's 'show offline members' box changed")
+end
+
+-- sender: the sender's name on a guild addon message (with or without the realm?), next to how
+-- La Taverne writes names. Sends one message to my guild on a prefix nobody else listens to; any
+-- guildmate running this probe in the next 30 s shows up too.
+local SENDER_PREFIX = "TaverneV"
+local senderUntil = 0
+local senderFrame
+
+local function SenderHeard(_, _, prefix, _, distribution, sender)
+    if prefix ~= SENDER_PREFIX or GetTime() > senderUntil then return end
+    if IsSecret(sender) then
+        Note("sender: SECRET")
+        return
+    end
+    Note(format("sender: %s via %s; Ambiguate %s; La Taverne key %s", q(sender), tostring(distribution),
+        q(Ambiguate and Ambiguate(sender, "none")), q(ns.NameKey(sender))))
+end
+
+local function SenderRun()
+    if not IsInGuild() then
+        Note("sender: not in a guild")
+        return
+    end
+    if not senderFrame then
+        C_ChatInfo.RegisterAddonMessagePrefix(SENDER_PREFIX)
+        senderFrame = CreateFrame("Frame")
+        senderFrame:RegisterEvent("CHAT_MSG_ADDON")
+        senderFrame:SetScript("OnEvent", Safe(SenderHeard))
+    end
+    senderUntil = GetTime() + 30
+    Note(format("sender: me %s, my key %s, realm %s", q(ns.FullName("player")), q(ns.NameKey(ns.FullName("player"))),
+        q(GetNormalizedRealmName and GetNormalizedRealmName())))
+    local r = C_ChatInfo.SendAddonMessage(SENDER_PREFIX, "v", "GUILD")
+    Note("sender: sent to my guild", ResultName(r))
+end
+
 local PROBES = {
     { name = "lines", start = LinesStart, stop = LinesStop,
       about = "guild lines: line and message numbers, fingerprints (two PCs in one guild)" },
@@ -797,11 +1072,25 @@ local PROBES = {
       about = "events and messages at logout and idle logout (saved; a PC running beacon sees the message)" },
     { name = "rest", start = RestStart, stop = RestStop,
       about = "where the game counts me as resting (walk through the cities)" },
+    -- Vouching (.plans/vouch-trust.md)
+    { name = "who", run = WhoRun,
+      about = "<Firstname Lastname>: /who from a typed command, a timer and a click (vouching)" },
+    { name = "plates", start = PlatesStart, stop = PlatesStop,
+      about = "the guild of players near me: nameplates, mouseover, target (vouching)" },
+    { name = "guildlines", start = GuildLinesStart, stop = GuildLinesStop,
+      about = "the game's lines when someone joins or leaves my guild (vouching)" },
+    { name = "roster", run = RosterRun,
+      about = "whether the guild roster gives offline members too (runs once; vouching)" },
+    { name = "sender", run = SenderRun,
+      about = "the sender's name on a guild addon message (runs once, 30 s; vouching)" },
 }
 
--- /taverne probe [name | show | stop | clear]
+-- /taverne probe [name [what] | show | stop | clear]
 ns.commands.probe = function(arg)
-    arg = strtrim(arg or ""):lower()
+    local raw = strtrim(arg or "")
+    arg = raw:lower()
+    local first, rest = raw:match("^(%S*)%s*(.-)$")
+    first = (first or ""):lower()
     if arg == "show" then
         ns.ShowCopyWindow()
         return
@@ -825,10 +1114,10 @@ ns.commands.probe = function(arg)
     end
     local probe
     for _, p in ipairs(PROBES) do
-        if p.name == arg then probe = p end
+        if p.name == first then probe = p end
     end
     if not probe then
-        ns.Print("relay probes: /taverne probe <name> (again to stop), show, stop, clear")
+        ns.Print("probes: /taverne probe <name> (again to stop), show, stop, clear")
         for _, p in ipairs(PROBES) do
             ns.Print(format("  %s%s - %s", p.name, probes[p.name] and " (ON)" or "", p.about))
         end
@@ -836,7 +1125,7 @@ ns.commands.probe = function(arg)
     end
     if probe.run then
         Note("La Taverne", ns.version, probe.name, date("%Y-%m-%d"))
-        probe.run()
+        probe.run(rest)
         ns.ShowCopyWindow()
         return
     end

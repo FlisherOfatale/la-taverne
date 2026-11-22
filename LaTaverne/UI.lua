@@ -1096,14 +1096,16 @@ local function FillListingRow(row, l)
     row.titleHit.dungeon = l.dungeon
     row.titleHit.listing = l
     row.titleHit:Fit()
-    -- An allied leader nobody from their guild could confirm yet: said in the tooltip only.
-    local unverified = l.tag and ns.Vouch and ns.Vouch:GetState(l.leader) == "unverified"
+    -- An allied leader nobody from their guild could confirm yet, or disputed: said in the
+    -- tooltip only (read now: it changes while the listing stays).
+    local vouch = l.tag and ns.Vouch and ns.Vouch:GetState(l.leader)
     local note = (l.note and l.note ~= "") and ("  |cffb0b0b0\194\171 " .. l.note:gsub("\n", " ") .. " \194\187|r") or ""
     local icons = FlagIcons(l)
     row.leader:SetText(NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN
         .. (icons ~= "" and ("  " .. icons) or "") .. note)
     local tip = { NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN }
-    if unverified then tip[#tip + 1] = format(L["Not checked yet: nobody from [%s] was online to confirm this player is a member."], l.tag) end
+    if vouch == "unverified" then tip[#tip + 1] = format(L["Not checked yet: nobody from [%s] was online to confirm this player is a member."], l.tag) end
+    if vouch == "disputed" then tip[#tip + 1] = ns.Vouch:Describe(l.leader) end
     if l.note and l.note ~= "" then tip[#tip + 1] = "|cffffd100" .. L["Note"] .. ":|r " .. l.note end
     for _, line in ipairs(FlagLines(l)) do tip[#tip + 1] = line end
     row.leaderHit.tooltip = tip
@@ -1242,9 +1244,9 @@ local function InitPendingRow(row, p)
     end
 
     -- Allied players show their guild's tag, and "not checked yet" when nobody from that guild
-    -- could confirm them.
+    -- could confirm them ("disputed" when someone says they aren't in it). Read now: it changes.
     row.name:SetText(NameText(p.name, p.class, p.tag)
-        .. (p.unverified and (" |cffff9900(" .. L["not checked yet"] .. ")|r") or ""))
+        .. (p.tag and ns.Vouch and ns.Vouch:Mark(p.name) or ""))
     -- Under the name: level, and "new player" once, as words (a leader wants to know).
     local detail = {}
     if p.level then detail[#detail + 1] = format(L["Level %d"], p.level) end
@@ -3101,9 +3103,12 @@ function InitPlayerRow(row, e)
     if ver and ns.version ~= "?" and ns.CompareVersions(ver, ns.version) < 0 then
         verText = "  |cffff9900" .. L["(old version)"] .. "|r"
     end
-    row.name:SetText(NameText(e.name, e.class, tag) .. level .. afk .. verText)
+    -- An allied player: "not checked yet" or "disputed" after the name, the reason in the tooltip.
+    local vouchMark = tag and ns.Vouch and ns.Vouch:Mark(e.name) or ""
+    row.name:SetText(NameText(e.name, e.class, tag) .. vouchMark .. level .. afk .. verText)
     row.nameHit.tooltip = { NameText(e.name, e.class, tag),
-        ver and ("La Taverne v" .. ver) or ("|cff808080" .. L["Doesn't have the La Taverne addon"] .. "|r") }
+        ver and ("La Taverne v" .. ver) or ("|cff808080" .. L["Doesn't have the La Taverne addon"] .. "|r"),
+        vouchMark ~= "" and ns.Vouch:Describe(e.name) or nil }
     if e.tier == "available" then
 
         row.detail:SetText(AvailDetail(a.roles, a.dungeons, a.note, L["any dungeon at their level"]))
@@ -3853,6 +3858,7 @@ local NO_ICON = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14|t"
 local VOUCH_SHORT = {
     confirmed = { READY_ICON, "20ff20", "confirmed" },
     unverified = { WAIT_ICON, "ff9900", "not checked: nobody from their guild online" },
+    disputed = { WAIT_ICON, "ff9900", "disputed" },
     denied = { NO_ICON, "ff4040", "not in this guild" },
 }
 
@@ -3934,12 +3940,17 @@ local function InitAllianceRow(row, item)
             if p.remembered then
                 row.state:SetText("|cff808080" .. L["Not heard since you logged in"] .. "|r")
             else
-                row.state:SetText(short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
+                -- Denied: how many of their messages were hidden this session.
+                row.state:SetText((short and (short[1] .. " |cff" .. short[2] .. L[short[3]] .. "|r")
                     or ("|cff808080" .. (p.state and L["Checking..."] or L["online, not checked yet"]) .. "|r"))
+                    .. ((p.hidden or 0) > 0 and ("  |cffff4040" .. format(L["%d hidden"], p.hidden) .. "|r") or ""))
             end
             row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",
-                p.remembered and L["Seen before, not heard from since you logged in."] or ns.Vouch.StateText(p),
-                p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
+                p.remembered and L["Seen before, not heard from since you logged in."] or ns.Vouch.StateText(p) }
+            if (p.hidden or 0) > 0 then
+                row.hit.tooltip[#row.hit.tooltip + 1] = format(L["%d messages hidden this session."], p.hidden)
+            end
+            if p.seen then row.hit.tooltip[#row.hit.tooltip + 1] = L["Last heard from:"] .. " " .. Ago(p.seen) end
         end
         row.seen:SetText(p.seen and Ago(p.seen) or "")
     else
@@ -3957,8 +3968,10 @@ local function BuildNetworkPanel()
     local p = NewPanel()
     NewPageTitle(p, L["Guild Alliance"], { L["Guild Alliance"],
         L["Guilds linked together: their groups, available players and guild chat are shared, as if it were one guild."],
-        L["Members of their guild confirm who they are. Players their guild doesn't know are ignored."],
-        L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."] })
+        L["Their guild is checked: what the game shows (group, target, nameplate), your other characters' guild rosters, or their guild's members. Players shown in another guild are ignored."],
+        L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."],
+        L["Disputed: someone says they aren't in that guild, but nobody vouches for that someone. They still get through."],
+        L["Auto-invite waits for your click for players not checked yet or disputed."] })
     -- Top right: Setup (players who can edit the Guild Info), then the channel left of it.
     local setupPage = NewButton(p, L["Setup"], 130, 24)
     setupPage:SetPoint("TOPRIGHT", -2, -4)
@@ -4181,12 +4194,9 @@ local function BuildNetworkPanel()
                     heard = entry and entry.heard, tooltip = RelayTooltip(g, job, entry, #online > 0) }
             end
             if g.mine then
-                local others, away, complete = ns.Relay:CountOthers("chat")
-                rows[#rows + 1] = { kind = "relay", label = L["You"], state = ns.Relay:MyStateText(),
-                    tooltip = { L["Help relay for my guild"], L["On or off in Options, Shared guild chat."],
-                        away > 0 and format(L["Others in your guild who can relay right now: %d (%d away)."], others, away)
-                            or format(L["Others in your guild who can relay right now: %d."], others),
-                        not complete and L["You logged in a few minutes ago: players say whether they can relay every 4 to 5 minutes, so some may not be counted yet."] or nil } }
+                local tip = { L["Help relay for my guild"], L["On or off in Options, Shared guild chat."] }
+                for _, line in ipairs((ns.Relay:OthersLines())) do tip[#tip + 1] = line end
+                rows[#rows + 1] = { kind = "relay", label = L["You"], state = ns.Relay:MyStateText(), tooltip = tip }
             end
             if g.open then
                 if #seen == 0 then
@@ -4557,6 +4567,16 @@ local function BuildOptionsPanel()
         ns.db.allyChat.showTag = self:GetChecked() and true or false
     end)
     allyTag:SetPoint("TOPLEFT", 12, rowY + 2)
+    -- Relayed lines' authors (no La Taverne) never see allied answers: a mark says so.
+    -- (kept on allyTag rather than a new local: this function has many already)
+    rowY = Row()
+    allyTag.markCheck = NewCheckbox(c, L["Mark players who can't see your answers"], function(self)
+        ns.db.allyChat.markRelayed = self:GetChecked() and true or false
+    end)
+    allyTag.markCheck:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(allyTag.markCheck, { L["Mark players who can't see your answers"],
+        L["Allied players without La Taverne: their guild's relay passes their lines on, but your answers never reach them."],
+        L["A grey lynx in front of their lines (a grey dot when the lynx is turned off)."] })
     -- The guild relay (Relay.lua): may I pass on my guild's chat for the members without La
     -- Taverne? Turning it off asks first (how many others can still relay). My state on the right.
     -- (Its widgets in one table: fewer locals here.)
@@ -4588,6 +4608,7 @@ local function BuildOptionsPanel()
         ns.db.allyChat.enabled = self:GetChecked() and true or false
         allyTag:SetEnabled(ns.db.allyChat.enabled)
         allyLynx:SetEnabled(ns.db.allyChat.enabled)
+        allyTag.markCheck:SetEnabled(ns.db.allyChat.enabled)
     end)
     allyChat:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(allyChat, { L["Share guild chat with the allied guilds"],
@@ -4665,6 +4686,8 @@ local function BuildOptionsPanel()
         allyChat:SetEnabled(active)
         allyTag:SetEnabled(active and ns.AllyChat.Enabled())
         allyLynx:SetEnabled(active and ns.AllyChat.Enabled())
+        allyTag.markCheck:SetChecked(ns.db.allyChat.markRelayed ~= false)
+        allyTag.markCheck:SetEnabled(active and ns.AllyChat.Enabled())
         relayUI.help:SetChecked(ns.db.relay.help ~= false)
         relayUI.help:SetEnabled(active and ns.AllyChat.Enabled())
         relayUI.state:SetText(active and ns.Relay:MyStateText() or "")
