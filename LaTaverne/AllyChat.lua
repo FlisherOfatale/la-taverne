@@ -24,6 +24,21 @@ local function IsSecret(value)
     return issecretvalue ~= nil and issecretvalue(value)
 end
 
+-- One guild line can reach us in slightly different forms: as its author typed it, as the game
+-- delivers it, as another player passes it on. This key leaves out what may differ (colors,
+-- icons, a link's name and details: kind and number only, spaces) and keeps the first 200 bytes
+-- (a long line may be cut on the way), to tell copies of one line from new lines. Only for
+-- comparing, never shown. nil for a secret text.
+local KEY_MAX = 200
+function AllyChat.TextKey(text)
+    if type(text) ~= "string" or IsSecret(text) then return nil end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|cn[^:|]*:", ""):gsub("|r", "")
+    text = text:gsub("|H(%a+):([^:|]*)[^|]*|h.-|h", "<%1:%2>")
+    text = text:gsub("|T.-|t", ""):gsub("|A.-|a", "")
+    text = strtrim((text:gsub("%s+", " ")))
+    return text:sub(1, KEY_MAX)
+end
+
 -- GuildUnion shares guild chat too: while both are loaded, one of them should stop, or allied
 -- lines show twice. That's the only time La Taverne's switch shows (Options).
 function AllyChat:CanTurnOff()
@@ -106,7 +121,7 @@ local function FallbackLine(author, class, text, tagText)
     return head .. text
 end
 
-AllyChat.stats = { handler = 0, fallback = 0, tagged = 0 }
+AllyChat.stats = { handler = 0, fallback = 0, tagged = 0, relayed = 0, copies = 0, refused = 0 }
 
 -- Chattynator doesn't read the chat windows: its own hidden frame listens to the chat events
 -- and formats each line with the player's settings (short channel names, level...), and it
@@ -354,16 +369,114 @@ local function Receive(author, payload, tag)
     end
 end
 
+-- Copies: one allied line can come twice (its author's own copy and a relay's, two relays at
+-- once, a copy the game held during a fight): same guild, author and text (TextKey), typed
+-- within 10 s of each other. Kept 15 min. A "+1" typed again later still shows.
+local COPY_WINDOW, COPY_KEEP = 10, 15 * 60
+local copies = {} -- [guild \0 author \0 key] = { server times }
+
+local function IsCopy(guild, author, text, t)
+    local key = AllyChat.TextKey(text)
+    if not key or type(guild) ~= "string" or type(author) ~= "string" then return false end
+    local id = strtrim(guild):lower() .. "\0" .. ns.NameKey(author) .. "\0" .. key
+    local now = GetServerTime()
+    t = tonumber(t) or now
+    local list = copies[id]
+    if list then
+        for _, seen in ipairs(list) do
+            if math.abs(seen - t) <= COPY_WINDOW then return true end
+        end
+    else
+        list = {}
+        copies[id] = list
+    end
+    list[#list + 1] = t
+    if math.random(1, 50) == 1 then
+        for other, times in pairs(copies) do
+            if now - times[#times] > COPY_KEEP then copies[other] = nil end
+        end
+    end
+    return false
+end
+
 ns.Comm:OnAlly("CHAT", function(sender, payload, isSelf)
     if isSelf or not Enabled() then return end
+    if IsCopy(payload.g, sender, payload.m, payload.t) then
+        AllyChat.stats.copies = AllyChat.stats.copies + 1
+        return
+    end
     local tag = ns.Alliance:GetTag(payload.g) or "?"
     Receive(sender, payload, tag)
-
 end)
 
--- Sandbox only: a fake guild mate typed in the fake guild chat.
+-- Relayed lines (Relay.lua): an allied guild's member without La Taverne, passed on by their
+-- guild's relay (the sender, checked by vouching like any allied player). Shown like any other
+-- allied line. The relay speaks for someone else, so what it says is checked more.
+-- Relayed lines a minute from one guild (copies not counted): more is a broken relay. A relay
+-- sends 8 at once then 1 a second (Relay.lua), 68 in its first minute: room above that.
+local FLOOD_MAX = 90
+local TIME_DRIFT = 300    -- a time further than this from mine: taken as now
+local flood = {}          -- [guild lowercase] = { start, count }
+
+local function Refuse(sender, why)
+    AllyChat.stats.refused = AllyChat.stats.refused + 1
+    ns.Comm:LogNote(format("relayed line from %s refused: %s", tostring(sender), why), "relayed line refused")
+end
+
+-- A player's name: no codes, no link characters, not too long.
+local function ValidAuthor(name)
+    return type(name) == "string" and not IsSecret(name) and #name <= 48 and name:find("%S") ~= nil
+        and not name:find("[%c|%[%]:]")
+end
+
+ns.Comm:OnAlly("RCHAT", function(sender, payload, isSelf)
+    if isSelf or not Enabled() or not ns.Relay then return end
+    local rp = tonumber(payload.rp) or 0
+    if rp > ns.Relay.RP then
+        ns.Relay:NoteProtocol(rp, false)
+        return
+    end
+    if rp < ns.Relay.RP - 1 then return end
+    local author = payload.a
+    if not ValidAuthor(author) then return Refuse(sender, "bad author name") end
+    -- Nobody of my guild, nor me: my guild's lines never come from an allied guild.
+    if ns.IsMe(author) or ns.Guild:IsMember(author) then return Refuse(sender, "author in my guild") end
+    local g = strtrim(payload.g):lower()
+    local now = GetServerTime()
+    local t = tonumber(payload.t)
+    if not t or math.abs(now - t) > TIME_DRIFT then t = now end
+    -- A copy (two relays for a moment, a gap fill, the author's own) is dropped before the flood
+    -- count: only lines that would show count.
+    if IsCopy(payload.g, author, payload.m, t) then
+        AllyChat.stats.copies = AllyChat.stats.copies + 1
+        return
+    end
+    local f = flood[g]
+    if not f or now - f.start >= 60 then
+        f = { start = now, count = 0 }
+        flood[g] = f
+    end
+    f.count = f.count + 1
+    if f.count > FLOOD_MAX then
+        if f.count == FLOOD_MAX + 1 then Refuse(sender, "more than " .. FLOOD_MAX .. " lines in a minute") end
+        return
+    end
+    local guid = type(payload.id) == "string" and payload.id:match("^Player%-[%w%-]+$") or nil
+    local class = type(payload.c) == "string" and payload.c:match("^%u+$") or nil
+    AllyChat.stats.relayed = AllyChat.stats.relayed + 1
+    Receive(author, { m = payload.m, t = t, c = class, id = guid, g = payload.g }, ns.Alliance:GetTag(payload.g) or "?")
+end)
+
+-- Sandbox only: a fake guild mate typed in the fake guild chat. as: a test guild member without
+-- La Taverne said it (/taverne dev say, typed by the sender): shown under that name, without
+-- the sender's own class and GUID.
 ns.Comm:On("GCHAT", function(sender, payload, isSelf)
     if isSelf or not ns.Guild:IsSandbox() then return end
+    if payload.as ~= nil then
+        if not ValidAuthor(payload.as) then return end
+        Receive(payload.as, { m = payload.m, t = payload.t, c = payload.c, g = payload.g }, nil)
+        return
+    end
     Receive(sender, payload, nil)
 end)
 
@@ -423,6 +536,25 @@ function AllyChat:SendTestGuildChat(text, guildOnly)
 
         ns.Comm:SendAlly("CHAT", MyPayload(text), "ALERT")
     end
+    return true
+end
+
+-- Test mode: a member of the test guild who doesn't run La Taverne says a line, to try the guild
+-- relay (Relay.lua) with two PCs in two test guilds. The name needn't exist. It goes to the test
+-- guild like my own lines (GCHAT, as = who said it), never straight to the allied guilds: that's
+-- the relay's job, mine included (I see the line too, like everyone in the guild).
+local FAKE_CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+
+function AllyChat:SendFakeMemberLine(name, text)
+    if not ns.Guild:IsSandbox() then return false end
+    name, text = strtrim(name or ""), strtrim(text or "")
+    if text == "" or not ValidAuthor(name) or ns.IsMe(name) then return false end
+    local h = 0
+    for i = 1, #name do h = (h * 31 + name:byte(i)) % 1000003 end
+    local class = FAKE_CLASSES[h % #FAKE_CLASSES + 1] -- always the same for one name
+    ShowLine(name, class, nil, text, nil)
+    ns.Comm:Send("GCHAT", { m = text, c = class, t = GetServerTime(), as = name }, "ALERT")
+    if ns.Relay then ns.Relay:GuildLine(name, text, class, nil) end
     return true
 end
 

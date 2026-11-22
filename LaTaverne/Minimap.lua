@@ -6,8 +6,9 @@
 -- there), Options.
 -- The tooltip says where I'm at: my group, my availability, auto-invite.
 -- On the button: a golden pulse with a count when something waits for my answer and I haven't
--- seen it yet (join requests to my group, invitations), and a small steady green dot while
--- something of mine is on (my group looking for players, available, auto-invite).
+-- seen it yet (join requests to my group, invitations), a small steady green dot while
+-- something of mine is on (my group looking for players, available, auto-invite), and a small
+-- speech bubble while I relay my guild's chat for the allied guilds (Relay.lua).
 local ADDON, ns = ...
 local Minimap = ns.NewModule("Minimap")
 local L = ns.L
@@ -122,6 +123,13 @@ local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
         -- The allied guilds' channel, when the guild is in an alliance (same as the Alliance page).
         if ns.Alliance:IsActive() then
             tooltip:AddLine(L["Alliance channel:"] .. " " .. ns.Comm:AllyStatusText(), 1, 1, 1)
+            -- Who passes on each guild's chat for its members without La Taverne (Relay.lua),
+            -- and whether I do.
+            for _, entry in ipairs(ns.Alliance:GetGuilds()) do
+                tooltip:AddLine("|cff8fb8e8[" .. (entry.tag or "?") .. "]|r " .. L["Relay:"] .. " "
+                    .. ns.Relay:StatusText(entry.name, "chat"), 1, 1, 1)
+            end
+            if ns.Relay:IsHolding("chat") then tooltip:AddLine(ns.Relay:MyStateText()) end
         end
         if ns.Guild:IsSandbox() then
             tooltip:AddLine(format(L["Test guild: %s"], ns.Guild:GetName() or "?"), 1, 0.6, 0)
@@ -165,6 +173,13 @@ local function Decorate(button)
     dot:SetPoint("TOPRIGHT", 1, 1)
     dot:Hide()
 
+    -- While I relay my guild's chat (Relay.lua): a small speech bubble, bottom left.
+    local badge = button:CreateTexture(nil, "OVERLAY")
+    badge:SetTexture("Interface\\GossipFrame\\GossipGossipIcon")
+    badge:SetSize(12, 12)
+    badge:SetPoint("BOTTOMLEFT", 1, 1)
+    badge:Hide()
+
     local function Update()
         -- The glow and count can be turned off in Options.
         local unseen = ns.db.minimapGlow ~= false and ns.Groups:CountUnseen() or 0
@@ -178,14 +193,16 @@ local function Decorate(button)
             count:SetText("")
         end
         dot:SetShown(SomethingOn() and true or false)
+        badge:SetShown(ns.Relay:IsHolding("chat") and true or false)
     end
     -- Updated when something changes (my group, requests, invitations, availability,
-    -- auto-invite, or the page that shows them opening), plus a slow check in case something
-    -- changes without saying so (a group's state with time).
+    -- auto-invite, relaying, or the page that shows them opening), plus a slow check in case
+    -- something changes without saying so (a group's state with time).
     Minimap.Update = Update
     ns.Groups:OnChange(Update)
     ns.Players:OnChange(Update)
     ns.Invites:OnChange(Update)
+    ns.Relay:OnChange(Update)
     C_Timer.NewTicker(10, Update)
     Update()
 end

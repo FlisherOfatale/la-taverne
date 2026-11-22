@@ -31,7 +31,8 @@ Vouch.EXEMPT = { VQ = true, VA = true }
 -- from each online ally). They're checked once they post or talk. Same for "who's inviting?".
 -- Map positions (every few seconds from each ally) too, and without refreshing the window for
 -- each one ("quiet": only when the player is new).
-Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet" }
+-- The relay's coordination (RLY: claims, beacons, Relay.lua) only says who relays: quiet too.
+Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet" }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer }
 -- state: "checking", "confirmed", "unverified", "denied"; source: "answer", "game", "timeout"
@@ -420,9 +421,47 @@ end)
 -- Alliance page shows who's online within seconds, not only players who post or talk. A
 -- newcomer missed every message sent before it joined, so a hello is always answered. Then a
 -- "still here" every few minutes keeps idle players online (online = heard in the last 10 min).
+-- My guildmates hear my hellos too: that's how they know I run La Taverne (Players.lua). A hello
+-- also says whether I'm away (afk), and what Relay.lua adds about relaying. Old versions only
+-- read r.
 local helloTimer
+local lastAfk          -- what my last hello said about being away
+local lastChange = -60 -- GetTime() of my last hello sent because something changed
+local changeTimer
+local CHANGE_EVERY = 60 -- a change (away) is said at most once a minute
+
+local function HelloPayload(answer)
+    local payload = { r = answer or nil, afk = (UnitIsAFK and UnitIsAFK("player")) and 1 or nil }
+    if ns.Relay and ns.Relay.HelloFields then ns.Relay:HelloFields(payload) end
+    return payload
+end
+
 local function SayHello(answer)
-    ns.Comm:SendAlly("HI", { r = answer or nil })
+    local payload = HelloPayload(answer)
+    lastAfk = payload.afk
+    ns.Comm:SendAlly("HI", payload)
+end
+
+-- Something my hello says changed: say it again, as an answer (nobody answers it). now: right
+-- away (the relay switch); otherwise at most once a minute, and only if being away changed (it
+-- comes and goes).
+function Vouch:HelloChanged(now)
+    if not (ns.Alliance:IsActive() and ns.Comm:IsAllyReady()) then return end
+    if now then
+        if changeTimer then changeTimer:Cancel() changeTimer = nil end
+        lastChange = GetTime()
+        SayHello(true)
+        return
+    end
+    if changeTimer then return end
+    local wait = math.max(0, CHANGE_EVERY - (GetTime() - lastChange))
+    changeTimer = C_Timer.NewTimer(wait, function()
+        changeTimer = nil
+        if not (ns.Alliance:IsActive() and ns.Comm:IsAllyReady()) then return end
+        if HelloPayload(true).afk == lastAfk then return end
+        lastChange = GetTime()
+        SayHello(true)
+    end)
 end
 
 ns.Comm:OnAlly("HI", function(sender, payload, isSelf)
@@ -441,6 +480,12 @@ function Vouch:OnLogin()
     -- Still here (an answer: nobody answers it), a little spread so clients don't sync up.
     C_Timer.NewTicker(BEAT + math.random(0, 30), function()
         if ns.Alliance:IsActive() and ns.Comm:IsAllyReady() then SayHello(true) end
+    end)
+    -- Away or back: my guildmates' counts of who can relay say how many are away.
+    ns.On("PLAYER_FLAGS_CHANGED", function(unit)
+        if unit ~= "player" then return end
+        local afk = (UnitIsAFK and UnitIsAFK("player")) and 1 or nil
+        if afk ~= lastAfk then Vouch:HelloChanged() end
     end)
     ns.PruneSeen("allySeen")
     ns.On("GROUP_ROSTER_UPDATE", function()

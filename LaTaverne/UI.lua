@@ -3344,6 +3344,7 @@ local function BuildOfficerPanel()
     end)
     local TAG_X = 350 -- x of the "Tag" column in the guild rows
     local draft
+    local relayDraft -- the relay rule being edited (LT:r line): nil, "off" or { [job] = true }
     local dirty = false
     local allyDirty = false -- the Guild Alliance part changed (not only the auto-invite rule)
     local imported = false -- the list shows an imported setup, not saved yet
@@ -3365,14 +3366,15 @@ local function BuildOfficerPanel()
     end
 
     NewPageTitle(outer, L["Setup"], { L["Setup"],
-        L["What La Taverne writes in the Guild Info: the Guild Alliance, and who can use auto-invite."],
+        L["What La Taverne writes in the Guild Info: who can use auto-invite, the Guild Alliance, and the guild relay."],
         L["Only players who can edit the Guild Info see this tab."],
         L["Set up the guilds once, then send the setup to an officer of each allied guild (Export, then Import on their side)."] })
 
 
 
-    -- Three sections: Auto-invite (my guild's own, alliance or not), Guild Alliance (the same
-    -- lines in every allied guild), and saving both to the Guild Info.
+    -- Four sections: Auto-invite (my guild's own, alliance or not), Guild Alliance (the same
+    -- lines in every allied guild), Guild relay (my guild's own), and saving them to the Guild
+    -- Info.
 
     -- Auto-invite: who can use it -------------------------------------------------------------
     local ruleHeader = NewSectionHeader(p, L["Auto-invite"])
@@ -3552,15 +3554,37 @@ local function BuildOfficerPanel()
     local keyHint = NewInfoIcon(p, {})
     keyHint:SetPoint("LEFT", step2, "RIGHT", 6, 0)
 
-    -- Save both to the Guild Info, with a preview of La Taverne's lines ---------------------
+    -- Guild relay (Relay.lua): what one La Taverne player of the guild passes on to the allied
+    -- guilds for the members without it. My guild's own line (LT:r), like auto-invite's: Export
+    -- doesn't send it. A box per job (guild chat for now); all ticked: no line ----------------
+    local relayHeader = NewSectionHeader(p, L["Guild relay"])
+    relayHeader:SetPoint("TOPLEFT", below, "TOPLEFT", 8, -116)
+    NewInfoIcon(p, { L["Guild relay"],
+        L["Members who don't run La Taverne can't share their guild chat with the allied guilds themselves. One La Taverne player of your guild passes it on for them (the relay), picked on its own among those online."],
+        L["Saved in the Guild Info, for your guild only: Export doesn't send it."],
+        L["Each player can also stop relaying, in Options."] }):SetPoint("LEFT", relayHeader, "RIGHT", 6, 0)
+    NewLabel(p, L["For members without La Taverne"]):SetPoint("TOPLEFT", below, "TOPLEFT", 16, -150)
+    -- (Checked in RefreshDraft from relayDraft: the rule being edited.)
+    local relayChecks = {}
+    for i, job in ipairs(ns.Relay:GetJobs()) do
+        local cb = NewCheckbox(p, ns.Relay.JobText(job), function(self)
+            relayDraft = ns.Alliance.RelayRuleWith(relayDraft, job, self:GetChecked(), ns.Relay:GetJobs())
+            Changed(true)
+        end)
+        cb:SetPoint("TOPLEFT", below, "TOPLEFT", 276 + (i - 1) * 180, -144)
+        cb.job = job
+        relayChecks[i] = cb
+    end
+
+    -- Save them to the Guild Info, with a preview of La Taverne's lines ---------------------
     local saveHeader = NewSectionHeader(p, L["Save to your Guild Info"])
-    saveHeader:SetPoint("TOPLEFT", below, "TOPLEFT", 8, -116)
+    saveHeader:SetPoint("TOPLEFT", below, "TOPLEFT", 8, -186)
     local previewLabel = NewLabel(p, "", "GameFontDisableSmall")
-    previewLabel:SetPoint("TOPLEFT", below, "TOPLEFT", 26, -144)
+    previewLabel:SetPoint("TOPLEFT", below, "TOPLEFT", 26, -214)
     previewLabel:SetPoint("RIGHT", -8, 0)
     previewLabel:SetJustifyH("LEFT")
     local preview = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    preview:SetPoint("TOPLEFT", below, "TOPLEFT", 24, -160)
+    preview:SetPoint("TOPLEFT", below, "TOPLEFT", 24, -230)
     preview:SetPoint("RIGHT", -8, 0)
     preview:SetHeight(76)
     BoxBackdrop(preview, { 0, 0, 0, 0.35 }, { 0.4, 0.4, 0.4, 1 })
@@ -3601,7 +3625,7 @@ local function BuildOfficerPanel()
     saveButton:SetScript("OnClick", function()
         local problem = Problem()
         if problem then Say(problem, true) return end
-        local ok, err, paste = ns.Alliance:Save(draft.guilds, draft.key, rule:GetRule())
+        local ok, err, paste = ns.Alliance:Save(draft.guilds, draft.key, rule:GetRule(), relayDraft)
         if not ok then
             Say(err, true)
         elseif paste then
@@ -3609,7 +3633,7 @@ local function BuildOfficerPanel()
             -- The page stays unsaved until the Guild Info is read back with the new lines.
             -- Test mode: the same window, pasted in the test guild window's Guild Info instead.
             imported = false
-            pending = LinesSig(ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule()))
+            pending = LinesSig(ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule(), relayDraft))
             Say(nil)
             ns.TextDialog({
                 kind = "guildinfo", -- closed on its own once the Guild Info has the lines
@@ -3631,6 +3655,7 @@ local function BuildOfficerPanel()
     cancelButton:SetScript("OnClick", function()
         draft = ns.Alliance:GetDraft()
         rule:Reset()
+        relayDraft = ns.Alliance:GetRelayRule()
         dirty, allyDirty, imported, pending = false, false, false, nil
         Say(nil)
         p:Refresh()
@@ -3733,12 +3758,16 @@ local function BuildOfficerPanel()
             keyHint.lines = { L["Shared key"], L["Every guild of the Guild Alliance uses the same key. La Taverne makes one for you."] }
         end
 
-        -- Every line La Taverne writes, the auto-invite one included; the box fits them.
-        local lines = ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule())
-        -- Each line in its section's color: auto-invite gold, alliance blue (like the tags).
+        for _, cb in ipairs(relayChecks) do cb:SetChecked(ns.Alliance.RelayRuleAllows(relayDraft, cb.job)) end
+
+        -- Every line La Taverne writes, the auto-invite and relay ones included; the box fits them.
+        local lines = ns.Alliance.InfoLines(draft.guilds, draft.key, rule:GetRule(), relayDraft)
+        -- Each line in its section's color: my guild's own (auto-invite, relay) gold, alliance
+        -- blue (like the tags).
         local shown = {}
         for i, line in ipairs(lines) do
-            shown[i] = (line:match("^LT:ai:") and "|cffffd100" or "|cff8fb8e8") .. line .. "|r"
+            local own = line:match("^LT:ai:") or line:match("^LT:r:")
+            shown[i] = (own and "|cffffd100" or "|cff8fb8e8") .. line .. "|r"
         end
         previewText:SetText(table.concat(shown, "\n"))
         preview:SetHeight(math.max(36, #lines * 14 + 16))
@@ -3760,14 +3789,15 @@ local function BuildOfficerPanel()
         exportButton:SetEnabled(not allyDirty and not imported and ns.Alliance:IsActive()
             and ns.Alliance:GetKey() == draft.key)
         -- The whole height, for the scroll: the steps down to the two lines under Save.
-        self:SetHeight(34 + rule:GetHeight() + 30 + 84 + list:GetHeight() + 160 + preview:GetHeight() + 10 + 24 + 8 + 44)
+        self:SetHeight(34 + rule:GetHeight() + 30 + 84 + list:GetHeight() + 230 + preview:GetHeight() + 10 + 24 + 8 + 44)
     end
 
     function p:Refresh()
         -- The pasted lines are in the Guild Info: saved.
         if pending then
             local now = ns.Alliance:GetDraft()
-            if LinesSig(ns.Alliance.InfoLines(now.guilds, ns.Alliance:GetKey(), ns.Alliance:GetAutoInvite())) == pending then
+            if LinesSig(ns.Alliance.InfoLines(now.guilds, ns.Alliance:GetKey(), ns.Alliance:GetAutoInvite(),
+                    ns.Alliance:GetRelayRule())) == pending then
                 pending, dirty, allyDirty = nil, false, false
                 Say(L["Saved: the Guild Info has the new lines."])
                 ns.CloseTextDialog("guildinfo")
@@ -3776,6 +3806,7 @@ local function BuildOfficerPanel()
         if not draft or not dirty then
             draft = ns.Alliance:GetDraft()
             rule:Reset()
+            relayDraft = ns.Alliance:GetRelayRule()
         end
 
 
@@ -3822,8 +3853,9 @@ local CARD_HEADER, CARD_ROW, CARD_GAP = 34, 24, 12
 local FOLD_OPEN = "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
 local FOLD_CLOSED = "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t "
 
--- Rows: a guild's card header (folds the card), a player, the "n offline" line that folds the
--- players not heard from lately, a note, or the gap between two cards.
+-- Rows: a guild's card header (folds the card), its relay (Relay.lua: who passes on its members
+-- without La Taverne; mine: me too), a player, the "n offline" line that folds the players not
+-- heard from lately, a note, or the gap between two cards.
 local function InitAllianceRow(row, item)
     if not row.built then
         row.card = CreateFrame("Frame", nil, row, "BackdropTemplate")
@@ -3852,16 +3884,16 @@ local function InitAllianceRow(row, item)
         row.hit:SetScript("OnClick", function(self) if self.onClick then self.onClick() end end)
         row.built = true
     end
-    local header, player = item.kind == "guild", item.kind == "player"
+    local header, player, relay = item.kind == "guild", item.kind == "player", item.kind == "relay"
     local note = item.kind == "note" or item.kind == "fold"
     row.card:SetShown(header)
     row.title:SetShown(header)
     row.side:SetShown(header)
-    row.name:SetShown(player)
-    row.state:SetShown(player)
-    row.seen:SetShown(player)
+    row.name:SetShown(player or relay)
+    row.state:SetShown(player or relay)
+    row.seen:SetShown(player or relay)
     row.note:SetShown(note)
-    row.hit:EnableMouse(header or player or item.kind == "fold")
+    row.hit:EnableMouse(header or player or relay or item.kind == "fold")
     row.hit.tooltip = nil
     row.hit.onClick = item.onClick
     if header then
@@ -3869,6 +3901,11 @@ local function InitAllianceRow(row, item)
             .. "  |cff8fb8e8[" .. (item.tag or "?") .. "]|r"
             .. (item.mine and ("  |cff808080" .. L["your guild"] .. "|r") or ""))
         row.side:SetText(item.side or "")
+        row.hit.tooltip = item.tooltip
+    elseif relay then
+        row.name:SetText("|cffc0c0c0" .. item.label .. "|r")
+        row.state:SetText(item.state or "")
+        row.seen:SetText(item.heard and Ago(item.heard) or "")
         row.hit.tooltip = item.tooltip
     elseif player then
         local p = item.player
@@ -3946,6 +3983,27 @@ local function BuildNetworkPanel()
     local setup = NewButton(p, L["Set up the Guild Alliance"], 220)
     setup:SetPoint("TOP", emptyHint, "BOTTOM", 0, -12)
     setup:SetScript("OnClick", function() UI:ShowPage("officers") end)
+
+    -- A guild's relay row tooltip (Relay.lua). entry: its relay, or nil; playersOnline: someone
+    -- of that guild with La Taverne is online (who could relay).
+    local function RelayTooltip(g, job, entry, playersOnline)
+        local lines = { format(L["Relay: %s"], ns.Relay.JobText(job)),
+            L["One La Taverne player of the guild passes on the guild chat of its members without La Taverne to the allied guilds: the relay. Picked on its own: players in a city first, then elsewhere, then those who just fought; in a raid group or away for long only as a last resort."] }
+        local _, why = ns.Relay:GetStatus(g.name, job)
+        if entry then
+            if entry.since then lines[#lines + 1] = format(L["Relaying since %s."], date("%H:%M", entry.since)) end
+            if entry.sent then lines[#lines + 1] = format(L["Lately: %d lines sent, %d waiting at most."], entry.sent, entry.maxq or 0) end
+        elseif why == "officers" or (g.mine and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job)) then
+            lines[#lines + 1] = L["Turned off by the guild's officers (Guild Info)."]
+        elseif g.mine then
+            lines[#lines + 1] = L["Nobody relays right now: the allied guilds don't see your members without La Taverne."]
+        elseif playersOnline then
+            lines[#lines + 1] = L["Nobody relays right now: you don't see their members without La Taverne."]
+        else
+            lines[#lines + 1] = L["Nobody of this guild with La Taverne is online to relay."]
+        end
+        return lines
+    end
 
     function p:Refresh()
         local active = ns.Alliance:IsActive()
@@ -4034,6 +4092,20 @@ local function BuildNetworkPanel()
             g.tooltip = { g.name .. "  |cff8fb8e8[" .. (g.tag or "?") .. "]|r",
                 g.mine and L["Allied players see you with this tag."] or nil }
             rows[#rows + 1] = g
+            -- Its relay, folded or not (it's about the guild, not its players); mine: me too.
+            for _, job in ipairs(ns.Relay:GetJobs()) do
+                local state, entry = ns.Relay:StatusText(g.name, job, g.mine or #online > 0)
+                rows[#rows + 1] = { kind = "relay", label = format(L["Relay: %s"], ns.Relay.JobText(job)), state = state,
+                    heard = entry and entry.heard, tooltip = RelayTooltip(g, job, entry, #online > 0) }
+            end
+            if g.mine then
+                local others, away, complete = ns.Relay:CountOthers("chat")
+                rows[#rows + 1] = { kind = "relay", label = L["You"], state = ns.Relay:MyStateText(),
+                    tooltip = { L["Help relay for my guild"], L["On or off in Options, Shared guild chat."],
+                        away > 0 and format(L["Others in your guild who can relay right now: %d (%d away)."], others, away)
+                            or format(L["Others in your guild who can relay right now: %d."], others),
+                        not complete and L["You logged in a few minutes ago: players say whether they can relay every 4 to 5 minutes, so some may not be counted yet."] or nil } }
+            end
             if g.open then
                 if #seen == 0 then
                     rows[#rows + 1] = { kind = "note", text = g.mine and L["Nobody else from your guild with La Taverne heard from yet."]
@@ -4405,6 +4477,31 @@ local function BuildOptionsPanel()
         ns.db.allyChat.showTag = self:GetChecked() and true or false
     end)
     allyTag:SetPoint("TOPLEFT", 12, rowY + 2)
+    -- The guild relay (Relay.lua): may I pass on my guild's chat for the members without La
+    -- Taverne? Turning it off asks first (how many others can still relay). My state on the right.
+    -- (Its widgets in one table: fewer locals here.)
+    local relayUI = {}
+    rowY = Row()
+    relayUI.help = NewCheckbox(c, L["Help relay for my guild"], function(self)
+        if self:GetChecked() then
+            ns.Relay:SetHelp(true)
+        elseif not ns.Alliance:IsActive() then
+            ns.Relay:SetHelp(false)
+        else
+            self:SetChecked(true) -- until the popup is answered
+            ns.Relay:AskToStop(function()
+                ns.Relay:SetHelp(false)
+                p:Refresh()
+            end)
+        end
+    end)
+    relayUI.help:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(relayUI.help, { L["Help relay for my guild"],
+        L["Members of your guild who don't run La Taverne can't share their guild chat with the allied guilds. One La Taverne player of the guild passes their lines on for them (the relay), picked on its own among those who help: players in a city first, never in a dungeon or raid."],
+        L["Only La Taverne players of the allied guilds see the relayed lines. Nothing is written in the real guild chat."],
+        L["A few small messages a minute, on their own channel."] })
+    relayUI.state = NewLabel(c, "", "GameFontHighlightSmall")
+    relayUI.state:SetPoint("TOPLEFT", CONTROL_X, rowY - 4)
     -- Only with GuildUnion loaded (see Refresh): its own row, under the tag.
     rowY = Row()
     local allyChat = NewCheckbox(c, L["Share guild chat with the allied guilds"], function(self)
@@ -4488,6 +4585,9 @@ local function BuildOptionsPanel()
         allyChat:SetEnabled(active)
         allyTag:SetEnabled(active and ns.AllyChat.Enabled())
         allyLynx:SetEnabled(active and ns.AllyChat.Enabled())
+        relayUI.help:SetChecked(ns.db.relay.help ~= false)
+        relayUI.help:SetEnabled(active and ns.AllyChat.Enabled())
+        relayUI.state:SetText(active and ns.Relay:MyStateText() or "")
 
         local errors = ns.Errors:Count()
         showErrors:SetEnabled(errors > 0)
@@ -5029,6 +5129,8 @@ function UI:OnInit()
     -- an open window follows both.
     ns.Alliance:OnChange(function() UI:Refresh() end)
     ns.Comm:OnReady(function() UI:Refresh() end)
+    -- Who relays for each guild (Alliance page), whether I do (Options).
+    ns.Relay:OnChange(function() UI:Refresh() end)
 end
 
 

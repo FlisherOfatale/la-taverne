@@ -7,6 +7,8 @@
 --                                 guild picks its key, so testers elsewhere never share a channel)
 --   LT:ai:0,1,3   or   LT:ai:off  who may use auto-invite: these ranks (0 = guild master), or
 --                                 nobody. No line: everyone. Each guild's own, alliance or not.
+--   LT:r:off   or   LT:r:chat     the guild relay (Relay.lua): nothing relayed, or only these
+--                                 jobs. No line: every job. Each guild's own, like LT:ai.
 -- Lines can also be separated by ";" (handy for /taverne dev info, which is a single line).
 --
 -- The key gives the hidden alliance channel (name made from the key, password = key). Only
@@ -21,6 +23,7 @@ local OLD_CHANNEL_GRACE = 600 -- seconds on the previous channel after a key cha
 local config = { guilds = {}, key = nil } -- guilds: [lowercase name] = { name, tag }
 local configSig = ""
 local infoPending = false -- the Guild Info couldn't be read (game restriction): read it again after
+local infoKnown = false   -- read once since login (or the setup saved last time is used)
 
 -- The last setup read from the real Guild Info, saved per character: used when the game blocks
 -- reading it at login or after a /reload (in a dungeon, in combat), until it can be read again.
@@ -69,6 +72,63 @@ function Alliance.AutoInviteLine(rule)
     return "LT:ai:" .. table.concat(list, ",")
 end
 
+-- The guild relay (Relay.lua), each guild's own line, for its own members:
+--   no line          every job relayed (guild chat, and later map positions...)
+--   LT:r:off         nothing relayed
+--   LT:r:chat        only these jobs (comma-separated)
+-- "off" -> "off"; "chat,map" -> { chat = true, map = true }; "on", "all" or no job named: nil
+-- (every job).
+function Alliance.ParseRelay(rule)
+    rule = strtrim(rule or ""):lower()
+    if rule == "off" then return "off" end
+    if rule == "on" or rule == "all" then return nil end
+    local jobs, any = {}, false
+    for job in rule:gmatch("%a+") do
+        jobs[job] = true
+        any = true
+    end
+    return any and jobs or nil
+end
+
+-- Does a relay rule (nil, "off" or { [job] = true }) let this job be relayed?
+function Alliance.RelayRuleAllows(rule, job)
+    if rule == "off" then return false end
+    if type(rule) == "table" then return rule[job] == true end
+    return true
+end
+
+-- A new rule with one job switched on or off (the Setup page; rule itself isn't changed). known:
+-- the jobs this version has. None left: "off". Every known job on: no line, unless the rule
+-- already listed its jobs (it may hold jobs of a newer version, kept as they were).
+function Alliance.RelayRuleWith(rule, job, on, known)
+    local jobs, listed = {}, type(rule) == "table"
+    if listed then
+        for j, v in pairs(rule) do jobs[j] = v and true or nil end
+    elseif rule ~= "off" then
+        for _, j in ipairs(known) do jobs[j] = true end
+    end
+    jobs[job] = on and true or nil
+    if next(jobs) == nil then return "off" end
+    if listed then return jobs end
+    for _, j in ipairs(known) do
+        if not jobs[j] then return jobs end
+    end
+    return nil
+end
+
+-- The LT:r line for a rule (nil: no line, every job).
+function Alliance.RelayLine(rule)
+    if rule == "off" then return "LT:r:off" end
+    if type(rule) ~= "table" then return nil end
+    local list = {}
+    for job, on in pairs(rule) do
+        if on then list[#list + 1] = job end
+    end
+    table.sort(list)
+    if #list == 0 then return "LT:r:off" end
+    return "LT:r:" .. table.concat(list, ",")
+end
+
 function Alliance.Parse(text)
     local result = { guilds = {}, key = nil, testKey = nil, count = 0 }
     if type(text) ~= "string" then return result end
@@ -88,6 +148,8 @@ function Alliance.Parse(text)
             if testKey and #testKey >= 4 then result.testKey = testKey end
             local rule = line:match("^[Ll][Tt]:[Aa][Ii]:(.+)$")
             if rule then result.autoInvite = Alliance.ParseAutoInvite(rule) end
+            local relay = line:match("^[Ll][Tt]:[Rr]:(.+)$")
+            if relay then result.relay = Alliance.ParseRelay(relay) end
         end
     end
     return result
@@ -118,8 +180,9 @@ function Alliance.BuildLines(guilds, key)
 end
 
 -- All of La Taverne's lines for my Guild Info: the alliance's (only with an allied guild: a
--- guild alone needs none, not even a key), then who may use auto-invite (see GetAutoInvite).
-function Alliance.InfoLines(guilds, key, rule)
+-- guild alone needs none, not even a key), then who may use auto-invite (see GetAutoInvite),
+-- then what the guild relay may pass on (relayRule, see GetRelayRule).
+function Alliance.InfoLines(guilds, key, rule, relayRule)
     local others = 0
     for _, entry in ipairs(guilds) do
         if not ns.Guild:IsMyGuild(entry.name) then others = others + 1 end
@@ -127,16 +190,19 @@ function Alliance.InfoLines(guilds, key, rule)
     local lines = others > 0 and Alliance.BuildLines(guilds, key) or {}
     local ai = Alliance.AutoInviteLine(rule)
     if ai then lines[#lines + 1] = ai end
+    local relay = Alliance.RelayLine(relayRule)
+    if relay then lines[#lines + 1] = relay end
     return lines
 end
 
--- The Guild Info text with our lines (LT:g, LT:k, LT:ai) replaced by new ones; everything else
--- is kept. oneLine: the test Guild Info, whose lines may be written on one line with ";"
+-- The Guild Info text with our lines (LT:g, LT:k, LT:ai, LT:r) replaced by new ones; everything
+-- else is kept. oneLine: the test Guild Info, whose lines may be written on one line with ";"
 -- between them (/taverne dev info), like Parse reads it. Not the real one: its own text may
 -- hold a ";".
 local function Ours(line)
     line = strtrim(line)
     return line:match("^[Ll][Tt]:[GgKk]:") ~= nil or line:match("^[Ll][Tt]:[Aa][Ii]:") ~= nil
+        or line:match("^[Ll][Tt]:[Rr]:") ~= nil
 end
 
 function Alliance.ReplaceLines(text, lines, oneLine)
@@ -175,13 +241,13 @@ function Alliance.ValidTag(tag)
     return type(tag) == "string" and #strtrim(tag) >= 1 and #strtrim(tag) <= 6 and not tag:find("[:;\n|%s]")
 end
 
--- Save the setup: the alliance (guilds, key) and who may use auto-invite (rule). The game
--- forbids addons to change the Guild Info (SetGuildInfoText is protected), so this returns the
--- whole new Guild Info text for the officer to paste: ok, error text, text to paste. Test mode
--- does the same with the test Guild Info (pasted in the test guild window), so the officer's
--- steps can be tried.
-function Alliance:Save(guilds, key, rule)
-    local lines = Alliance.InfoLines(guilds, key, rule)
+-- Save the setup: the alliance (guilds, key), who may use auto-invite (rule) and what the guild
+-- relay may pass on (relayRule). The game forbids addons to change the Guild Info
+-- (SetGuildInfoText is protected), so this returns the whole new Guild Info text for the officer
+-- to paste: ok, error text, text to paste. Test mode does the same with the test Guild Info
+-- (pasted in the test guild window), so the officer's steps can be tried.
+function Alliance:Save(guilds, key, rule, relayRule)
+    local lines = Alliance.InfoLines(guilds, key, rule, relayRule)
     if ns.Guild:IsSandbox() then
         local text = Alliance.ReplaceLines(ns.db.dev.infoText or "", lines, true)
         if #text > Alliance.INFO_MAX then
@@ -206,6 +272,22 @@ end
 -- Who may use auto-invite: nil (everyone), "off", or { [rankIndex] = true }.
 function Alliance:GetAutoInvite()
     return config.autoInvite
+end
+
+-- My guild's relay line (LT:r): nil (every job), "off", or { [job] = true }.
+function Alliance:GetRelayRule()
+    return config.relay
+end
+
+-- May this job be relayed for my guild? Never before the Guild Info was read once: the officers
+-- may have turned it off.
+function Alliance:RelayAllows(job)
+    if not infoKnown then return false end
+    return Alliance.RelayRuleAllows(config.relay, job)
+end
+
+function Alliance:IsInfoKnown()
+    return infoKnown
 end
 
 -- Current setup as an editable copy: { guilds = { {name, tag, mine} }, key }.
@@ -281,7 +363,7 @@ function Alliance.WithNewTestKey(text)
     return table.concat(kept, "\n")
 end
 
-local autoInviteSig = "nil"
+local ownLinesSig = "nil|nil"
 
 -- Re-read the Guild Info and follow any change (called at login and on guild updates).
 function Alliance:Refresh()
@@ -293,9 +375,10 @@ function Alliance:Refresh()
         if text then
             infoPending = false
             config = Alliance.Parse(text)
+            infoKnown = true
             if not ns.Guild:IsSandbox() then
                 SavedSetup().alliance = { guild = ns.Guild:GetName(), guilds = config.guilds, key = config.key,
-                    autoInvite = config.autoInvite }
+                    autoInvite = config.autoInvite, relay = config.relay }
             end
         else
             -- Blocked for now: keep the current setup (and channel) instead of turning it off.
@@ -303,14 +386,16 @@ function Alliance:Refresh()
             -- Nothing read yet since login: use the setup saved last time, if it's the same guild.
             local saved = SavedSetup().alliance
             if configSig ~= "" or not saved or not saved.guild or saved.guild ~= ns.Guild:GetName() then return end
-            config = { guilds = saved.guilds or {}, key = saved.key, autoInvite = saved.autoInvite }
+            config = { guilds = saved.guilds or {}, key = saved.key, autoInvite = saved.autoInvite, relay = saved.relay }
+            infoKnown = true
         end
     end
 
-    -- Who may use auto-invite changed: tell the window and auto-invite (not the channel's business).
-    local aiSig = tostring(Alliance.AutoInviteLine(config.autoInvite))
-    if aiSig ~= autoInviteSig then
-        autoInviteSig = aiSig
+    -- My guild's own lines changed (who may use auto-invite, what the relay may pass on): tell
+    -- the window and auto-invite (not the channel's business; Relay.lua checks every second).
+    local ownSig = tostring(Alliance.AutoInviteLine(config.autoInvite)) .. "|" .. tostring(Alliance.RelayLine(config.relay))
+    if ownSig ~= ownLinesSig then
+        ownLinesSig = ownSig
         Alliance:Changed()
     end
 

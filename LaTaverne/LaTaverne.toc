@@ -28,6 +28,7 @@ Alliance.lua
 Vouch.lua
 AllyChat.lua
 AllyMap.lua
+Relay.lua
 
 Invites.lua
 Players.lua

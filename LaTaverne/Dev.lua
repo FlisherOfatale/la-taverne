@@ -218,6 +218,15 @@ subcommands.ping = function(arg)
     L("DEV_PING", q(text), sent and "sent" or "queued (channel not ready yet)")
 end
 
+-- A test guild member without La Taverne says a line: the guild relay passes it on to the
+-- allied test guilds (two PCs in two test guilds).
+subcommands.say = function(arg)
+    local name, text = arg:match("^([^:]+):%s*(.+)$")
+    if not name or not ns.AllyChat:SendFakeMemberLine(name, text) then
+        ns.Print("usage, test mode only: /taverne dev say Firstname Lastname: text (not your own name)")
+    end
+end
+
 subcommands.expiry = function()
     if ns.Players:DevExpireSoon() then
         ns.Print("availability now ends in 5 min: the popup shows within a few seconds")
@@ -239,6 +248,7 @@ ns.commands.dev = function(arg)
         ns.Print("/taverne dev add | remove <Firstname Lastname> - fake roster")
         ns.Print("/taverne dev clear - empty the fake roster")
         ns.Print("/taverne dev ping [text] - message the other testers, they answer back")
+        ns.Print("/taverne dev say <Firstname Lastname>: <text> - a test guild member without La Taverne says a line (the guild relay passes it on)")
         ns.Print("/taverne dev expiry - show the availability expiry popup now (be available first)")
     end
 end

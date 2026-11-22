@@ -20,6 +20,12 @@ local CTL = _G.ChatThrottleLib
 local PREFIX = "LaTaverne"
 local ALLY_PREFIX = "LaTaverneA"
 local PROBE_PREFIX = "LaTaverneProbe"
+-- The guild relay (Relay.lua) talks on its own prefix, on the same alliance channel and with the
+-- same checks: the game limits messages per prefix, so relaying never slows down groups,
+-- positions and the chat of La Taverne users. Old versions never registered it: they don't
+-- receive any of it.
+Comm.RELAY_PREFIX = "LaTaverneR"
+local ALLY_PREFIXES = { [ALLY_PREFIX] = true, [Comm.RELAY_PREFIX] = true }
 local PROTOCOL = 1
 local JOIN_DELAY = 8   -- seconds after login, so the game's own channels (General, Trade...) keep their numbers
 local MAX_QUEUE = 50
@@ -40,10 +46,17 @@ Comm.stats = { sent = 0, received = 0, rejected = 0 }
 -- The real guild's messages are ignored then: only counted.
 local LOG_MAX = 300
 local RATE_MAX = 30 -- messages in a minute from one sender: unusual
-local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, realIgnored = 0, positions = { ["in"] = 0, out = 0 } }
--- Positions on the map (AllyMap.lua) go every few seconds from everyone: only counted, never
--- listed, or they'd push everything else out of the log.
-local QUIET_TYPES = { POS = true }
+local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, realIgnored = 0,
+    quiet = { positions = { ["in"] = 0, out = 0 }, relayed = { ["in"] = 0, out = 0 } },
+    guildQuiet = { hellos = 0, lines = 0 } }
+-- Positions on the map (AllyMap.lua) go every few seconds from everyone, and relayed guild lines
+-- (Relay.lua) one per line: only counted, never listed, or they'd push everything else out of
+-- the log. [type] = its counter.
+local QUIET_TYPES = { POS = "positions", RCHAT = "relayed" }
+-- My guildmates' hellos (Vouch.lua), heard on the alliance channel: one every 4-4.5 minutes from
+-- each of them, a lot in a big guild. And their own copies of their guild lines (AllyChat.lua),
+-- read only by the relay: one per line. Only counted too. [type] = its counter.
+local QUIET_GUILD_TYPES = { HI = "hellos", CHAT = "lines" }
 
 function Comm:IsLogging() return msgLog.on end
 
@@ -87,8 +100,17 @@ end
 -- One message. dir: "in" or "out"; scope: "guild" or "ally"; what: what happened to it.
 local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
     if not msgLog.on then return end
-    if QUIET_TYPES[msgType] and not unusual then
-        if dir == "in" or what == "sent" then msgLog.positions[dir] = (msgLog.positions[dir] or 0) + 1 end
+    -- Counted once each: in when delivered (not when held for vouching, then again when
+    -- delivered, nor a copy from the old channel), out when sent.
+    local quiet = QUIET_TYPES[msgType]
+    if quiet and not unusual then
+        local counter = msgLog.quiet[quiet]
+        if what == "delivered" or what == "sent" then counter[dir] = (counter[dir] or 0) + 1 end
+        return
+    end
+    local quietGuild = scope == "guild" and QUIET_GUILD_TYPES[msgType]
+    if quietGuild and not unusual then
+        if what == "delivered" then msgLog.guildQuiet[quietGuild] = msgLog.guildQuiet[quietGuild] + 1 end
         return
     end
     if scope == "guild" and ns.Guild:IsSandbox() then scope = "test" end
@@ -125,7 +147,8 @@ function Comm:SetLogging(on)
         wipe(msgLog.order)
         wipe(msgLog.rate)
         msgLog.realIgnored = 0
-        msgLog.positions["in"], msgLog.positions.out = 0, 0
+        for _, counter in pairs(msgLog.quiet) do counter["in"], counter.out = 0, 0 end
+        for name in pairs(msgLog.guildQuiet) do msgLog.guildQuiet[name] = 0 end
         msgLog.since = date("%H:%M:%S")
     end
     msgLog.on = on and true or false
@@ -148,7 +171,11 @@ function Comm:LogText(hiddenKinds, hiddenWho)
         out[#out + 1] = format("Real guild: %d messages ignored (test mode)", msgLog.realIgnored)
     end
     out[#out + 1] = format("Queues: guild %d, alliance %d", #queues.guild, #queues.ally)
-    out[#out + 1] = format("Map positions (not listed): %d in, %d out", msgLog.positions["in"], msgLog.positions.out)
+    local quiet = msgLog.quiet
+    out[#out + 1] = format("Map positions (not listed): %d in, %d out", quiet.positions["in"], quiet.positions.out)
+    out[#out + 1] = format("Relayed guild lines (not listed): %d in, %d out", quiet.relayed["in"], quiet.relayed.out)
+    out[#out + 1] = format("Hellos from my guild (not listed): %d", msgLog.guildQuiet.hellos)
+    out[#out + 1] = format("My guild's lines, their authors' copies to the allies (not listed): %d", msgLog.guildQuiet.lines)
     if #msgLog.order == 0 then
         out[#out + 1] = "Unusual: none"
     else
@@ -526,14 +553,15 @@ end
 local PART_IDS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 local partId = 0
 
-local function SendOnChannel(ch, text, prio)
+local function SendOnChannel(ch, text, prio, prefix)
     local id = ChannelId(ch)
     if not id then
         ch.ready = false
         return false
     end
+    prefix = prefix or ALLY_PREFIX
     if #text <= PART_SIZE then
-        CTL:SendAddonMessage(prio, ALLY_PREFIX, "0" .. text, "CHANNEL", id)
+        CTL:SendAddonMessage(prio, prefix, "0" .. text, "CHANNEL", id)
     else
         -- Each message of several parts gets its own letter after the mark, so two of them
         -- sent at once (different priorities, mixed by ChatThrottleLib) stay apart.
@@ -543,7 +571,7 @@ local function SendOnChannel(ch, text, prio)
         while pos <= len do
             local chunk = text:sub(pos, pos + PART_SIZE - 1)
             local mark = (pos == 1) and "1" or ((pos + PART_SIZE > len) and "3" or "2")
-            CTL:SendAddonMessage(prio, ALLY_PREFIX, mark .. tag .. chunk, "CHANNEL", id)
+            CTL:SendAddonMessage(prio, prefix, mark .. tag .. chunk, "CHANNEL", id)
             pos = pos + PART_SIZE
         end
     end
@@ -552,13 +580,13 @@ end
 
 -- During a key change, also send on the previous channel, for the guilds that haven't switched
 -- yet. Receivers drop the copy (same sender and message number).
-local function SendAllyText(text, priority)
+local function SendAllyText(text, priority, prefix)
     local ch = channels.ally
     if not (ch and ch.ready) then return false end
     local prio = priority or "NORMAL"
-    if not SendOnChannel(ch, text, prio) then return false end
+    if not SendOnChannel(ch, text, prio, prefix) then return false end
     local old = channels.allyOld
-    if old and old.ready then SendOnChannel(old, text, prio) end
+    if old and old.ready then SendOnChannel(old, text, prio, prefix) end
     Comm.stats.sent = Comm.stats.sent + 1
     return true
 end
@@ -566,8 +594,8 @@ end
 local allySerial = 0
 
 -- Send to the allied guilds. Payload always gets the sender's guild name.
--- noQueue: as for Comm:Send.
-function Comm:SendAlly(msgType, payload, priority, noQueue)
+-- noQueue: as for Comm:Send. prefix: Comm.RELAY_PREFIX for the relay, nil otherwise.
+function Comm:SendAlly(msgType, payload, priority, noQueue, prefix)
     if ns.reloadPending then return false end
     payload = payload or {}
     payload.g = ns.Guild:GetName()
@@ -575,7 +603,7 @@ function Comm:SendAlly(msgType, payload, priority, noQueue)
     allySerial = allySerial + 1
     payload.n = math.random(1, 1000000) * 1000 + allySerial % 1000
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
-    if SendAllyText(text, priority) then
+    if SendAllyText(text, priority, prefix) then
         Trace("out", "ally", msgType, nil, #text, "sent", payload)
         return true
     end
@@ -584,7 +612,7 @@ function Comm:SendAlly(msgType, payload, priority, noQueue)
         return false
     end
     if #queues.ally < MAX_QUEUE then
-        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType }
+        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType, prefix = prefix }
         Trace("out", "ally", msgType, nil, #text, "queued (" .. #queues.ally .. " waiting)", payload,
             #queues.ally == 10 and "queue growing" or nil)
     else
@@ -602,7 +630,7 @@ FlushQueue = function()
     end
     while #queues.ally > 0 do
         local item = queues.ally[1]
-        if not SendAllyText(item.text, item.priority) then break end
+        if not SendAllyText(item.text, item.priority, item.prefix) then break end
         table.remove(queues.ally, 1)
         Trace("out", "ally", item.msgType, nil, #item.text, "sent from the queue")
     end
@@ -628,8 +656,15 @@ local function FromAllyChannel(target, localID, channelName)
 end
 
 local partial = {} -- [sender#channel] = { text, time }
--- Sent by my guild's members on the alliance channel only (no guild copy): AllyMap.lua's positions.
-local OWN_GUILD_ON_ALLY = { POS = true }
+-- Sent by my guild's members on the alliance channel only (no guild copy): AllyMap.lua's
+-- positions, the hellos (Vouch.lua), which tell me which guildmates run La Taverne, and what the
+-- relay (Relay.lua) needs from its own guild: the relay's messages (RLY, RCHAT) and the authors'
+-- own copies of their lines (CHAT), to know which guild lines were already passed on. Read as
+-- my guild's messages (guild handlers, not the allied ones: a guildmate's hello is never
+-- answered, nothing of my guild goes through vouching, and my guild's lines are never shown
+-- twice). "relay": only while something reads it (Relay.lua loaded); otherwise my guild's copy,
+-- ignored as before, and not an unknown message in the message log.
+local OWN_GUILD_ON_ALLY = { POS = true, HI = true, CHAT = "relay", RCHAT = "relay", RLY = "relay" }
 local seen = {}    -- [sender .. "#" .. n] = time, to drop copies sent on two channels
 
 local function AlreadySeen(sender, n)
@@ -656,9 +691,11 @@ local function OnAllyMessage(text, sender)
     -- The sender's guild must be one of ours, and a member of our own guild can't pose as another one.
     local guild = payload.g
     -- My guild's copy (allied guilds get it here, I got it on the guild channel): not logged.
-    -- Except what my guild sends only here (map positions): read as my guild's, from a member.
+    -- Except what my guild sends only here (OWN_GUILD_ON_ALLY): read as my guild's, from a member.
     if ns.Guild:IsMyGuild(guild) then
-        if OWN_GUILD_ON_ALLY[msgType] and ns.Guild:IsMember(sender) then
+        local own = OWN_GUILD_ON_ALLY[msgType]
+        if own == "relay" and not (handlers.guild and handlers.guild[msgType]) then own = nil end
+        if own and ns.Guild:IsMember(sender) then
             if AlreadySeen(sender, payload.n) then return end
             Comm.stats.received = Comm.stats.received + 1
             ns.Guild:NoteSeen(sender)
@@ -703,7 +740,7 @@ local function OnAllyMessage(text, sender)
 end
 
 ns.On("CHAT_MSG_ADDON", function(prefix, message, distribution, sender, target, zoneChannelID, localID, channelName)
-    if prefix ~= ALLY_PREFIX then return end
+    if not ALLY_PREFIXES[prefix] then return end
     if distribution ~= "CHANNEL" then return end
     local fromOurs = FromAllyChannel(target, localID, channelName)
     Comm.lastAllyCheck = { target = target, localID = localID, channelName = channelName, ok = fromOurs }
@@ -719,9 +756,9 @@ ns.On("CHAT_MSG_ADDON", function(prefix, message, distribution, sender, target, 
         OnAllyMessage(body, sender)
         return
     end
-    -- Parts are put together per sender, per channel (two channels during a key change) and
-    -- per message letter.
-    local slot = sender .. "#" .. tostring(localID) .. "#" .. body:sub(1, 1)
+    -- Parts are put together per sender, per prefix, per channel (two channels during a key
+    -- change) and per message letter.
+    local slot = sender .. "#" .. prefix .. "#" .. tostring(localID) .. "#" .. body:sub(1, 1)
     body = body:sub(2)
     if mark == "1" then
         partial[slot] = { text = body, time = GetTime() }
@@ -775,7 +812,7 @@ end
 
 function Comm:OnLogin()
     C_ChatInfo.RegisterAddonMessagePrefix(PROBE_PREFIX)
-    C_ChatInfo.RegisterAddonMessagePrefix(ALLY_PREFIX)
+    for prefix in pairs(ALLY_PREFIXES) do C_ChatInfo.RegisterAddonMessagePrefix(prefix) end
     self:RegisterComm(PREFIX, OnGuildReceive)
     C_Timer.After(JOIN_DELAY, function()
         loggedIn = true

@@ -524,6 +524,52 @@ ns.Comm:On("HERE", function(sender, p, isSelf)
     Changed()
 end)
 
+-- My guildmates' hellos on the alliance channel (Vouch.lua: when they join it, when they answer
+-- an allied hello, every 4-4.5 minutes, and when something they say changes). Comm.lua already
+-- counted them as running La Taverne; this keeps what they say about themselves: away (afk), and
+-- the relay fields (Relay.lua): rl = relay switch on, cap = jobs they can do, rp = relay protocol.
+-- Only while there's an alliance: no alliance channel, no hellos.
+ns.Comm:On("HI", function(sender, p, isSelf)
+    if isSelf then return end
+    local key = ns.NameKey(sender)
+    local entry = present[key]
+    if not entry then return end -- (Comm.lua noted them just before)
+    local old = entry.hello
+    local now = GetServerTime()
+    entry.hello = {
+        t = now,
+        afk = p.afk and true or nil,
+        rl = (p.rl == 1 or p.rl == true) or nil,
+        cap = type(p.cap) == "string" and #p.cap <= 64 and p.cap or nil,
+        rp = tonumber(p.rp),
+    }
+    -- The Players page only cares about someone new, or someone going away or coming back.
+    if not old or now - old.t >= PRESENCE_AGE or (old.afk or false) ~= (entry.hello.afk or false) then
+        Changed()
+    end
+end)
+
+-- Does this guildmate run La Taverne (heard from in the last 20 minutes)? Then they share their
+-- own guild lines with the allied guilds (AllyChat.lua): the relay only covers for them.
+function Players:RunsAddon(name)
+    local p = name and present[ns.NameKey(name)]
+    return p ~= nil and p.seen ~= nil and GetServerTime() - p.seen < PRESENCE_AGE
+end
+
+-- Guildmates whose hello I heard in the last maxAge seconds (online in the roster):
+-- { name, t, afk, rl, cap, rp }. For Relay.lua (who else can relay right now).
+function Players:GetGuildHellos(maxAge)
+    local out, now = {}, GetServerTime()
+    for _, entry in pairs(present) do
+        local h = entry.hello
+        local member = h and now - h.t < maxAge and ns.Guild:GetMember(entry.name)
+        if member and member.online then
+            out[#out + 1] = { name = entry.name, t = h.t, afk = h.afk, rl = h.rl, cap = h.cap, rp = h.rp }
+        end
+    end
+    return out
+end
+
 -- Expiry popup ---------------------------------------------------------------------------------
 -- A confirmation window at the top of the screen like a ready check (ns.ConfirmDialog, not the
 -- game's dialog): "+15 min", "+1 h" (the length I chose last comes first) and "Stop". The time

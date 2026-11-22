@@ -182,6 +182,10 @@ local DEFAULTS = {
         button = true,     -- the lynx button on the game's map (not with OpenMap's map)
         told = false,      -- the "your position is shared" line was shown once
     },
+    relay = {         -- guild relay (Relay.lua)
+        help = true,         -- I may relay my guild for the allied guilds
+        told = false,        -- the "you're relaying" line was shown once
+    },
     invites = {       -- keyword auto-invite (always off at login)
         auto = true,      -- invite right away, or wait for a click
         whispers = false, -- also listen to whispers
@@ -631,6 +635,7 @@ SlashCmdList.LATAVERNE = function(msg)
         ns.Print("/taverne - open or close the window")
         ns.Print("/taverne autoinvite - turn keyword auto-invite on or off")
         ns.Print("/taverne errors [clear] - error report to send to the author")
+        ns.Print("/taverne relay - guild relay report: who relays for each guild, and how it goes")
         -- Testing and diagnostics: listed only in test mode (they still work outside it).
         if ns.db and ns.db.dev and ns.db.dev.sandbox then
             ns.Print("Test mode:")
@@ -640,6 +645,7 @@ SlashCmdList.LATAVERNE = function(msg)
             ns.Print("/taverne map - positions on the map: what's shared and shown")
             ns.Print("/taverne test [all|env|api|names|guild|chan] - run diagnostics")
             ns.Print("/taverne who <name> - look a name up in the guild roster")
+            ns.Print("/taverne probe - relay measurements (list)")
             ns.Print("/taverne copy - reopen the output window")
         end
     end
