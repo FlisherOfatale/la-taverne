@@ -519,6 +519,7 @@ function ns.TextDialog(opts)
     -- tooltip = { lines } } } (dropdowns, text: the label), opts.check = { text, checked,
     -- onClick = function(checked), tooltip = { lines } }.
     f:SetWidth(opts.width or 600) -- (the message log asks for more: its row of tools)
+    f.edit:SetWidth((opts.width or 600) - 70) -- (the text wraps at the window's width)
     if SetupTools(f, opts) then
         f.holder:SetPoint("TOPLEFT", f.tools, "BOTTOMLEFT", 0, -6)
     else

@@ -323,7 +323,8 @@ function Alliance:Refresh()
     if read then
         -- Linked until now, and this read says no: read again in a moment before believing it.
         if ActiveIn(config) and not ActiveIn(read) then
-            if not offSince then
+            -- (An offSince from long ago, its second read blocked meanwhile, doesn't count: start over.)
+            if not offSince or GetTime() - offSince > OFF_CONFIRM * 3 then
                 offSince = GetTime()
                 C_Timer.After(OFF_CONFIRM + 0.5, function() Alliance:Refresh() end)
                 return

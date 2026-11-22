@@ -2057,7 +2057,15 @@ local function BuildGroupsPanel()
                 if UI.focusGroup and entry.listing.id == UI.focusGroup.id then open = true end
             end
             list[#list + 1] = { separator = true, text = format(L["In progress or full (%d)"], #busy), open = open,
-                onClick = function() ns.db.showBusy = not open or nil UI:Refresh() end }
+                onClick = function()
+                    if open then
+                        ns.db.showBusy = nil
+                        UI.focusGroup = nil -- (a [View] link kept it open)
+                    else
+                        ns.db.showBusy = true
+                    end
+                    UI:Refresh()
+                end }
             if open then
                 for _, entry in ipairs(busy) do list[#list + 1] = entry end
             end
@@ -2531,7 +2539,7 @@ local function BuildManageView(parent)
     delist:SetScript("OnClick", function() ns.Groups:Delist() end)
     m.delist = delist
     -- A La Taverne line about the group for the players who run it (not guild chat), on demand,
-    -- at most once a minute: bottom left (away from where Post group was, under the mouse right
+    -- not in the group's first 5 minutes, then once every 5: bottom left (away from where Post group was, under the mouse right
     -- after posting).
     m.guildPost = NewButton(m, L["Announce in chat"], 180)
     m.guildPost:SetPoint("BOTTOMLEFT", 2, 2)

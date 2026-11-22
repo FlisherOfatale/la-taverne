@@ -773,6 +773,7 @@ function AllyMap:OnLogin()
     local openMapHid = false
     C_Timer.NewTicker(1, function()
         if not MapShown() then return end
+        AllyMap:UpdateMapButton() -- (OpenMap's map switched on or off: the lynx tab follows)
         local hid = OpenMapHidesGuild()
         if hid ~= openMapHid then
             openMapHid = hid
