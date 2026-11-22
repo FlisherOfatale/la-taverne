@@ -37,7 +37,7 @@ local handlers = {}      -- ["guild" | "ally"][msgType] = { fn, ... }
 local queues = { guild = {}, ally = {} } -- serialized messages waiting for a channel
 local loggedIn = false
 
-Comm.stats = { sent = 0, received = 0, rejected = 0 }
+Comm.stats = { sent = 0, received = 0, rejected = 0, resent = 0 }
 
 -- Message log --------------------------------------------------------------------------
 -- Debug tab or /taverne msglog: every hidden message in and out while it's on, and what
@@ -754,18 +754,46 @@ Comm.lastSend = { parts = 0, bytes = 0 }
 
 -- Parts on a watched prefix report back once ChatThrottleLib really sends them (it holds them
 -- while its budget or the game's throttle says wait): fn(didSend, waited seconds, the game's
--- result code). Relay.lua.
-local partWatch = {}
-function Comm:WatchParts(prefix, fn) partWatch[prefix] = fn end
+-- result code, message type). A message sent again (below) tells onResend(message type, parts,
+-- bytes), so its sending is measured too. Relay.lua.
+local partWatch, resendWatch = {}, {}
+function Comm:WatchParts(prefix, fn, onResend)
+    partWatch[prefix] = fn
+    resendWatch[prefix] = onResend
+end
+
+-- Sent again: a message whose part the game refused for its channel throttle
+-- (Enum.SendAddonMessageResult.ChannelThrottle; ChatThrottleLib only waits and tries again for
+-- the add-on message throttle) goes out once more, whole, RESEND_DELAY later, when its sender
+-- asked for it (a chat line). Receivers drop it if the first one came through (same message
+-- number). Comm.stats.resent counts them.
+local CHANNEL_THROTTLE = 8
+local RESEND_DELAY = 2
+local SendOnChannel
 
 local function PartDone(arg, didSend, result)
     local fn = partWatch[arg.prefix]
-    if fn then fn(didSend and true or false, GetTime() - arg.at, result) end
+    if fn then fn(didSend and true or false, GetTime() - arg.at, result, arg.msg.kind) end
+    local msg = arg.msg
+    if not didSend and result == CHANNEL_THROTTLE and msg.retry and not msg.resent then
+        msg.resent = true -- once per message, even when several of its parts are refused
+        C_Timer.After(RESEND_DELAY, function()
+            if ns.reloadPending or not msg.ch.ready then return end
+            local before = Comm.lastSend
+            Comm.lastSend = { parts = 0, bytes = 0 }
+            if SendOnChannel(msg.ch, msg.text, msg.prio, msg.prefix, { kind = msg.kind, resent = true }) then
+                Comm.stats.resent = Comm.stats.resent + 1
+                local onResend = resendWatch[msg.prefix]
+                if onResend then onResend(msg.kind, Comm.lastSend.parts, Comm.lastSend.bytes) end
+            end
+            Comm.lastSend = before
+        end)
+    end
 end
 
-local function SendPart(prio, prefix, msg, id)
-    if partWatch[prefix] then
-        CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id, nil, PartDone, { prefix = prefix, at = GetTime() })
+local function SendPart(prio, prefix, msg, id, info)
+    if partWatch[prefix] or info.retry then
+        CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id, nil, PartDone, { prefix = prefix, at = GetTime(), msg = info })
     else
         CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id)
     end
@@ -773,15 +801,20 @@ local function SendPart(prio, prefix, msg, id)
     sent.parts, sent.bytes = sent.parts + 1, sent.bytes + #msg + #prefix
 end
 
-local function SendOnChannel(ch, text, prio, prefix)
+-- opts: { kind = message type, retry = send it again if the channel throttle refuses it }.
+SendOnChannel = function(ch, text, prio, prefix, opts)
     local id = ChannelId(ch)
     if not id then
         ch.ready = false
         return false
     end
     prefix = prefix or ALLY_PREFIX
+    opts = opts or {}
+    -- What PartDone needs to send it again, shared by its parts.
+    local info = { ch = ch, text = text, prio = prio, prefix = prefix, kind = opts.kind,
+        retry = opts.retry and true or false, resent = opts.resent and true or false }
     if #text <= PART_SIZE then
-        SendPart(prio, prefix, "0" .. text, id)
+        SendPart(prio, prefix, "0" .. text, id, info)
     else
         -- Each message of several parts gets its own letter after the mark, so two of them
         -- sent at once (different priorities, mixed by ChatThrottleLib) stay apart.
@@ -791,7 +824,7 @@ local function SendOnChannel(ch, text, prio, prefix)
         while pos <= len do
             local chunk = text:sub(pos, pos + PART_SIZE - 1)
             local mark = (pos == 1) and "1" or ((pos + PART_SIZE > len) and "3" or "2")
-            SendPart(prio, prefix, mark .. tag .. chunk, id)
+            SendPart(prio, prefix, mark .. tag .. chunk, id, info)
             pos = pos + PART_SIZE
         end
     end
@@ -800,13 +833,13 @@ end
 
 -- During a key change, also send on the previous channel, for the guilds that haven't switched
 -- yet. Receivers drop the copy (same sender and message number).
-local function SendAllyText(text, priority, prefix)
+local function SendAllyText(text, priority, prefix, opts)
     local ch = channels.ally
     if not (ch and ch.ready) then return false end
     local prio = priority or "NORMAL"
-    if not SendOnChannel(ch, text, prio, prefix) then return false end
+    if not SendOnChannel(ch, text, prio, prefix, opts) then return false end
     local old = channels.allyOld
-    if old and old.ready then SendOnChannel(old, text, prio, prefix) end
+    if old and old.ready then SendOnChannel(old, text, prio, prefix, opts) end
     Comm.stats.sent = Comm.stats.sent + 1
     return true
 end
@@ -815,8 +848,8 @@ local allySerial = 0
 
 -- Send to the allied guilds. Payload always gets the sender's guild name.
 -- noQueue: as for Comm:Send. prefix: Comm.RELAY_PREFIX or Comm.MAP_PREFIX for the relay, nil
--- otherwise.
-function Comm:SendAlly(msgType, payload, priority, noQueue, prefix)
+-- otherwise. retry: send it once more if the game's channel throttle refuses it (chat lines).
+function Comm:SendAlly(msgType, payload, priority, noQueue, prefix, retry)
     if ns.reloadPending then return false end
     payload = payload or {}
     payload.g = ns.Guild:GetName()
@@ -825,7 +858,8 @@ function Comm:SendAlly(msgType, payload, priority, noQueue, prefix)
     payload.n = math.random(1, 1000000) * 1000 + allySerial % 1000
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
     Comm.lastSend.parts, Comm.lastSend.bytes = 0, 0
-    if SendAllyText(text, priority, prefix) then
+    local opts = { kind = msgType, retry = retry }
+    if SendAllyText(text, priority, prefix, opts) then
         Trace("out", "ally", msgType, nil, #text, "sent", payload)
         return true
     end
@@ -834,7 +868,7 @@ function Comm:SendAlly(msgType, payload, priority, noQueue, prefix)
         return false
     end
     if #queues.ally < MAX_QUEUE then
-        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType, prefix = prefix }
+        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType, prefix = prefix, opts = opts }
         Trace("out", "ally", msgType, nil, #text, "queued (" .. #queues.ally .. " waiting)", payload,
             #queues.ally == 10 and "queue growing" or nil)
     else
@@ -852,7 +886,7 @@ FlushQueue = function()
     end
     while #queues.ally > 0 do
         local item = queues.ally[1]
-        if not SendAllyText(item.text, item.priority, item.prefix) then break end
+        if not SendAllyText(item.text, item.priority, item.prefix, item.opts) then break end
         table.remove(queues.ally, 1)
         Trace("out", "ally", item.msgType, nil, #item.text, "sent from the queue")
     end

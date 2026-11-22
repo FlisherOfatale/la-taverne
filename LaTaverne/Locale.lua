@@ -962,6 +962,10 @@ if GetLocale() == "frFR" then
     -- Relay, map job (OpenMap positions of members without La Taverne)
     L["Map positions"] = "Positions sur la carte"
     L["game codes:"] = "codes du jeu :"
+    L["chat lines"] = "lignes de discussion"
+    L["map batches"] = "lots de positions"
+    L["coordination"] = "coordination"
+    L["sent again %d"] = "renvoyés %d"
     L["map: %d%% of the game's limit: slower steps"] = "carte : %d %% de la limite du jeu : rythme ralenti"
     L["map: back to normal steps"] = "carte : retour au rythme normal"
     L["map: still %d%% of the game's limit after %d s: handed over"] = "carte : encore %d %% de la limite du jeu après %d s : laissée à un autre"

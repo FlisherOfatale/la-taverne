@@ -307,10 +307,11 @@ end
 -- (held) or refused (failed, and failCodes: [the game's result code] = count); budget warnings.
 -- prefix: [prefix] = ring of seconds, the same per prefix (the game's limit is per prefix).
 local meter = { sec = {}, min = {}, prefix = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
-    held = 0, failed = 0, failCodes = {}, warnings = 0 }
+    held = 0, failed = 0, failCodes = {}, failKinds = {}, resent = {}, warnings = 0 }
 for _, job in ipairs(JOB_ORDER) do meter.prefix[JOBS[job].prefix] = {} end
 
-local function Measure(kind, job, parts, bytes)
+-- resend: a message sent again (Comm.lua), counted in the sending but not as one more message.
+local function Measure(kind, job, parts, bytes, resend)
     local now = math.floor(GetTime())
     local s = Slot(meter.sec, now)
     s.m, s.b = s.m + parts, s.b + bytes
@@ -318,13 +319,15 @@ local function Measure(kind, job, parts, bytes)
     ps.m, ps.b = ps.m + parts, ps.b + bytes
     local m = Slot(meter.min, math.floor(now / 60))
     m.m, m.b = m.m + parts, m.b + bytes
-    meter.all = meter.all + 1
-    if kind == "RLY" then
-        meter.rly = meter.rly + 1
-    else
-        meter.items = meter.items + 1
-        meter.parts = meter.parts + parts
-        if parts > meter.maxParts then meter.maxParts = parts end
+    if not resend then
+        meter.all = meter.all + 1
+        if kind == "RLY" then
+            meter.rly = meter.rly + 1
+        else
+            meter.items = meter.items + 1
+            meter.parts = meter.parts + parts
+            if parts > meter.maxParts then meter.maxParts = parts end
+        end
     end
     -- The beacon's report: what I sent for a job I hold.
     local st = job and jobs[job]
@@ -334,9 +337,12 @@ local function Measure(kind, job, parts, bytes)
 end
 
 -- ChatThrottleLib tells when it really sent each part (Comm.lua): one held back a second or more
--- (its budget, or the game's throttle), or refused, counts as throttled.
+-- (its budget, or the game's throttle), or refused, counts as throttled. Refused: per code and
+-- per message type (failKinds: RCHAT a line, RMAP a map batch, RLY coordination). A chat line
+-- refused by the channel throttle goes out once more (Comm.lua): resent[message type], and its
+-- sending is measured like the first one.
 for _, job in ipairs(JOB_ORDER) do
-    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited, result)
+    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited, result, kind)
         if didSend and waited < SLOW_PART then return end
         if didSend then
             meter.held = meter.held + 1
@@ -344,9 +350,15 @@ for _, job in ipairs(JOB_ORDER) do
             meter.failed = meter.failed + 1
             local code = tostring(result)
             meter.failCodes[code] = (meter.failCodes[code] or 0) + 1
+            kind = kind or "?"
+            meter.failKinds[kind] = (meter.failKinds[kind] or 0) + 1
         end
         local st = jobs[job]
         if st.holding then st.report.th = st.report.th + 1 end
+    end, function(kind, parts, bytes)
+        kind = kind or "?"
+        meter.resent[kind] = (meter.resent[kind] or 0) + 1
+        Measure(kind, job, parts, bytes, true)
     end)
 end
 
@@ -932,7 +944,7 @@ end
 local function SendLine(e, waiting, gapFill)
     local payload = { a = e.author, m = e.text, c = e.class, id = e.guid, t = e.t, q = waiting or 0, rp = RP,
         gf = gapFill and 1 or nil }
-    if not ns.Comm:SendAlly("RCHAT", payload, "ALERT", true, PREFIX) then return false end
+    if not ns.Comm:SendAlly("RCHAT", payload, "ALERT", true, PREFIX, true) then return false end
     Measure("RCHAT", "chat", ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
     local now = GetTime()
     if not e.covered then
@@ -1854,12 +1866,26 @@ local function ReportText()
     Add("    " .. format(L["budget: chat %d%%, map %d%% of the game's limit (warning at %d%% for %d min: %d so far), busiest minute %d messages"],
         PrefixPct(PREFIX, now), PrefixPct(MAP_PREFIX, now), BUDGET_WARN, BUDGET_WARN_FOR / 60, meter.warnings, meter.peak))
     -- Refused: the game's result codes too (Enum.SendAddonMessageResult: 7 invalid channel...).
+    -- Then what they were (a lost line matters, a map batch is replaced 10 s later) and how many
+    -- chat lines went out again.
     local codes = {}
     for code, n in pairs(meter.failCodes) do codes[#codes + 1] = code .. " x" .. n end
     table.sort(codes)
+    local KIND_NAMES = { RCHAT = "chat lines", RMAP = "map batches", RLY = "coordination" }
+    local kinds = {}
+    for kind, n in pairs(meter.failKinds) do
+        kinds[#kinds + 1] = (KIND_NAMES[kind] and L[KIND_NAMES[kind]] or kind) .. " " .. n
+    end
+    table.sort(kinds)
+    local resent = 0
+    for _, n in pairs(meter.resent) do resent = resent + n end
+    local details = {}
+    if #codes > 0 then details[#details + 1] = L["game codes:"] .. " " .. table.concat(codes, ", ") end
+    if #kinds > 0 then details[#details + 1] = table.concat(kinds, ", ") end
+    if resent > 0 then details[#details + 1] = format(L["sent again %d"], resent) end
     Add("    " .. format(L["messages per line: average %.1f, max %d; coordination %d%% of what you sent; held back 1 s or more %d, refused %d"],
         meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts, Pct(meter.rly, meter.all), meter.held, meter.failed)
-        .. (#codes > 0 and (" (" .. L["game codes:"] .. " " .. table.concat(codes, ", ") .. ")") or ""))
+        .. (#details > 0 and (" (" .. table.concat(details, "; ") .. ")") or ""))
     local owed = 0
     for _, e in ipairs(buffer) do
         if not e.covered then owed = owed + 1 end

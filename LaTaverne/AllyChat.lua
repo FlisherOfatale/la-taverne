@@ -516,7 +516,8 @@ end
 
 local function Relay(text)
     if not Enabled() or not ns.Alliance:IsActive() then return end
-    ns.Comm:SendAlly("CHAT", MyPayload(text), "ALERT")
+    -- Sent again if the game's channel throttle refuses it (Comm.lua).
+    ns.Comm:SendAlly("CHAT", MyPayload(text), "ALERT", nil, nil, true)
 end
 
 local lastSig, lastTime = nil, 0
@@ -558,7 +559,7 @@ function AllyChat:SendTestGuildChat(text, guildOnly)
     ns.Comm:Send("GCHAT", MyPayload(text), "ALERT")
     if not guildOnly and Enabled() and ns.Alliance:IsActive() then
 
-        ns.Comm:SendAlly("CHAT", MyPayload(text), "ALERT")
+        ns.Comm:SendAlly("CHAT", MyPayload(text), "ALERT", nil, nil, true)
     end
     return true
 end
