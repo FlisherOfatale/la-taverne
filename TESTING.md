@@ -18,11 +18,6 @@ To start the vouching tests from a clean slate (keeps every setting):
 - [ ] Away check (nothing to set up, just play with script errors on): no "secret boolean" error
       from `Vouch.lua` or `Players.lua` after fights and boss encounters.
 
-- [ ] Guild relay live window: `/taverne relay` (and the Debug tab's "Guild relay" button)
-      opens a window that fills itself again every 3 s; Copy selects it all. With you relaying:
-      your guild's row, "Who can relay" counts you, "What you send" counts messages after a
-      `/taverne dev say` (test mode) or a guildmate's line, the last events list "I hold chat".
-
 ## 2. Alone: useful, not urgent
 - [ ] Probe: `/taverne probe roster` with the guild window's "show offline members" box unticked
       (are offline members still readable? if not, an alt's snapshot is partial).
@@ -72,6 +67,10 @@ To start the vouching tests from a clean slate (keeps every setting):
       guild: do the lines match (in English and French clients)?
 
 ## Done
+- 2026-11-22: guild relay live window, alone, test mode and the real guild: fills itself every
+  3 s (pauses under the mouse), Copy selects it all, you counted per tier, your sending and the
+  last events shown; real guild: guild lines counted, 9 OpenMap sharers without La Taverne
+  relayed (map about 8 % of the game's limit), 47 La Taverne users skipped.
 - 2026-11-22: map job, alone (test mode, `/taverne dev walk`, a pretend ally in the test Guild
   Info): you hold "Map positions" with chat, places heard every 10 s, a position passed on about
   every 30 s, a stop counted, map budget 5 %, nothing refused. (No dot on your own map: by design.)
