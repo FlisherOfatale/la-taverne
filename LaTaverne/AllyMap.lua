@@ -619,29 +619,6 @@ local function AddOpenMapToggles()
     end
 end
 
--- The game map's own filter menu (the button at its top right that lists what the map shows):
--- the same two switches, so they're at hand on the game's map too, without OpenMap. The player
--- opens that menu; La Taverne only adds lines to it, through the game's menu system. Whether the
--- menu showed them: /taverne map ("filter menu").
-AllyMap.stats.filterMenu = "not available"
-local filterHooked = false
-local function AddMapFilterToggles()
-    if filterHooked or not (Menu and Menu.ModifyMenu) then return end
-    filterHooked = true
-    AllyMap.stats.filterMenu = "added, not opened yet"
-    pcall(Menu.ModifyMenu, "MENU_WORLD_MAP_TRACKING", function(_, root)
-        AllyMap.stats.filterMenu = "shown"
-        if not (root and root.CreateCheckbox) then return end
-        if root.CreateDivider then root:CreateDivider() end
-        root:CreateCheckbox(L["Guild members (La Taverne)"], function() return Settings().showGuild end,
-            function() AllyMap:SetShow("guild", not Settings().showGuild) end)
-        if ns.Alliance:IsActive() then
-            root:CreateCheckbox(L["Allied guilds (La Taverne)"], function() return Settings().showAllies end,
-                function() AllyMap:SetShow("ally", not Settings().showAllies) end)
-        end
-    end)
-end
-
 -- A lynx tab on the game map's right edge, where and as OpenMap shows its own: a click opens the
 -- two switches. Only without OpenMap's map (its menu has them, and a star puts them on its map),
 -- and only while Options, Map leaves it on. Lit while a switch is on, greyed while both are off.
@@ -784,7 +761,6 @@ function AllyMap:OnLogin()
         end)
     end
     AddOpenMapToggles()
-    AddMapFilterToggles()
     ns.On("ADDON_LOADED", function(name)
         if name == "OpenMap" then AddOpenMapToggles() end
     end)
@@ -824,7 +800,6 @@ ns.commands.map = function()
     local st = AllyMap.stats
     ns.Print(format("map: sent %d, off %d, received %d, rejected %d, expired %d, drawn %d, left to OpenMap %d",
         st.sent, st.offSent, st.received, st.rejected, st.expired, st.drawn, st.skippedOpenMap))
-    ns.Print("map: switches in the game map's filter menu: " .. tostring(st.filterMenu))
     local om = OpenMapSettings()
     ns.Print(format("map: OpenMap %s, its map %s, its guild switch %s: La Taverne's guild and allied dots %s",
         OpenMapAPI and "loaded" or "not loaded", OpenMapStitched() and "on" or "off",
