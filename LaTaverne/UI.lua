@@ -2057,7 +2057,15 @@ local function BuildGroupsPanel()
                 if UI.focusGroup and entry.listing.id == UI.focusGroup.id then open = true end
             end
             list[#list + 1] = { separator = true, text = format(L["In progress or full (%d)"], #busy), open = open,
-                onClick = function() ns.db.showBusy = not open or nil UI:Refresh() end }
+                onClick = function()
+                    if open then
+                        ns.db.showBusy = nil
+                        UI.focusGroup = nil -- (a [View] link kept it open)
+                    else
+                        ns.db.showBusy = true
+                    end
+                    UI:Refresh()
+                end }
             if open then
                 for _, entry in ipairs(busy) do list[#list + 1] = entry end
             end
@@ -2531,7 +2539,7 @@ local function BuildManageView(parent)
     delist:SetScript("OnClick", function() ns.Groups:Delist() end)
     m.delist = delist
     -- A La Taverne line about the group for the players who run it (not guild chat), on demand,
-    -- at most once a minute: bottom left (away from where Post group was, under the mouse right
+    -- not in the group's first 5 minutes, then once every 5: bottom left (away from where Post group was, under the mouse right
     -- after posting).
     m.guildPost = NewButton(m, L["Announce in chat"], 180)
     m.guildPost:SetPoint("BOTTOMLEFT", 2, 2)
@@ -3854,8 +3862,7 @@ local FOLD_OPEN = "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
 local FOLD_CLOSED = "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t "
 
 -- Rows: a guild's card header (folds the card), its relay (Relay.lua: who passes on its members
--- without La Taverne; mine: me too), a player, the "n offline" line that folds the players not
--- heard from lately, a note, or the gap between two cards.
+-- without La Taverne; mine: me too), a player, a note, or the gap between two cards.
 local function InitAllianceRow(row, item)
     if not row.built then
         row.card = CreateFrame("Frame", nil, row, "BackdropTemplate")
@@ -3885,7 +3892,7 @@ local function InitAllianceRow(row, item)
         row.built = true
     end
     local header, player, relay = item.kind == "guild", item.kind == "player", item.kind == "relay"
-    local note = item.kind == "note" or item.kind == "fold"
+    local note = item.kind == "note"
     row.card:SetShown(header)
     row.title:SetShown(header)
     row.side:SetShown(header)
@@ -3893,7 +3900,7 @@ local function InitAllianceRow(row, item)
     row.state:SetShown(player or relay)
     row.seen:SetShown(player or relay)
     row.note:SetShown(note)
-    row.hit:EnableMouse(header or player or relay or item.kind == "fold")
+    row.hit:EnableMouse(header or player or relay)
     row.hit.tooltip = nil
     row.hit.onClick = item.onClick
     if header then
@@ -3914,9 +3921,10 @@ local function InitAllianceRow(row, item)
             row.name:SetText(p.online and NameText(p.name, p.class) or ("|cff9d9d9d" .. p.name .. "|r"))
             local ver = ns.Comm:GetVersion(p.name)
             local old = ver and ns.version ~= "?" and ns.CompareVersions(ver, ns.version) < 0
+            -- The version always, and "(old version)" after it in orange when it's behind mine.
             row.state:SetText(not p.online and ("|cff808080" .. L["offline"] .. "|r")
-                or old and ("|cffff9900" .. L["(old version)"] .. "|r")
-                or ("|cff808080" .. (ver and ("La Taverne v" .. ver) or "La Taverne") .. "|r"))
+                or ("|cff808080" .. (ver and ("La Taverne v" .. ver) or "La Taverne") .. "|r"
+                    .. (old and ("  |cffff9900" .. L["(old version)"] .. "|r") or "")))
             row.hit.tooltip = { NameText(p.name, p.class),
                 ver and ("La Taverne v" .. ver) or "La Taverne",
                 p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
@@ -3934,8 +3942,6 @@ local function InitAllianceRow(row, item)
                 p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
         end
         row.seen:SetText(p.seen and Ago(p.seen) or "")
-    elseif item.kind == "fold" then
-        row.note:SetText((item.open and FOLD_OPEN or FOLD_CLOSED) .. format(L["%d offline"], item.count))
     else
         row.note:SetText(item.text)
     end
@@ -3967,12 +3973,83 @@ local function BuildNetworkPanel()
     end)
     statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Folded cards and "n offline" lines, per guild (lowercased name).
-    p.open, p.offlineOpen = {}, {}
+    -- Folded cards, per guild (lowercased name).
+    p.open = {}
     -- My guild's members with La Taverne: asked once when the page opens.
     p:SetScript("OnShow", function() ns.Players:AskWho() end)
+
+    -- Under the title: how the players are sorted (kept), and whether offline ones show, mixed in
+    -- (greyed), for every guild at once (kept).
+    local SORTS = { { "name", L["Name"] }, { "seen", L["Last heard from"] }, { "version", L["Version"] } }
+    local sortLabel = NewLabel(p, L["Sort by"])
+    sortLabel:SetPoint("TOPLEFT", 8, -52)
+    local sortChoice = ns.NewDropdown(p)
+    sortChoice:SetWidth(170)
+    sortChoice:SetPoint("LEFT", sortLabel, "RIGHT", 10, 0)
+    sortChoice:SetupMenu(function(_, root)
+        for _, s in ipairs(SORTS) do
+            root:CreateRadio(s[2], function() return (ns.db.allianceSort or "name") == s[1] end, function()
+                ns.db.allianceSort = s[1] ~= "name" and s[1] or nil
+                wipe(p.order) -- (sorted again at once)
+                p:Refresh()
+            end)
+        end
+    end)
+    local offlineCheck = NewCheckbox(p, L["Show offline players"], function(self)
+        ns.db.allianceOffline = self:GetChecked() and true or nil
+        wipe(p.order)
+        p:Refresh()
+    end)
+    offlineCheck:SetPoint("LEFT", sortChoice, "RIGHT", 20, 0)
+    offlineCheck:SetScript("OnEnter", function(self)
+        ShowTooltip(self, { L["Show offline players"], L["Players not heard from lately, or only seen before this session, greyed, in the list with the others. For every guild."] })
+    end)
+    offlineCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- The order stays put for SORT_EVERY seconds (whatever the sort): rows don't jump around as
+    -- players answer or move up in "last heard from". Players new in the meantime go at the end
+    -- until the next sort. [guild key] = { at = GetTime(), rank = { [name key] = n } }.
+    local SORT_EVERY = 10
+    p.order = {}
+    local function Sorted(players, gkey)
+        local mode = ns.db.allianceSort or "name"
+        local function ByName(a, b) return a.name < b.name end
+        local cached = p.order[gkey]
+        if not cached or GetTime() - cached.at >= SORT_EVERY then
+            local less = ByName
+            if mode == "seen" then
+                less = function(a, b)
+                    if (a.seen or 0) ~= (b.seen or 0) then return (a.seen or 0) > (b.seen or 0) end
+                    return a.name < b.name
+                end
+            elseif mode == "version" then
+                -- Oldest version first (who needs to update), unknown last.
+                less = function(a, b)
+                    local va, vb = ns.Comm:GetVersion(a.name), ns.Comm:GetVersion(b.name)
+                    if va and vb and va ~= vb then return ns.CompareVersions(va, vb) < 0 end
+                    if (va ~= nil) ~= (vb ~= nil) then return va ~= nil end
+                    return a.name < b.name
+                end
+            end
+            table.sort(players, less)
+            local rank = {}
+            for i, pl in ipairs(players) do rank[ns.NameKey(pl.name) or pl.name] = i end
+            p.order[gkey] = { at = GetTime(), rank = rank }
+            -- (Sorted again once it's due, even with nothing new arriving.)
+            C_Timer.After(SORT_EVERY + 0.1, function() if p:IsShown() then p:Refresh() end end)
+            return players
+        end
+        local rank, last = cached.rank, #players + 1000
+        table.sort(players, function(a, b)
+            local ra, rb = rank[ns.NameKey(a.name) or a.name] or last, rank[ns.NameKey(b.name) or b.name] or last
+            if ra ~= rb then return ra < rb end
+            return a.name < b.name
+        end)
+        return players
+    end
+
     local list = NewScrollList(p, AllianceRowHeight, InitAllianceRow)
-    list:SetPoint("TOPLEFT", 0, -44)
+    list:SetPoint("TOPLEFT", 0, -78)
     list:SetPoint("BOTTOMRIGHT", -20, 0)
 
     -- Not set up yet: a short explanation, and the way to the setup for officers.
@@ -4013,6 +4090,11 @@ local function BuildNetworkPanel()
         if officer then status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0) else status:SetPoint("TOPRIGHT", -8, -12) end
         list:SetShown(active)
         status:SetShown(active)
+        sortLabel:SetShown(active)
+        sortChoice:SetShown(active)
+        offlineCheck:SetShown(active)
+        offlineCheck:SetChecked(ns.db.allianceOffline == true)
+        if sortChoice.GenerateMenu then sortChoice:GenerateMenu() end
         empty:SetShown(not active)
         emptyHint:SetShown(not active)
         -- Just after login the Guild Info isn't read yet: say so, not "not linked".
@@ -4110,16 +4192,14 @@ local function BuildNetworkPanel()
                 if #seen == 0 then
                     rows[#rows + 1] = { kind = "note", text = g.mine and L["Nobody else from your guild with La Taverne heard from yet."]
                         or L["Nobody from this guild heard from yet."] }
-                end
-                for _, pl in ipairs(online) do rows[#rows + 1] = { kind = "player", player = pl, mine = g.mine } end
-                -- The others (not heard from lately, or only before this session): folded.
-                if #offline > 0 then
-                    local showOffline = self.offlineOpen[key] == true
-                    rows[#rows + 1] = { kind = "fold", count = #offline, open = showOffline,
-                        onClick = function() self.offlineOpen[key] = not showOffline self:Refresh() end }
-                    if showOffline then
-                        for _, pl in ipairs(offline) do rows[#rows + 1] = { kind = "player", player = pl, mine = g.mine } end
+                else
+                    -- Online ones, and (the box at the top) offline ones mixed in, greyed.
+                    local shown = {}
+                    for _, pl in ipairs(ns.db.allianceOffline and seen or online) do shown[#shown + 1] = pl end
+                    if #shown == 0 then
+                        rows[#rows + 1] = { kind = "note", text = L["Nobody online right now."] }
                     end
+                    for _, pl in ipairs(Sorted(shown, key)) do rows[#rows + 1] = { kind = "player", player = pl, mine = g.mine } end
                 end
             end
         end

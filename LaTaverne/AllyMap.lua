@@ -207,11 +207,22 @@ local function OpenMapDraws(e)
     return db.friends ~= false and IsFriend(e)
 end
 
--- Whether a dot of ours shows for this one; false and "openmap" when OpenMap draws them already.
+-- OpenMap's map is on and its own "Guild members on the map" is off: the player doesn't want
+-- guild dots there, so ours hide too (instead of taking the place of OpenMap's), the allied
+-- guilds' as well (they count as the guild, here as everywhere in La Taverne).
+local function OpenMapHidesGuild()
+    if not OpenMapStitched() then return false end
+    local db = OpenMapSettings()
+    return db ~= nil and db.guild == false
+end
+
+-- Whether a dot of ours shows for this one; false and "openmap" when OpenMap draws them already
+-- (or OpenMap's guild switch is off).
 local function Visible(e)
     local s = Settings()
     if e.scope == "guild" and not s.showGuild then return false end
     if e.scope == "ally" and not s.showAllies then return false end
+    if OpenMapHidesGuild() then return false, "openmap" end
     if GetTime() - e.at > GONE_AFTER then return false end
     if InMyGroup(e) then return false end
     if OpenMapDraws(e) then return false, "openmap" end
@@ -288,15 +299,27 @@ local function ShowTooltip(pin)
     if not e then return end
     GameTooltip:SetOwner(pin, "ANCHOR_RIGHT")
     GameTooltip:AddLine(e.name, ClassColor(e.c))
+    local info = C_Map.GetMapInfo(e.m)
+    local ago = math.floor(GetTime() - e.at)
+    -- With OpenMap: its dots' look (Friends.lua's DotEnter), so all dots read alike: level, place,
+    -- then who they are in its light blue: "Guild", or the allied guild's name.
+    if OpenMapAPI then
+        if e.l and e.l > 0 then GameTooltip:AddLine((LEVEL or "Level") .. " " .. e.l, 1, 1, 1) end
+        GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
+        local who = GUILD or "Guild"
+        if e.scope == "ally" then who = e.guild or (e.tag and ("[" .. e.tag .. "]")) or who end
+        GameTooltip:AddLine(who, 0.6, 0.8, 1)
+        if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
+        GameTooltip:Show()
+        return
+    end
     if e.scope == "ally" then
         GameTooltip:AddLine((e.tag and ("[" .. e.tag .. "] ") or "") .. (e.guild or ""), TAG_COLOR[1], TAG_COLOR[2], TAG_COLOR[3])
     else
         GameTooltip:AddLine(GUILD or "Guild", GuildColor())
     end
     if e.l and e.l > 0 then GameTooltip:AddLine(L["Level %d"]:format(e.l), 1, 1, 1) end
-    local info = C_Map.GetMapInfo(e.m)
     GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
-    local ago = math.floor(GetTime() - e.at)
     if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
     GameTooltip:Show()
 end
@@ -596,29 +619,6 @@ local function AddOpenMapToggles()
     end
 end
 
--- The game map's own filter menu (the button at its top right that lists what the map shows):
--- the same two switches, so they're at hand on the game's map too, without OpenMap. The player
--- opens that menu; La Taverne only adds lines to it, through the game's menu system. Whether the
--- menu showed them: /taverne map ("filter menu").
-AllyMap.stats.filterMenu = "not available"
-local filterHooked = false
-local function AddMapFilterToggles()
-    if filterHooked or not (Menu and Menu.ModifyMenu) then return end
-    filterHooked = true
-    AllyMap.stats.filterMenu = "added, not opened yet"
-    pcall(Menu.ModifyMenu, "MENU_WORLD_MAP_TRACKING", function(_, root)
-        AllyMap.stats.filterMenu = "shown"
-        if not (root and root.CreateCheckbox) then return end
-        if root.CreateDivider then root:CreateDivider() end
-        root:CreateCheckbox(L["Guild members (La Taverne)"], function() return Settings().showGuild end,
-            function() AllyMap:SetShow("guild", not Settings().showGuild) end)
-        if ns.Alliance:IsActive() then
-            root:CreateCheckbox(L["Allied guilds (La Taverne)"], function() return Settings().showAllies end,
-                function() AllyMap:SetShow("ally", not Settings().showAllies) end)
-        end
-    end)
-end
-
 -- A lynx tab on the game map's right edge, where and as OpenMap shows its own: a click opens the
 -- two switches. Only without OpenMap's map (its menu has them, and a star puts them on its map),
 -- and only while Options, Map leaves it on. Lit while a switch is on, greyed while both are off.
@@ -761,7 +761,6 @@ function AllyMap:OnLogin()
         end)
     end
     AddOpenMapToggles()
-    AddMapFilterToggles()
     ns.On("ADDON_LOADED", function(name)
         if name == "OpenMap" then AddOpenMapToggles() end
     end)
@@ -769,6 +768,18 @@ function AllyMap:OnLogin()
     ns.On("GROUP_ROSTER_UPDATE", Refresh)                 -- (my group's own dots are the game's)
     C_Timer.NewTicker(TICK, Tick)
     C_Timer.NewTicker(PRUNE_EVERY, Prune)
+    -- OpenMap's guild switch doesn't tell us when it changes: while the map is open, look each
+    -- second, and redraw at once (otherwise each dot waited for its player's next position).
+    local openMapHid = false
+    C_Timer.NewTicker(1, function()
+        if not MapShown() then return end
+        AllyMap:UpdateMapButton() -- (OpenMap's map switched on or off: the lynx tab follows)
+        local hid = OpenMapHidesGuild()
+        if hid ~= openMapHid then
+            openMapHid = hid
+            Refresh()
+        end
+    end)
     -- Sharing is on by default: said once, so nobody shares without knowing it.
     C_Timer.After(15, function()
         local s = Settings()
@@ -790,7 +801,10 @@ ns.commands.map = function()
     local st = AllyMap.stats
     ns.Print(format("map: sent %d, off %d, received %d, rejected %d, expired %d, drawn %d, left to OpenMap %d",
         st.sent, st.offSent, st.received, st.rejected, st.expired, st.drawn, st.skippedOpenMap))
-    ns.Print("map: switches in the game map's filter menu: " .. tostring(st.filterMenu))
+    local om = OpenMapSettings()
+    ns.Print(format("map: OpenMap %s, its map %s, its guild switch %s: La Taverne's guild and allied dots %s",
+        OpenMapAPI and "loaded" or "not loaded", OpenMapStitched() and "on" or "off",
+        om and (om.guild == false and "off" or "on") or "?", OpenMapHidesGuild() and "hidden" or "follow La Taverne's switches"))
     local now = GetTime()
     for _, e in pairs(live) do
         ns.Print(format("  %s (%s%s) map %d %.1f, %.1f, %d s ago", e.name, e.scope, e.tag and (" " .. e.tag) or "",

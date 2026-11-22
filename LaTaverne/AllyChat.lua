@@ -307,6 +307,8 @@ local LINK_COLORS = { item = "ffffffff", quest = "ffffff00" }
 
 local function SafeLink(kind, data, name)
     if not LINK_TYPES[kind] or #data > 150 then return nil end
+    -- Letters only in an achievement's (a player's ID, and its data isn't used): the others are numbers.
+    if kind ~= "achievement" and data:find("[^%d:%-]") then return nil end
     name = name:gsub("|", "")
     if name == "" or #name > 100 then return nil end
     if kind == "item" then

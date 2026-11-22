@@ -212,7 +212,7 @@ end
 function Groups:HasRepost()
     local r = CharDB().repost
     if r and GetServerTime() - (r.time or 0) > REPOST_KEEP then CharDB().repost = nil r = nil end
-    return r ~= nil and not self:GetMine()
+    return r ~= nil and not self:GetMine() and not self:GetJoined()
 end
 
 -- The kept settings, once (nil when none).
@@ -789,7 +789,7 @@ end
 
 -- "Announce in chat" (My group), on demand: a La Taverne line for the players who run it, not a
 -- guild chat line. "Oylex is looking for 1 Tank, 2 DPS: Hall of Thanes 13-20 [View]", in their
--- La Taverne messages, with the same filters as new group alerts. My guild, and the allied
+-- La Taverne messages (their own on/off in Options, the ignore list, quiet). My guild, and the allied
 -- guilds (with a Guild Alliance every group is shown to them). Not in the first 5 minutes of
 -- the group (everyone just got the new group alert), then at most once every 5 minutes.
 -- (Test mode: the test channel, like every La Taverne message.)
@@ -1017,6 +1017,9 @@ function Groups:Create(dungeon, roles, invites, note, composition, options)
     options = options or {}
     if not self:CanPost() then return end
     if self:GetMine() then self:Delist() end
+    -- A new group (posted, or handed to me): a removed group's settings aren't wanted any more.
+    CharDB().repost = nil
+    if ns.UI then ns.UI.repost = nil end
     if ns.Players then ns.Players:Stop(L["You posted a group: you're no longer available."]) end
     local now = GetServerTime()
     local me = ns.FullName("player")
@@ -1367,11 +1370,20 @@ end
 -- Message handlers -------------------------------------------------------------------
 
 -- A leader's "Announce in chat": their group's line in my La Taverne messages (alert filters).
+-- The sender's button has its limits (not in the group's first minutes, then once every few
+-- minutes); a changed client could skip them, so they're kept here too (a little slack for
+-- clocks and delays).
+local lastAnnounce = {} -- [leader key] = GetTime()
 OnBoth("ANNOUNCE", function(sender, p, isSelf, scope)
     if isSelf or type(p) ~= "table" or type(p.id) ~= "string" then return end
     local l = listings[p.id]
     if not l or ns.NameKey(l.leader) ~= ns.NameKey(sender) then return end
     if not Groups:IsOpen(l) then return end
+    local key = ns.NameKey(sender)
+    if lastAnnounce[key] and GetTime() - lastAnnounce[key] < Groups.GUILD_POST_COOLDOWN - 20 then return end
+    local from = math.max(l.created or 0, type(l.reopened) == "number" and l.reopened or 0)
+    if GetServerTime() - from < Groups.ANNOUNCE_AFTER - 20 then return end
+    lastAnnounce[key] = GetTime()
     AlertNewGroup(l, false, true)
 end)
 
@@ -1670,9 +1682,12 @@ function Groups:OnLogin()
         end
         -- In progress and not looking for anyone: alone too long, or started too long ago.
         if mine and mine.started and not Groups:IsOpen(mine) then
+            -- (A group is complete as soon as its players are accepted, before they join the
+            -- party: "alone" only counts once the party has had members.)
             if IsInGroup() then
+                mine.hadParty = true
                 mine.aloneSince, mine.aloneWarned = nil, nil
-            else
+            elseif mine.hadParty then
                 mine.aloneSince = mine.aloneSince or now
                 -- Told once, right away (not when it was already too late at login).
                 if not mine.aloneWarned and now - mine.aloneSince < ALONE_MAX then

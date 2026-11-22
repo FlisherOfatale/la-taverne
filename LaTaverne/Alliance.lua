@@ -364,22 +364,49 @@ function Alliance.WithNewTestKey(text)
 end
 
 local ownLinesSig = "nil|nil"
+-- Turning the alliance off waits for a second read: a read that comes back without it (an empty
+-- Guild Info during a loading screen, the guild for a moment not known) isn't the officers
+-- removing it. OFF_CONFIRM seconds later, still off: then it's off.
+local OFF_CONFIRM = 5
+local offSince      -- when a read first came back without the alliance (waiting to confirm)
+local saidOff       -- "Guild Alliance: off." was said: say when it's back on
+local emptyRetry    -- the Guild Info came back empty: a new read is on its way
+
+-- Does this setup link us to another guild (a key and a guild that isn't mine)?
+local function ActiveIn(cfg)
+    if not cfg.key then return false end
+    for lname in pairs(cfg.guilds) do
+        if not ns.Guild:IsMyGuild(lname) then return true end
+    end
+    return false
+end
 
 -- Re-read the Guild Info and follow any change (called at login and on guild updates).
 function Alliance:Refresh()
     if not ns.Comm:IsLoggedIn() then return end
+    local read -- the setup just read (nil: nothing new read)
     if not ns.Guild:InGuild() then
-        config = { guilds = {}, key = nil }
+        read = { guilds = {}, key = nil }
     else
         local text = ns.Guild:GetInfoText()
+        -- An empty Guild Info: not loaded yet (after a login or /reload, until the game gets the
+        -- guild's data; opening the game's guild window does it). Not a real one: those aren't
+        -- empty. Ask the game for it and read again shortly; meanwhile, the setup saved last time.
+        -- (Test mode's made-up Guild Info can be empty for real.)
+        if text == "" and not ns.Guild:IsSandbox() then
+            text = nil
+            if not emptyRetry then
+                emptyRetry = true
+                if ns.Guild.RequestRoster then ns.Guild.RequestRoster() end
+                C_Timer.After(3, function()
+                    emptyRetry = false
+                    Alliance:Refresh()
+                end)
+            end
+        end
         if text then
             infoPending = false
-            config = Alliance.Parse(text)
-            infoKnown = true
-            if not ns.Guild:IsSandbox() then
-                SavedSetup().alliance = { guild = ns.Guild:GetName(), guilds = config.guilds, key = config.key,
-                    autoInvite = config.autoInvite, relay = config.relay }
-            end
+            read = Alliance.Parse(text)
         else
             -- Blocked for now: keep the current setup (and channel) instead of turning it off.
             infoPending = true
@@ -388,6 +415,25 @@ function Alliance:Refresh()
             if configSig ~= "" or not saved or not saved.guild or saved.guild ~= ns.Guild:GetName() then return end
             config = { guilds = saved.guilds or {}, key = saved.key, autoInvite = saved.autoInvite, relay = saved.relay }
             infoKnown = true
+        end
+    end
+    if read then
+        -- Linked until now, and this read says no: read again in a moment before believing it.
+        if ActiveIn(config) and not ActiveIn(read) then
+            -- (An offSince from long ago, its second read blocked meanwhile, doesn't count: start over.)
+            if not offSince or GetTime() - offSince > OFF_CONFIRM * 3 then
+                offSince = GetTime()
+                C_Timer.After(OFF_CONFIRM + 0.5, function() Alliance:Refresh() end)
+                return
+            end
+            if GetTime() - offSince < OFF_CONFIRM then return end
+        end
+        offSince = nil
+        config = read
+        infoKnown = true
+        if ns.Guild:InGuild() and not ns.Guild:IsSandbox() then
+            SavedSetup().alliance = { guild = ns.Guild:GetName(), guilds = config.guilds, key = config.key,
+                autoInvite = config.autoInvite, relay = config.relay }
         end
     end
 
@@ -419,6 +465,7 @@ function Alliance:Refresh()
             ns.Comm:LeaveChannel("ally")
             ns.Comm:LeaveChannel("allyOld")
             ns.Print(ns.L["Guild Alliance: off."])
+            saidOff = true
         end
         Alliance:Changed()
         return
@@ -430,6 +477,10 @@ function Alliance:Refresh()
         ns.Print(ns.L["Guild Alliance: the key changed, switching channel."])
     end
     ns.Comm:JoinChannel("ally", name, config.key)
+    if saidOff then
+        saidOff = nil
+        ns.Print(ns.L["Guild Alliance: on again."])
+    end
     Alliance:Changed()
 end
 
