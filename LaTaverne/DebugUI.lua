@@ -453,7 +453,7 @@ function ns.ShowMessageLog()
     local FILTER_TIP = L["Untick what you don't want to see. The counts at the top stay complete, and the text says what's left out. Kept for next time."]
     local hint
     if not ns.Comm:IsLogging() then
-        hint = L["Off: start it on the Debug tab (or /taverne msglog on). Copy with Ctrl+A, Ctrl+C."]
+        hint = L["Off: tick Recording to start it. Copy with Ctrl+A, Ctrl+C."]
     elseif dev.msgLogAuto then
         hint = L["On: new messages show by themselves. Copy with Ctrl+A, Ctrl+C."]
     else
@@ -475,10 +475,15 @@ function ns.ShowMessageLog()
               generator = SendersMenu, width = 160, tooltip = { L["Senders"], FILTER_TIP } },
         },
         checks = {
+            -- Recording: on or off right now (the ticked box says it), first.
             {
-                text = L["Auto-refresh"], checked = dev.msgLogAuto,
-                onClick = function(on) dev.msgLogAuto = on ns.ShowMessageLog() end,
-                tooltip = { L["Auto-refresh"], L["New messages show by themselves, every 2 seconds. It waits while the mouse is over the text, or a moment after a key in it, so you can select and copy."] },
+                text = L["Recording"], checked = ns.Comm:IsLogging(),
+                onClick = function(on)
+                    ns.Comm:SetLogging(on)
+                    ns.ShowMessageLog()
+                    if ns.RefreshDebugPanel then ns.RefreshDebugPanel() end -- (its start/stop button follows)
+                end,
+                tooltip = { L["Recording"], L["Ticked: the log records now (the last 300 lines, in memory). Unticked: stopped; starting it again starts a new log."] },
             },
             {
                 text = L["Always record"], checked = dev.msgLogAlways,
@@ -486,9 +491,16 @@ function ns.ShowMessageLog()
                     dev.msgLogAlways = on
                     if on and not ns.Comm:IsLogging() then ns.Comm:SetLogging(true) end
                     ns.ShowMessageLog()
+                    if ns.RefreshDebugPanel then ns.RefreshDebugPanel() end
                 end,
                 tooltip = { L["Always record"], L["The log starts on its own at every login and after a /reload (this choice is kept). You get the first messages after logging in, and when something goes wrong the log is already there to copy. It only keeps the last 300 lines, in memory: it costs next to nothing."] },
             },
+        },
+        -- Auto-refresh: at the bottom, next to Refresh.
+        buttonCheck = {
+            text = L["Auto-refresh"], checked = dev.msgLogAuto,
+            onClick = function(on) dev.msgLogAuto = on ns.ShowMessageLog() end,
+            tooltip = { L["Auto-refresh"], L["New messages show by themselves, every 2 seconds. It waits while the mouse is over the text, or a moment after a key in it, so you can select and copy."] },
         },
         autoFill = dev.msgLogAuto and MsgLogText or nil,
     })
@@ -574,6 +586,7 @@ function ns.BuildDebugPanel()
     msgLog:SetScript("OnClick", function()
         ns.Comm:SetLogging(not ns.Comm:IsLogging())
         p:Refresh()
+        if ns.TextDialogShown("msglog") then ns.ShowMessageLog() end -- (its Recording box follows)
     end)
     local showLog = K.NewButton(p, L["Show the message log"], W, 24)
     showLog:SetPoint("LEFT", msgLog, "RIGHT", 8, 0)
@@ -642,5 +655,7 @@ function ns.BuildDebugPanel()
         msgLog:SetText(ns.Comm:IsLogging() and L["Stop the message log"] or L["Start the message log"])
         fakeRunners:SetText(ns.Invites:HasFakeRunners() and L["Remove the fake inviters"] or L["Fake others inviting"])
     end
+    -- (the message log window's boxes switch the log too: this tab's button follows)
+    ns.RefreshDebugPanel = function() if p:IsShown() then p:Refresh() end end
     return p
 end

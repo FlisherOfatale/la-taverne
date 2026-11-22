@@ -366,10 +366,16 @@ ns.On("CHAT_MSG_CHANNEL_NOTICE", function(notice, _, _, _, _, _, _, _, baseName)
         ns.Print("could not join the hidden channel " .. ch.name .. " (" .. notice .. "). Messages there are disabled until the next reload."
             .. (ns.GamepadUI() and (" " .. ns.L["Close the password window with Cancel (B)."]) or ""))
     elseif notice == "YOU_LEFT" then
-        -- Dropped by the game (not by me: LeaveChannel forgets the channel first): back in shortly.
-        ch.ready = false
-        Comm:LogNote("dropped from " .. ch.name .. ": joining again")
-        C_Timer.After(2, function() Comm:Reconnect(ch) end)
+        -- Dropped by the game (not by me: LeaveChannel forgets the channel first, and a ghost
+        -- rejoin marks it "leaving"): back in shortly. Every role on that channel.
+        local lower = ch.name:lower()
+        for _, c in pairs(channels) do
+            if c.name:lower() == lower and not c.leaving then
+                c.ready = false
+                Comm:LogNote("dropped from " .. c.name .. ": joining again")
+                C_Timer.After(2, function() Comm:Reconnect(c) end)
+            end
+        end
     end
 end)
 
@@ -419,6 +425,125 @@ function Comm:Reconnect(ch)
     C_Timer.After(0.5, function() Probe(ch) end)
 end
 
+-- A "ghost" channel: the server dropped me without the game noticing. The game still gives the
+-- channel's number by its name (so it looks joined, even "ready"), but it's gone from the list of
+-- channels the server sends (the game's Channels window): nothing goes out or comes in. Seen when
+-- the game's chat server drops and comes back. Each check looks for it in that list; missing
+-- twice in a row: leave it and join again straight away (not asking the game "am I in it?": in
+-- this state it says yes). At most once a minute, five times in a row, then given up until it
+-- shows in the list again. Notes in the message log only.
+local GHOST_CHECKS, REJOIN_GAP, REJOIN_MAX = 2, 60, 5
+local GIVE_UP_FOR = 600 -- after REJOIN_MAX tries in a row: try again this much later (never for good)
+
+local function Secret(v) return issecretvalue ~= nil and issecretvalue(v) end
+
+-- In the server's channel list? true / false, nil when it can't be told: the list empty or not
+-- filled yet (just after login, while the game joins channels again after a chat server drop),
+-- or a folded group in the game's Channels window hiding its channels.
+local function Listed(id)
+    if not id or Secret(id) or not (GetNumDisplayChannels and GetChannelDisplayInfo) then return nil end
+    local ok, n = pcall(GetNumDisplayChannels)
+    if not ok or type(n) ~= "number" or Secret(n) or n == 0 then return nil end
+    local folded, channelsSeen = false, 0
+    for i = 1, n do
+        local ok2, _, header, collapsed, localID = pcall(GetChannelDisplayInfo, i)
+        if ok2 and not (Secret(header) or Secret(collapsed) or Secret(localID)) then
+            if header then
+                if collapsed then folded = true end
+            else
+                channelsSeen = channelsSeen + 1
+                if localID == id then return true end
+            end
+        end
+    end
+    -- Only "not there" when the list has other channels in it, all unfolded.
+    if folded or channelsSeen == 0 then return nil end
+    return false
+end
+
+-- Every one of my roles on this channel (sandbox tests can put two roles on one).
+local function SameChannel(name)
+    local out, lower = {}, name:lower()
+    for _, ch in pairs(channels) do
+        if ch.name:lower() == lower then out[#out + 1] = ch end
+    end
+    return out
+end
+
+local function RejoinGhost(ch)
+    local now = GetTime()
+    if ch.rejoinAt and now - ch.rejoinAt < REJOIN_GAP then return end
+    if (ch.rejoins or 0) >= REJOIN_MAX then
+        -- Not given up for good: a longer wait, then the tries start over.
+        if not ch.gaveUpAt then
+            ch.gaveUpAt = now
+            Comm:LogNote("ghost channel " .. ch.name .. ": still not in the server's list after " .. REJOIN_MAX
+                .. " tries, trying again in " .. GIVE_UP_FOR / 60 .. " min", "ghost channel")
+        end
+        if now - ch.gaveUpAt < GIVE_UP_FOR then return end
+        ch.rejoins, ch.gaveUpAt = 0, nil
+    end
+    ch.rejoins, ch.rejoinAt = (ch.rejoins or 0) + 1, now
+    Comm:LogNote("ghost channel " .. ch.name .. ": not in the server's list, leaving and joining again (" .. ch.rejoins .. ")", "ghost channel")
+    local same = SameChannel(ch.name)
+    -- (leaving: the "you left" notice is mine, not the game's; probing: nothing else joins meanwhile)
+    for _, c in ipairs(same) do c.ready, c.lost, c.probing, c.leaving = false, true, true, true end
+    pcall(LeaveChannelByName, ch.name)
+    -- Join once the leave went through (the game no longer gives the channel's number), so the join
+    -- isn't a no-op on a channel the game still thinks it's in; after a few seconds, join anyway.
+    local waited = 0
+    local function Join()
+        local alive = {}
+        for _, c in ipairs(same) do
+            if channels[c.role] == c and not c.failed then alive[#alive + 1] = c else c.probing, c.leaving = false, nil end
+        end
+        if #alive == 0 then return end
+        if GetChannelName(ch.name) ~= 0 and waited < 5 then
+            waited = waited + 1
+            C_Timer.After(1, Join)
+            return
+        end
+        for _, c in ipairs(alive) do c.leaving = nil end
+        pcall(JoinTemporaryChannel, ch.name, ch.password)
+        for _, c in ipairs(alive) do
+            c.tries = 0
+            C_Timer.After(0.5, function() Probe(c) end)
+        end
+    end
+    C_Timer.After(1, Join)
+end
+
+-- For /taverne ally: is this channel in the server's list ("yes", "NO (ghost)", "can't tell")?
+function Comm:ChannelListed(ch)
+    local id = ch and ChannelId(ch)
+    if not id then return "not joined" end
+    local listed = Listed(id)
+    return listed == true and "yes" or listed == false and "NO (ghost)" or "can't tell (list empty or a group folded)"
+end
+
+-- Two checks in a row with the channel missing from the list: rejoin it. A check that can't
+-- tell, or skips the channel, starts the count over (an old miss doesn't count much later).
+function Comm:CheckGhosts()
+    local done = {}
+    for _, ch in pairs(channels) do
+        local lower = ch.name:lower()
+        local id = not done[lower] and not ch.failed and not ch.probing and ChannelId(ch)
+        local listed = id and Listed(id)
+        if listed == true then
+            ch.ghost, ch.rejoins, ch.gaveUpAt = 0, 0, nil
+        elseif listed == false then
+            ch.ghost = (ch.ghost or 0) + 1
+            if ch.ghost >= GHOST_CHECKS then
+                ch.ghost = 0
+                done[lower] = true
+                RejoinGhost(ch)
+            end
+        else
+            ch.ghost = 0
+        end
+    end
+end
+
 -- Join (or rejoin) a hidden channel for a role. Replaces what the role had before.
 function Comm:JoinChannel(role, name, password)
     local old = channels[role]
@@ -426,6 +551,8 @@ function Comm:JoinChannel(role, name, password)
     if old and old.name ~= name then self:LeaveChannel(role) end
     local ch = { role = role, name = name, password = password, ready = false, failed = false, tries = 0, probing = true }
     channels[role] = ch
+    -- (from now on its messages are recognized: the ones held since login go first)
+    if role == "ally" then C_Timer.After(0, function() if Comm.ReplayHeldAlly then Comm.ReplayHeldAlly() end end) end
     if GetChannelName(name) == 0 then
         JoinTemporaryChannel(name, password)
     end
@@ -539,7 +666,41 @@ function Comm:Send(msgType, payload, priority, noQueue)
     return false
 end
 
+-- Just after login or a /reload, messages arrive before La Taverne is ready for them: the guild
+-- roster isn't read yet (a guildmate looks like a stranger), and the alliance channel, which a
+-- reload doesn't leave, delivers before La Taverne has taken it back (after reading the Guild
+-- Info). For EARLY_FOR seconds such messages are held, not dropped, and read again once the
+-- roster or the channel is there (going through every check as usual then).
+-- Held messages are always read again before any newer one is handled (the moment the roster or
+-- the channel is there, and first thing when a live message comes), so an old state never
+-- overwrites a newer one and a message in several parts stays whole.
+local EARLY_FOR, EARLY_MAX = 60, 300
+local loadedAt = GetTime() -- (set again at login: the window counts from entering the world)
+local earlyGuild, earlyAlly = {}, {}
+local replaying = false
+local function Early() return not replaying and GetTime() - loadedAt < EARLY_FOR end
+local ReplayGuild, ReplayAlly -- (below)
+local function RosterRead() return ns.Guild:GetRosterCount() > 0 end
+local PER_SENDER = 20 -- held messages per sender at most (one sender the roster never matches can't fill it; room for a message in parts and a minute of positions)
+
+-- Hold a message, within the limits: past PER_SENDER for that sender, or EARLY_MAX in all, the
+-- oldest one goes (never the new one: an old state must not be read after a newer one).
+local function Hold(list, entry, sender)
+    local n, first = 0, nil
+    for i, m in ipairs(list) do
+        if m[4] == sender then
+            n = n + 1
+            first = first or i
+        end
+    end
+    if n >= PER_SENDER then table.remove(list, first) end
+    if #list >= EARLY_MAX then table.remove(list, 1) end
+    list[#list + 1] = entry
+end
+
 local function OnGuildReceive(prefix, text, distribution, sender)
+    -- Held ones first, once the roster is read.
+    if not replaying and #earlyGuild > 0 and RosterRead() then ReplayGuild() end
     -- Only accept the route that matches the current mode.
     if ns.Guild:IsSandbox() then
         if distribution ~= "CHANNEL" then
@@ -557,6 +718,14 @@ local function OnGuildReceive(prefix, text, distribution, sender)
         return
     end
     if not ns.Guild:IsMember(sender) then
+        -- (the roster may not be read yet, or only partly: held, checked again at each roster
+        -- update, rejected only at the end of the early minute)
+        if not ns.Guild:IsSandbox() and Early() then
+            Hold(earlyGuild, { prefix, text, distribution, sender }, sender)
+            Trace("in", "guild", msgType, sender, #text,
+                RosterRead() and "held: not in the roster read so far" or "held: guild roster not read yet", payload)
+            return
+        end
         Comm.stats.rejected = Comm.stats.rejected + 1
         Trace("in", "guild", msgType, sender, #text, "rejected: not in the guild", payload, "sender not in the guild")
         if ns.Guild:IsSandbox() then
@@ -763,11 +932,26 @@ local function OnAllyMessage(text, sender)
 
 end
 
-ns.On("CHAT_MSG_ADDON", function(prefix, message, distribution, sender, target, zoneChannelID, localID, channelName)
+local function OnAllyAddon(prefix, message, distribution, sender, target, zoneChannelID, localID, channelName)
     if not ALLY_PREFIXES[prefix] then return end
     if distribution ~= "CHANNEL" then return end
+    -- Held ones first, once my alliance channel is set up.
+    if not replaying and #earlyAlly > 0 and channels.ally then ReplayAlly() end
     local fromOurs = FromAllyChannel(target, localID, channelName)
     Comm.lastAllyCheck = { target = target, localID = localID, channelName = channelName, ok = fromOurs }
+    -- From a La Taverne alliance channel before mine is set up (just after login): held.
+    if not fromOurs and not channels.ally and Early() then
+        local name = type(channelName) == "string" and channelName ~= "" and channelName
+        if not name and tonumber(localID) and tonumber(localID) > 0 then
+            local _, n = GetChannelName(tonumber(localID))
+            name = n
+        end
+        if type(name) == "string" and name:lower():match("^latavernea%w+$") then
+            Hold(earlyAlly, { prefix, message, distribution, sender, target, zoneChannelID, localID, channelName }, sender)
+            Trace("in", "ally", "?", sender, type(message) == "string" and #message or 0, "held: alliance channel not set up yet")
+            return
+        end
+    end
     if not fromOurs then
         Comm.stats.rejected = Comm.stats.rejected + 1
         Trace("in", "ally", "?", sender, type(message) == "string" and #message or 0,
@@ -801,6 +985,74 @@ ns.On("CHAT_MSG_ADDON", function(prefix, message, distribution, sender, target, 
             OnAllyMessage(p.text, sender)
         end
     end
+end
+ns.On("CHAT_MSG_ADDON", OnAllyAddon)
+
+-- The held messages, read again (once the roster is read, once my alliance channel is ready,
+-- and a last time when the early minute is over).
+-- One held message, read again; an error goes to the error report with its call stack, like a
+-- message handled live, and the rest of the list goes on.
+local function ReportError(err)
+    local was = replaying
+    replaying = false
+    pcall(geterrorhandler(), err)
+    replaying = was
+end
+local function Run(fn, ...)
+    xpcall(fn, ReportError, ...)
+end
+
+-- Guild: the senders the roster knows now go through (in the order they came); the others stay
+-- held until a later roster update, or the end of the early minute (final: all read, so the
+-- unknown ones are rejected then).
+function ReplayGuild(final)
+    if #earlyGuild == 0 then return end
+    local list, keep = earlyGuild, {}
+    earlyGuild = {}
+    replaying = true
+    for _, m in ipairs(list) do
+        if final or ns.Guild:IsMember(m[4]) then Run(OnGuildReceive, m[1], m[2], m[3], m[4]) else keep[#keep + 1] = m end
+    end
+    replaying = false
+    for _, m in ipairs(earlyGuild) do keep[#keep + 1] = m end -- (none expected: held while replaying can't happen)
+    earlyGuild = keep
+end
+
+-- Alliance: only once my alliance channel is set up. Still not set up when the early minute is
+-- over (final: the Guild Info blocked that long, or no alliance any more): dropped and counted,
+-- not kept (newer ones from the same players are rejected meanwhile: replayed later, the old ones
+-- would bring old states back).
+function ReplayAlly(final)
+    if #earlyAlly == 0 then return end
+    if not channels.ally then
+        if final then
+            Comm.stats.rejected = Comm.stats.rejected + #earlyAlly
+            Comm:LogNote(#earlyAlly .. " held allied message(s) dropped: the alliance channel still isn't set up", "held, no alliance channel")
+            earlyAlly = {}
+        end
+        return
+    end
+    local list = earlyAlly
+    earlyAlly = {}
+    replaying = true
+    local stale = 0
+    for _, m in ipairs(list) do
+        -- From a La Taverne channel that isn't mine (the side left by a test mode switch, an old
+        -- key): dropped with one note, not a "wrong channel" line each.
+        if FromAllyChannel(m[5], m[7], m[8]) then Run(OnAllyAddon, unpack(m, 1, 8)) else stale = stale + 1 end
+    end
+    replaying = false
+    if stale > 0 then
+        Comm.stats.rejected = Comm.stats.rejected + stale
+        Comm:LogNote(stale .. " held message(s) from a La Taverne channel not mine any more: dropped", "held from an old channel")
+    end
+end
+Comm.ReplayHeldAlly = ReplayAlly -- (for JoinChannel, further up)
+-- (Guild.lua rebuilds the roster on the same event, after this handler: checked a moment later.)
+ns.On("GUILD_ROSTER_UPDATE", function()
+    if #earlyGuild > 0 then
+        C_Timer.After(0.5, function() if RosterRead() then ReplayGuild() end end)
+    end
 end)
 
 -- Sandbox channel ----------------------------------------------------------------
@@ -822,6 +1074,8 @@ end
 
 -- Other listeners for "a channel is ready" (the window shows the alliance channel's state).
 Comm.readyListeners = {}
+-- My alliance channel ready: the allied messages held since login are read again.
+table.insert(Comm.readyListeners, function(role) if role == "ally" then C_Timer.After(0, ReplayAlly) end end)
 function Comm:OnReady(fn) self.readyListeners[#self.readyListeners + 1] = fn end
 
 function Comm:IsLoggedIn()
@@ -835,6 +1089,11 @@ function Comm:OnInit()
 end
 
 function Comm:OnLogin()
+    loadedAt = GetTime()
+    C_Timer.After(EARLY_FOR + 1, function()
+        ReplayGuild(true)
+        ReplayAlly(true)
+    end)
     C_ChatInfo.RegisterAddonMessagePrefix(PROBE_PREFIX)
     for prefix in pairs(ALLY_PREFIXES) do C_ChatInfo.RegisterAddonMessagePrefix(prefix) end
     self:RegisterComm(PREFIX, OnGuildReceive)
@@ -846,17 +1105,27 @@ function Comm:OnLogin()
     -- screen) joins again; before this it stayed "connecting" until a reload.
     C_Timer.NewTicker(15, function()
         for _, ch in pairs(channels) do Comm:Reconnect(ch) end
+        Comm:CheckGhosts()
+    end)
+    -- The game's chat server drops and comes back ("You have been disconnected from..."): our
+    -- channels can be left as ghosts then. Checked 15, 30 and 45 s after it's back. (Events that
+    -- may not exist on every client: registered with care, on a frame of their own.)
+    local chatServer = CreateFrame("Frame")
+    for _, event in ipairs({ "CHAT_SERVER_DISCONNECTED", "CHAT_SERVER_RECONNECTED" }) do
+        pcall(chatServer.RegisterEvent, chatServer, event)
+    end
+    chatServer:SetScript("OnEvent", function(_, event)
+        if event == "CHAT_SERVER_DISCONNECTED" then
+            Comm:LogNote("the game's chat server dropped")
+            return
+        end
+        Comm:LogNote("the game's chat server is back: checking the channels")
+        -- (the game joins its channels again first: checked a little later, two misses needed as always)
+        for _, delay in ipairs({ 15, 30, 45 }) do C_Timer.After(delay, function() Comm:CheckGhosts() end) end
     end)
 end
 
--- /taverne msglog [on | off | show]: no argument switches it on or off and shows it.
-ns.commands.msglog = function(arg)
-    arg = strtrim(arg or ""):lower()
-    if arg == "on" or arg == "off" then
-        Comm:SetLogging(arg == "on")
-        ns.Print("message log " .. arg)
-        return
-    end
-    if arg == "" then Comm:SetLogging(not Comm:IsLogging()) end
+-- /taverne msglog: opens the message log window (on or off: its Recording box, or the Debug tab).
+ns.commands.msglog = function()
     if ns.ShowMessageLog then ns.ShowMessageLog() end
 end

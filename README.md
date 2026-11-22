@@ -60,6 +60,8 @@ Everything works inside your own guild right away. Linking allied guilds is done
 
 The **Alliance** tab has one card per guild: who is online with La Taverne (with their version, and a mark for an old one), the players seen in the last two weeks, and how many open groups and available players each guild has right now. Sort the players by name, last heard from or version (to see who needs to update), and show the offline ones or not.
 
+The guilds talk over a hidden channel. If the game drops it (a chat server hiccup, a loading screen), La Taverne joins it again on its own, and nothing sent in the first seconds after a login or `/reload` is lost.
+
 ### World map
 
 - Your guildmates and allied players who run La Taverne show as class-colored dots on the world map: a green ring for your guild, a blue ring for allies. Hover a dot for the name, guild, level and place.
@@ -172,6 +174,8 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 ### Alliance
 
 L'onglet **Alliance** a une carte par guilde : qui est en ligne avec La Taverne (avec sa version, et une marque pour une ancienne), les joueurs vus ces deux dernières semaines, et combien de groupes ouverts et de joueurs disponibles chaque guilde a en ce moment. Triez les joueurs par nom, dernier signe ou version (pour voir qui doit mettre à jour), et affichez ou non ceux qui sont hors ligne.
+
+Les guildes communiquent par un canal caché. Si le jeu le coupe (un hoquet du serveur de chat, un écran de chargement), La Taverne le rejoint d'elle-même, et rien de ce qui arrive dans les premières secondes après une connexion ou un `/reload` n'est perdu.
 
 ### Carte du monde
 
