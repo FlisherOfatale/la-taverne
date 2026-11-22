@@ -6,6 +6,7 @@ local Guild = ns.NewModule("Guild")
 local roster = {} -- [nameKey] = member
 local rosterCount = 0
 
+-- (Also loads the Guild Info: Alliance.lua asks for it while that's still empty.)
 local function RequestRoster()
     if C_GuildInfo and C_GuildInfo.GuildRoster then
         C_GuildInfo.GuildRoster()
@@ -13,6 +14,7 @@ local function RequestRoster()
         GuildRoster()
     end
 end
+Guild.RequestRoster = RequestRoster
 
 local function RebuildRoster()
     wipe(roster)

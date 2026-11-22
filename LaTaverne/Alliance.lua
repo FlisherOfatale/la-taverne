@@ -288,6 +288,7 @@ local autoInviteSig = "nil"
 local OFF_CONFIRM = 5
 local offSince      -- when a read first came back without the alliance (waiting to confirm)
 local saidOff       -- "Guild Alliance: off." was said: say when it's back on
+local emptyRetry    -- the Guild Info came back empty: a new read is on its way
 
 -- Does this setup link us to another guild (a key and a guild that isn't mine)?
 local function ActiveIn(cfg)
@@ -306,8 +307,21 @@ function Alliance:Refresh()
         read = { guilds = {}, key = nil }
     else
         local text = ns.Guild:GetInfoText()
-        -- An empty Guild Info while we're linked: not read yet (a real one is never empty).
-        if text == "" and ActiveIn(config) then text = nil end
+        -- An empty Guild Info: not loaded yet (after a login or /reload, until the game gets the
+        -- guild's data; opening the game's guild window does it). Not a real one: those aren't
+        -- empty. Ask the game for it and read again shortly; meanwhile, the setup saved last time.
+        -- (Test mode's made-up Guild Info can be empty for real.)
+        if text == "" and not ns.Guild:IsSandbox() then
+            text = nil
+            if not emptyRetry then
+                emptyRetry = true
+                if ns.Guild.RequestRoster then ns.Guild.RequestRoster() end
+                C_Timer.After(3, function()
+                    emptyRetry = false
+                    Alliance:Refresh()
+                end)
+            end
+        end
         if text then
             infoPending = false
             read = Alliance.Parse(text)
