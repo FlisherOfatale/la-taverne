@@ -7,6 +7,7 @@
 ## X-Curse-Project-ID: 1814877
 ## IconTexture: Interface\AddOns\LaTaverne\media\lynx_icon
 ## SavedVariables: LaTaverneDB
+## OptionalDeps: GuildUnion, Chattynator, OpenMap
 
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua

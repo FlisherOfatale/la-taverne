@@ -179,6 +179,7 @@ local DEFAULTS = {
         share = true,      -- my position goes to my guild and the allied guilds
         showGuild = true,  -- dots for my guild's members
         showAllies = true, -- dots for the allied guilds' members
+        button = true,     -- the lynx button on the game's map (not with OpenMap's map)
         told = false,      -- the "your position is shared" line was shown once
     },
     invites = {       -- keyword auto-invite (always off at login)
@@ -200,6 +201,11 @@ local DEFAULTS = {
         roster = {}, -- [nameKey] = { name = "Firstname Lastname", class, level, seen }
         gameChat = true, -- test guild chat also shown in the game's chat windows (only to me)
         lynxFast = false, -- the window's lynx: short pauses between its moves (Debug tab)
+        -- Message log window: types and senders not listed ({ [key] = true }), auto-refresh.
+        msgLogHiddenTypes = {},
+        msgLogHiddenSenders = {},
+        msgLogAuto = false,
+        msgLogAlways = false, -- the message log records from every login (not only in test mode)
     },
 }
 
@@ -372,7 +378,104 @@ local function BuildTextDialog()
     end)
     -- No Close button: the X in the corner (and Escape) close it.
     f.holder = holder
+    f.scroll = scroll
+    -- Auto-fill (see TextDialog): a key in the text box pauses it a moment (Ctrl+A, Ctrl+C), and
+    -- a text box scrolled to the bottom stays at the bottom when the text grows.
+    if edit:HasScript("OnKeyDown") then
+        edit:HookScript("OnKeyDown", function() f.keyAt = GetTime() end)
+    end
+    if scroll:HasScript("OnScrollRangeChanged") then
+        scroll:HookScript("OnScrollRangeChanged", function(self, _, yrange)
+            if f.followBottom then self:SetVerticalScroll(yrange or self:GetVerticalScrollRange()) end
+        end)
+    end
     textDialog = f
+end
+
+local AUTO_EVERY, AUTO_PAUSE = 2, 5 -- seconds
+
+local function AutoFill(f, elapsed)
+    f.autoWait = f.autoWait - elapsed
+    if f.autoWait > 0 then return end
+    f.autoWait = AUTO_EVERY
+    -- Not while the player is selecting, scrolling or copying.
+    if f.holder:IsMouseOver() or (f.keyAt and GetTime() - f.keyAt < AUTO_PAUSE) then return end
+    local text = f.autoFill() or ""
+    if text == f.edit:GetText() then return end
+    local scroll = f.scroll
+    f.followBottom = scroll:GetVerticalScroll() >= scroll:GetVerticalScrollRange() - 2
+    f.edit:SetText(text)
+end
+
+-- A row under the hint (message log): dropdowns (Menu.lua) and checkboxes.
+local function SetupTools(f, opts)
+    local menus = opts.menus or {}
+    local checks = opts.checks or (opts.check and { opts.check }) or {}
+    local tools = f.tools
+    if not tools then
+        if #menus == 0 and #checks == 0 then return false end
+        tools = CreateFrame("Frame", nil, f.Inset or f)
+        tools:SetPoint("TOPLEFT", f.hint, "BOTTOMLEFT", -2, -8)
+        tools:SetPoint("RIGHT", -12, 0)
+        tools:SetHeight(26)
+        tools.menus = {}
+        tools.checks = {}
+        f.tools = tools
+    end
+    for i, def in ipairs(menus) do
+        local dd = tools.menus[i]
+        if not dd then
+            dd = ns.NewDropdown(tools)
+            dd:SetScript("OnEnter", function(self)
+                if self.tooltip and ns.UIKit then ns.UIKit.ShowTooltip(self, self.tooltip) end
+            end)
+            dd:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            tools.menus[i] = dd
+        end
+        dd:ClearAllPoints()
+        if i == 1 then dd:SetPoint("LEFT", 0, 0) else dd:SetPoint("LEFT", tools.menus[i - 1], "RIGHT", 8, 0) end
+        dd:SetWidth(def.width or 160)
+        dd.tooltip = def.tooltip
+        dd:SetDefaultText(def.text)
+        dd:SetupMenu(def.generator)
+        dd:Show()
+    end
+    for i = #menus + 1, #tools.menus do tools.menus[i]:Hide() end
+    -- Checkboxes after the dropdowns, each after the label of the one before.
+    local after = tools.menus[#menus]
+    for i, def in ipairs(checks) do
+        local cb = tools.checks[i]
+        if not cb and ns.UIKit then
+            cb = ns.UIKit.NewCheckbox(tools, "", function(self)
+                if self.onCheck then self.onCheck(self:GetChecked() and true or false) end
+            end)
+            cb:SetScript("OnEnter", function(self)
+                if self.tip then ns.UIKit.ShowTooltip(self, self.tip) end
+            end)
+            cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            tools.checks[i] = cb
+        end
+        if cb then
+            cb:ClearAllPoints()
+            local label = after and (after.Text or after.text)
+            if label and i > 1 then
+                cb:SetPoint("LEFT", label, "RIGHT", 16, 0)
+            elseif after then
+                cb:SetPoint("LEFT", after, "RIGHT", 12, 0)
+            else
+                cb:SetPoint("LEFT", 0, 0)
+            end
+            cb.Text:SetText(def.text)
+            cb:SetChecked(def.checked and true or false)
+            cb.onCheck, cb.tip = def.onClick, def.tooltip
+            cb:Show()
+            after = cb
+        end
+    end
+    for i = #checks + 1, #tools.checks do tools.checks[i]:Hide() end
+    local shown = #menus > 0 or #checks > 0
+    tools:SetShown(shown)
+    return shown
 end
 
 -- Close the text window if it's still showing that kind (opts.kind) of text.
@@ -412,6 +515,19 @@ function ns.TextDialog(opts)
             if extra.tooltip and ns.UIKit then ns.UIKit.ShowTooltip(self, extra.tooltip) end
         end)
     end
+    -- A row of tools under the hint (message log): opts.menus = { { text, generator, width,
+    -- tooltip = { lines } } } (dropdowns, text: the label), opts.check = { text, checked,
+    -- onClick = function(checked), tooltip = { lines } }.
+    f:SetWidth(opts.width or 600) -- (the message log asks for more: its row of tools)
+    if SetupTools(f, opts) then
+        f.holder:SetPoint("TOPLEFT", f.tools, "BOTTOMLEFT", 0, -6)
+    else
+        f.holder:SetPoint("TOPLEFT", f.hint, "BOTTOMLEFT", -2, -10)
+    end
+    -- opts.autoFill = function() return text end: the text box is filled again every AUTO_EVERY
+    -- seconds when the text changed (message log's auto-refresh).
+    f.autoFill, f.autoWait, f.followBottom = opts.autoFill, AUTO_EVERY, false
+    f:SetScript("OnUpdate", opts.autoFill and AutoFill or nil)
     -- The text box goes down to the bottom when there's no button under it.
     f.holder:SetPoint("BOTTOMRIGHT", -10, opts.button and 44 or 10)
     f:Show()

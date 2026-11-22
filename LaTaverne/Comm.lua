@@ -57,10 +57,15 @@ local function FieldNames(payload)
     return "{" .. table.concat(keys, ",") .. "}"
 end
 
-local function AddLine(text, unusual)
+-- Each line keeps its message type (kind) and who it's from (who), for the window's filters:
+-- notes (lines that aren't one message) are kind LOG_NOTES and nobody's, what I send is LOG_ME's.
+local LOG_NOTES, LOG_ME = "--", "@me"
+Comm.LOG_NOTES, Comm.LOG_ME = LOG_NOTES, LOG_ME
+
+local function AddLine(text, unusual, kind, who)
     local line = date("%H:%M:%S") .. (unusual and " !! " or "    ") .. text
     local lines = msgLog.lines
-    lines[#lines + 1] = line
+    lines[#lines + 1] = { text = line, kind = kind or LOG_NOTES, who = who }
     if #lines > LOG_MAX then table.remove(lines, 1) end
     if unusual then
         local u = msgLog.unusual[unusual]
@@ -108,7 +113,8 @@ local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
         end
     end
     AddLine(format("%-3s %-5s %-12s%s  %db  %s  %s", dir, scope, tostring(msgType), from, size or 0,
-        what, FieldNames(payload)), unusual and (unusual .. " (" .. tostring(msgType) .. ")") or nil)
+        what, FieldNames(payload)), unusual and (unusual .. " (" .. tostring(msgType) .. ")") or nil,
+        tostring(msgType), dir == "in" and tostring(sender) or LOG_ME)
 end
 Comm.Trace = Trace
 
@@ -132,7 +138,9 @@ function Comm:ClearLog()
 end
 
 -- The log as text: what's unusual first, then the lines, oldest first.
-function Comm:LogText()
+-- hiddenKinds, hiddenWho: { [type or sender] = true } left out of the lines (the window's
+-- filters); the counts at the top stay complete, and the text says what was left out.
+function Comm:LogText(hiddenKinds, hiddenWho)
     local out = { format("La Taverne %s, message log %s%s, %s", ns.version,
         msgLog.on and "on" or "off", msgLog.since and (" since " .. msgLog.since) or "",
         ns.Guild:IsSandbox() and "test mode (test guild + alliance)" or "real guild + alliance") }
@@ -150,9 +158,39 @@ function Comm:LogText()
             out[#out + 1] = format("  %d x %s   last: %s", u.count, kind, u.last)
         end
     end
+    local shown, left = {}, 0
+    for _, line in ipairs(msgLog.lines) do
+        if (hiddenKinds and hiddenKinds[line.kind]) or (line.who and hiddenWho and hiddenWho[line.who]) then
+            left = left + 1
+        else
+            shown[#shown + 1] = line.text
+        end
+    end
+    local function Names(set, renames)
+        local names = {}
+        for key in pairs(set or {}) do names[#names + 1] = renames[key] or key end
+        table.sort(names)
+        return names
+    end
+    local kinds = Names(hiddenKinds, { [LOG_NOTES] = "notes" })
+    local who = Names(hiddenWho, { [LOG_ME] = "me" })
+    if #kinds > 0 or #who > 0 then
+        out[#out + 1] = format("Not listed (%d lines): types %s; senders %s", left,
+            #kinds > 0 and table.concat(kinds, ", ") or "none", #who > 0 and table.concat(who, ", ") or "none")
+    end
     out[#out + 1] = format("--- last %d lines (newest at the bottom) ---", LOG_MAX)
-    for _, line in ipairs(msgLog.lines) do out[#out + 1] = line end
+    for _, text in ipairs(shown) do out[#out + 1] = text end
     return table.concat(out, "\n")
+end
+
+-- How many lines of each type, and from each sender, the log has now (for the filters).
+function Comm:LogCounts()
+    local kinds, who = {}, {}
+    for _, line in ipairs(msgLog.lines) do
+        kinds[line.kind] = (kinds[line.kind] or 0) + 1
+        if line.who then who[line.who] = (who[line.who] or 0) + 1 end
+    end
+    return kinds, who
 end
 
 -- Versions: every message carries the sender's La Taverne version (payload.ver), so a player on
@@ -756,7 +794,7 @@ end
 -- Test mode: the log is always on from the start (still only the last LOG_MAX lines), so a
 -- problem is there to copy without having thought of starting it. It can still be stopped.
 function Comm:OnInit()
-    if ns.Guild:IsSandbox() then self:SetLogging(true) end
+    if ns.Guild:IsSandbox() or (ns.db.dev and ns.db.dev.msgLogAlways) then self:SetLogging(true) end
 end
 
 function Comm:OnLogin()

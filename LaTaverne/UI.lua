@@ -4374,6 +4374,16 @@ local function BuildOptionsPanel()
     mapAllies:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
     WithTooltip(mapAllies, { L["Show the allied guilds' members on the map"],
         L["Those who run La Taverne and share their position, with their guild's tag."], L["Only with a Guild Alliance."] })
+    rowY = Row()
+    -- (kept on mapAllies rather than a new local: this function is close to Lua's 200 locals)
+    mapAllies.buttonCheck = NewCheckbox(c, L["Button on the game's map"], function(self)
+        ns.db.allyMap.button = self:GetChecked() and true or false
+        ns.AllyMap:UpdateMapButton()
+    end)
+    mapAllies.buttonCheck:SetPoint("TOPLEFT", CONTROL_X - 4, rowY + 2)
+    WithTooltip(mapAllies.buttonCheck, { L["Button on the game's map"],
+        L["A lynx button in the corner of the world map: click it to choose who shows."],
+        L["Not with OpenMap: its menu has these switches, and a star puts them on its map."] })
     EndSection()
 
     -- Shared guild chat: always on. The lynx and tag options, and (only while GuildUnion is
@@ -4453,6 +4463,7 @@ local function BuildOptionsPanel()
         mapShare:SetChecked(ns.db.allyMap.share)
         mapGuild:SetChecked(ns.db.allyMap.showGuild)
         mapAllies:SetChecked(ns.db.allyMap.showAllies)
+        mapAllies.buttonCheck:SetChecked(ns.db.allyMap.button ~= false)
         local omState = ns.AllyMap:OpenMapState()
         if omState == "on" then
             openMapState:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t |cff20ff20" .. L["Detected, on"] .. "|r")
