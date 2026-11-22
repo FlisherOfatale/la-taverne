@@ -11,6 +11,7 @@ ignore:
   - branding
   - README.md
   - CHANGELOG.md
+  - GUILD-RELAY.md
   - LICENSE
 
 # Release notes for CurseForge and GitHub: the notes of the version being tagged.
