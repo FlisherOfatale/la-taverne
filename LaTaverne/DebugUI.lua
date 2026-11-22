@@ -481,6 +481,7 @@ function ns.ShowMessageLog()
                 onClick = function(on)
                     ns.Comm:SetLogging(on)
                     ns.ShowMessageLog()
+                    if ns.RefreshDebugPanel then ns.RefreshDebugPanel() end -- (its start/stop button follows)
                 end,
                 tooltip = { L["Recording"], L["Ticked: the log records now (the last 300 lines, in memory). Unticked: stopped; starting it again starts a new log."] },
             },
@@ -490,6 +491,7 @@ function ns.ShowMessageLog()
                     dev.msgLogAlways = on
                     if on and not ns.Comm:IsLogging() then ns.Comm:SetLogging(true) end
                     ns.ShowMessageLog()
+                    if ns.RefreshDebugPanel then ns.RefreshDebugPanel() end
                 end,
                 tooltip = { L["Always record"], L["The log starts on its own at every login and after a /reload (this choice is kept). You get the first messages after logging in, and when something goes wrong the log is already there to copy. It only keeps the last 300 lines, in memory: it costs next to nothing."] },
             },
@@ -653,5 +655,7 @@ function ns.BuildDebugPanel()
         msgLog:SetText(ns.Comm:IsLogging() and L["Stop the message log"] or L["Start the message log"])
         fakeRunners:SetText(ns.Invites:HasFakeRunners() and L["Remove the fake inviters"] or L["Fake others inviting"])
     end
+    -- (the message log window's boxes switch the log too: this tab's button follows)
+    ns.RefreshDebugPanel = function() if p:IsShown() then p:Refresh() end end
     return p
 end

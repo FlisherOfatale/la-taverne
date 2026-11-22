@@ -654,6 +654,22 @@ local replaying = false
 local function Early() return not replaying and GetTime() - loadedAt < EARLY_FOR end
 local ReplayGuild, ReplayAlly -- (below)
 local function RosterRead() return ns.Guild:GetRosterCount() > 0 end
+local PER_SENDER = 20 -- held messages per sender at most (one sender the roster never matches can't fill it; room for a message in parts and a minute of positions)
+
+-- Hold a message, within the limits: past PER_SENDER for that sender, or EARLY_MAX in all, the
+-- oldest one goes (never the new one: an old state must not be read after a newer one).
+local function Hold(list, entry, sender)
+    local n, first = 0, nil
+    for i, m in ipairs(list) do
+        if m[4] == sender then
+            n = n + 1
+            first = first or i
+        end
+    end
+    if n >= PER_SENDER then table.remove(list, first) end
+    if #list >= EARLY_MAX then table.remove(list, 1) end
+    list[#list + 1] = entry
+end
 
 local function OnGuildReceive(prefix, text, distribution, sender)
     -- Held ones first, once the roster is read.
@@ -675,10 +691,12 @@ local function OnGuildReceive(prefix, text, distribution, sender)
         return
     end
     if not ns.Guild:IsMember(sender) then
-        -- (the roster may not be read yet: held, checked again when it is)
-        if not ns.Guild:IsSandbox() and not RosterRead() and Early() and #earlyGuild < EARLY_MAX then
-            earlyGuild[#earlyGuild + 1] = { prefix, text, distribution, sender }
-            Trace("in", "guild", msgType, sender, #text, "held: guild roster not read yet", payload)
+        -- (the roster may not be read yet, or only partly: held, checked again at each roster
+        -- update, rejected only at the end of the early minute)
+        if not ns.Guild:IsSandbox() and Early() then
+            Hold(earlyGuild, { prefix, text, distribution, sender }, sender)
+            Trace("in", "guild", msgType, sender, #text,
+                RosterRead() and "held: not in the roster read so far" or "held: guild roster not read yet", payload)
             return
         end
         Comm.stats.rejected = Comm.stats.rejected + 1
@@ -885,14 +903,14 @@ local function OnAllyAddon(prefix, message, distribution, sender, target, zoneCh
     local fromOurs = FromAllyChannel(target, localID, channelName)
     Comm.lastAllyCheck = { target = target, localID = localID, channelName = channelName, ok = fromOurs }
     -- From a La Taverne alliance channel before mine is set up (just after login): held.
-    if not fromOurs and not channels.ally and Early() and #earlyAlly < EARLY_MAX then
+    if not fromOurs and not channels.ally and Early() then
         local name = type(channelName) == "string" and channelName ~= "" and channelName
         if not name and tonumber(localID) and tonumber(localID) > 0 then
             local _, n = GetChannelName(tonumber(localID))
             name = n
         end
         if type(name) == "string" and name:lower():match("^latavernea%w+$") then
-            earlyAlly[#earlyAlly + 1] = { prefix, message, distribution, sender, target, zoneChannelID, localID, channelName }
+            Hold(earlyAlly, { prefix, message, distribution, sender, target, zoneChannelID, localID, channelName }, sender)
             Trace("in", "ally", "?", sender, type(message) == "string" and #message or 0, "held: alliance channel not set up yet")
             return
         end
@@ -935,35 +953,62 @@ ns.On("CHAT_MSG_ADDON", OnAllyAddon)
 
 -- The held messages, read again (once the roster is read, once my alliance channel is ready,
 -- and a last time when the early minute is over).
-local function Run(fn, ...)
-    local ok, err = pcall(fn, ...)
-    if not ok then
-        replaying = false
-        geterrorhandler()(err) -- (to the error report, like a message handled live)
-        replaying = true
-    end
+-- One held message, read again; an error goes to the error report with its call stack, like a
+-- message handled live, and the rest of the list goes on.
+local function ReportError(err)
+    local was = replaying
+    replaying = false
+    pcall(geterrorhandler(), err)
+    replaying = was
 end
-function ReplayGuild()
+local function Run(fn, ...)
+    xpcall(fn, ReportError, ...)
+end
+
+-- Guild: the senders the roster knows now go through (in the order they came); the others stay
+-- held until a later roster update, or the end of the early minute (final: all read, so the
+-- unknown ones are rejected then).
+function ReplayGuild(final)
     if #earlyGuild == 0 then return end
-    local list = earlyGuild
+    local list, keep = earlyGuild, {}
     earlyGuild = {}
     replaying = true
-    for _, m in ipairs(list) do Run(OnGuildReceive, m[1], m[2], m[3], m[4]) end
+    for _, m in ipairs(list) do
+        if final or ns.Guild:IsMember(m[4]) then Run(OnGuildReceive, m[1], m[2], m[3], m[4]) else keep[#keep + 1] = m end
+    end
     replaying = false
+    for _, m in ipairs(earlyGuild) do keep[#keep + 1] = m end -- (none expected: held while replaying can't happen)
+    earlyGuild = keep
 end
-function ReplayAlly()
+
+-- Alliance: only once my alliance channel is set up. Still not set up when the early minute is
+-- over (final: the Guild Info blocked that long, or no alliance any more): dropped and counted,
+-- not kept (newer ones from the same players are rejected meanwhile: replayed later, the old ones
+-- would bring old states back).
+function ReplayAlly(final)
     if #earlyAlly == 0 then return end
+    if not channels.ally then
+        if final then
+            Comm.stats.rejected = Comm.stats.rejected + #earlyAlly
+            Comm:LogNote(#earlyAlly .. " held allied message(s) dropped: the alliance channel still isn't set up", "held, no alliance channel")
+            earlyAlly = {}
+        end
+        return
+    end
     local list = earlyAlly
     earlyAlly = {}
     replaying = true
     local stale = 0
     for _, m in ipairs(list) do
         -- From a La Taverne channel that isn't mine (the side left by a test mode switch, an old
-        -- key): dropped quietly, not "wrong channel" lines.
+        -- key): dropped with one note, not a "wrong channel" line each.
         if FromAllyChannel(m[5], m[7], m[8]) then Run(OnAllyAddon, unpack(m, 1, 8)) else stale = stale + 1 end
     end
     replaying = false
-    if stale > 0 then Comm:LogNote(stale .. " held message(s) from a La Taverne channel not mine any more: dropped") end
+    if stale > 0 then
+        Comm.stats.rejected = Comm.stats.rejected + stale
+        Comm:LogNote(stale .. " held message(s) from a La Taverne channel not mine any more: dropped", "held from an old channel")
+    end
 end
 Comm.ReplayHeldAlly = ReplayAlly -- (for JoinChannel, further up)
 -- (Guild.lua rebuilds the roster on the same event, after this handler: checked a moment later.)
@@ -1009,8 +1054,8 @@ end
 function Comm:OnLogin()
     loadedAt = GetTime()
     C_Timer.After(EARLY_FOR + 1, function()
-        ReplayGuild()
-        ReplayAlly()
+        ReplayGuild(true)
+        ReplayAlly(true)
     end)
     C_ChatInfo.RegisterAddonMessagePrefix(PROBE_PREFIX)
     C_ChatInfo.RegisterAddonMessagePrefix(ALLY_PREFIX)

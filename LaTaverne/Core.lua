@@ -516,16 +516,18 @@ function ns.TextDialog(opts)
             f.buttonCheck.Text:SetText(bc.text)
             f.buttonCheck:SetChecked(bc.checked and true or false)
             f.buttonCheck.onCheck, f.buttonCheck.tip = bc.onClick, bc.tooltip
-            -- Its label ends a little before the button (measured again once the window is
-            -- laid out: hidden, a label can read 0 wide).
-            local function Place()
-                local labelWidth = f.buttonCheck.Text:GetStringWidth() or 0
-                if labelWidth <= 0 then labelWidth = 170 end
-                f.buttonCheck:ClearAllPoints()
-                f.buttonCheck:SetPoint("RIGHT", f.button, "LEFT", -(labelWidth + 16), 0)
-            end
-            Place()
-            C_Timer.After(0, Place)
+            -- Its label ends a little before the button, and the box sits left of its label:
+            -- anchored that way, nothing needs measuring (a hidden label can read 0 wide).
+            local label = f.buttonCheck.Text
+            label:ClearAllPoints()
+            label:SetPoint("RIGHT", f.button, "LEFT", -12, 0)
+            f.buttonCheck:ClearAllPoints()
+            f.buttonCheck:SetPoint("RIGHT", label, "LEFT", -2, 0)
+            -- (its label clicks like the box: the area is measured again once the window is shown)
+            C_Timer.After(0, function()
+                local w = label:GetStringWidth() or 0
+                if w > 0 then f.buttonCheck:SetHitRectInsets(0, -(w + 4), 0, 0) end
+            end)
         end
     end
     -- A second button, bottom left, that fills the text box (e.g. "From GuildUnion"):
