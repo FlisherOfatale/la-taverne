@@ -3885,9 +3885,10 @@ local function InitAllianceRow(row, item)
             row.name:SetText(p.online and NameText(p.name, p.class) or ("|cff9d9d9d" .. p.name .. "|r"))
             local ver = ns.Comm:GetVersion(p.name)
             local old = ver and ns.version ~= "?" and ns.CompareVersions(ver, ns.version) < 0
+            -- The version always, and "(old version)" after it in orange when it's behind mine.
             row.state:SetText(not p.online and ("|cff808080" .. L["offline"] .. "|r")
-                or old and ("|cffff9900" .. L["(old version)"] .. "|r")
-                or ("|cff808080" .. (ver and ("La Taverne v" .. ver) or "La Taverne") .. "|r"))
+                or ("|cff808080" .. (ver and ("La Taverne v" .. ver) or "La Taverne") .. "|r"
+                    .. (old and ("  |cffff9900" .. L["(old version)"] .. "|r") or "")))
             row.hit.tooltip = { NameText(p.name, p.class),
                 ver and ("La Taverne v" .. ver) or "La Taverne",
                 p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
