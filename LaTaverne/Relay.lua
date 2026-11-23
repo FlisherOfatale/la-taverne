@@ -58,6 +58,7 @@ local OPENMAP_PREFIX = "OpenMapLoc" -- OpenMap's positions (Map/Friends.lua), he
 local TICK = 1
 local BEACON_EVERY = 60       -- the holder's beacon
 local LEASE = 150             -- no beacon (or anything) from the holder for this long: gone
+local LOST_AFTER = 30         -- a guild that had a relay, none for this long (players online): lost
 local ASK_WAIT = 5            -- after asking: no beacon from my guild by then, the job is free
 local ANSWER_EVERY = 3        -- a holder answers questions at most this often (per job)
 local SETTLE = 2              -- after claiming: wait for the other claims, then apply the order
@@ -279,13 +280,13 @@ end
 
 -- Measuring ------------------------------------------------------------------------------------
 -- Rings of 60 slots (seconds or minutes), each { i (its second or minute), m (messages: parts,
--- each its own addon message), b (bytes), up, online (seconds), planned, unplanned }.
+-- each its own addon message), b (bytes), up, online (seconds), planned, unplanned, lost }.
 
 local function Slot(ring, index)
     local pos = index % 60 + 1
     local s = ring[pos]
     if not s or s.i ~= index then
-        s = { i = index, m = 0, b = 0, up = 0, online = 0, planned = 0, unplanned = 0 }
+        s = { i = index, m = 0, b = 0, up = 0, online = 0, planned = 0, unplanned = 0, lost = 0 }
         ring[pos] = s
     end
     return s
@@ -307,8 +308,13 @@ end
 -- (held) or refused (failed, and failCodes: [the game's result code] = count); budget warnings.
 -- prefix: [prefix] = ring of seconds, the same per prefix (the game's limit is per prefix).
 local meter = { sec = {}, min = {}, prefix = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
-    held = 0, failed = 0, failCodes = {}, failKinds = {}, resent = {}, hitLines = 0, lostAgain = 0, warnings = 0 }
-for _, job in ipairs(JOB_ORDER) do meter.prefix[JOBS[job].prefix] = {} end
+    held = 0, failed = 0, failCodes = {}, failKinds = {}, resent = {}, hitLines = 0, lostAgain = 0, warnings = 0, thJobs = {}, failBy = {} }
+-- Per job, since login (the window): thJobs[job] parts held back or refused; failBy[job][kind]
+-- [code] parts refused, by message type and the game's result code.
+for _, job in ipairs(JOB_ORDER) do
+    meter.prefix[JOBS[job].prefix] = {}
+    meter.thJobs[job], meter.failBy[job] = 0, {}
+end
 
 -- resend: a message sent again (Comm.lua), counted in the sending but not as one more message.
 local function Measure(kind, job, parts, bytes, resend)
@@ -354,6 +360,9 @@ for _, job in ipairs(JOB_ORDER) do
             meter.failCodes[code] = (meter.failCodes[code] or 0) + 1
             local kind = msg and msg.kind or "?"
             meter.failKinds[kind] = (meter.failKinds[kind] or 0) + 1
+            local by = meter.failBy[job]
+            by[kind] = by[kind] or {}
+            by[kind][code] = (by[kind][code] or 0) + 1
             if kind == "RCHAT" and not msg.counted then
                 msg.counted = true -- once per line, whatever the number of its parts refused
                 if msg.resent then
@@ -363,6 +372,7 @@ for _, job in ipairs(JOB_ORDER) do
                 end
             end
         end
+        meter.thJobs[job] = meter.thJobs[job] + 1
         local st = jobs[job]
         if st.holding then st.report.th = st.report.th + 1 end
     end, function(kind, parts, bytes)
@@ -374,7 +384,8 @@ end
 
 -- Stability per guild and job, from the beacons heard: [guild lowercase][job] = { min = ring
 -- (up: seconds with a fresh beacon, online: seconds with a La Taverne player of that guild
--- online, planned / unplanned: holder changes), holder (key), off (an "off" heard since) }.
+-- online, planned / unplanned: holder changes, lost: a relay gone with nobody taking over),
+-- holder (key), off (an "off" heard since), wasUp / downAt (for lost: TrackUptime) }.
 -- A change is planned when the last holder said "off" first, unplanned when it just went quiet.
 local stability = {}
 
@@ -1506,10 +1517,27 @@ local function TrackUptime()
         local key = strtrim(g.name):lower()
         if online[key] or ns.Guild:IsMyGuild(g.name) then
             for _, job in ipairs(JOB_ORDER) do
-                local s = MinuteSlot(Track(key, job))
+                local t = Track(key, job)
+                local s = MinuteSlot(t)
                 s.online = s.online + 1
-                if Relay:GetStatus(g.name, job) then s.up = s.up + 1 end
+                local entry, why = Relay:GetStatus(g.name, job)
+                if entry then
+                    s.up = s.up + 1
+                    t.wasUp, t.downAt = true, nil
+                elseif why == "officers" then
+                    t.wasUp, t.downAt = nil, nil -- turned off on purpose, not lost
+                elseif t.wasUp then
+                    -- It had a relay and has none now: lost once nobody took over for LOST_AFTER.
+                    t.downAt = t.downAt or now
+                    if now - t.downAt >= LOST_AFTER then
+                        s.lost = s.lost + 1
+                        t.wasUp, t.downAt = nil, nil
+                    end
+                end
             end
+        elseif stability[key] then
+            -- Nobody of that guild online: nobody to relay, not a lost relay.
+            for _, t in pairs(stability[key]) do t.wasUp, t.downAt = nil, nil end
         end
     end
 end
@@ -1721,15 +1749,16 @@ local function Pct(a, b)
     return b > 0 and math.floor(a * 100 / b + 0.5) or 0
 end
 
--- This hour for a guild and job: uptime %, planned and unplanned holder changes, and the seconds
--- it had a La Taverne player online (0: nothing to say). nil: never heard of.
+-- This hour for a guild and job: uptime %, planned and unplanned holder changes, the seconds
+-- it had a La Taverne player online (0: nothing to say), and relays lost (nobody took over).
+-- nil: never heard of.
 local function Stability(g, job)
     local t = stability[g] and stability[g][job]
     if not t then return nil end
     local idx = math.floor(GetTime() / 60)
     local online = Sum(t.min, idx, 60, "online")
     return Pct(Sum(t.min, idx, 60, "up"), online), Sum(t.min, idx, 60, "planned"),
-        Sum(t.min, idx, 60, "unplanned"), online
+        Sum(t.min, idx, 60, "unplanned"), online, Sum(t.min, idx, 60, "lost")
 end
 
 -- My guild's candidates for a job, per tier: me now, the others as their last hello said (up to
@@ -1809,10 +1838,10 @@ local function ReportText()
                 Add(head .. (why and format(L["nobody (%s)"], Relay.WhyText(why)) or L["nobody"]) .. ", "
                     .. (Relay:HasPlayersOnline(g.name) and L["La Taverne players online"] or L["no La Taverne player online"]))
             end
-            local up, planned, unplanned, online = Stability(key, job)
+            local up, planned, unplanned, online, lost = Stability(key, job)
             if up and online > 0 then
                 Add("        " .. format(L["this hour: up %d%% of the time, holder changes: %d planned, %d unplanned"],
-                    up, planned, unplanned))
+                    up, planned, unplanned) .. ", " .. format(L["lost with nobody taking over: %d"], lost))
             end
         end
     end
@@ -1960,7 +1989,292 @@ local function ReportText()
     return table.concat(out, "\n")
 end
 
+-- The window (RelayWindow.lua) ----------------------------------------------------------------
+-- The same figures as the text, as data for the window's tabs. Levels color them: "ok" (green),
+-- "warn" (orange: worth a look), "off" (grey), nil (plain). Rows: { label, value, level, tip }
+-- (tip: tooltip lines, the first one its title).
+
+local HEAVY_PER_MIN = 20 -- one player's relay messages a minute, all jobs: shown as busy (to tune)
+local UP_WARN = 90       -- uptime this hour under this %: shown as worth a look
+
+-- The game's result codes for a refused message (Enum.SendAddonMessageResult).
+local CODE_NAMES = { ["3"] = "add-on message limit", ["7"] = "channel not ready", ["8"] = "channel throttle",
+    ["9"] = "general error" }
+local KIND_TEXT = { RCHAT = "chat line", RMAP = "map batch", ["RLY claim"] = "claim",
+    ["RLY hold"] = "holder's signal", ["RLY off"] = "giving it up", ["RLY ask"] = "asking who relays" }
+
+-- My refused messages for a job (nil: all jobs) as tooltip lines, and their count.
+local function RefusedLines(job)
+    local out, total = {}, 0
+    for _, j in ipairs(JOB_ORDER) do
+        if not job or j == job then
+            for kind, codes in pairs(meter.failBy[j]) do
+                for code, n in pairs(codes) do
+                    total = total + n
+                    local codeText = CODE_NAMES[code] and L[CODE_NAMES[code]] or format(L["code %s"], code)
+                    out[#out + 1] = format(L["%s: %d (%s, code %s)"], L[KIND_TEXT[kind] or kind], n, codeText, code)
+                end
+            end
+        end
+    end
+    table.sort(out)
+    return out, total
+end
+
+-- My messages in the last minute on a job's prefix.
+local function MyPerMin(job, now)
+    return Sum(meter.prefix[JOBS[job].prefix], math.floor(now), 60, "m")
+end
+
+local function GuildCard(g, now, server)
+    local key = strtrim(g.name):lower()
+    local mine = ns.Guild:IsMyGuild(g.name)
+    local card = { title = "[" .. (g.tag or "?") .. "]" .. (mine and (" " .. L["your guild"]) or ""), mine = mine,
+        rows = {} }
+    local holders, held, refused = {}, 0, 0
+    for _, job in ipairs(JOB_ORDER) do
+        local entry, why = Relay:GetStatus(g.name, job)
+        local up, planned, unplanned, online, lost = Stability(key, job)
+        local row = { label = Relay.JobText(job), job = job }
+        local tip = { Relay.JobText(job) }
+        if entry then
+            held = held + 1
+            local me = ns.IsMe(entry.name)
+            local who = me and L["you"] or entry.name
+            row.holder = format("%s · %s · %s", who, Relay.TierText(entry.tier), format(L["since %s"], Since(entry.since)))
+            tip[#tip + 1] = format(L["%s (%s), heard %d s ago, relaying since %s"], who, Relay.TierText(entry.tier),
+                server - entry.heard, Since(entry.since))
+            local h = holders[entry.name] or { name = who, me = me, jobs = 0, perMin = 0, th = 0 }
+            holders[entry.name] = h
+            h.jobs = h.jobs + 1
+            if me then
+                local per = MyPerMin(job, now)
+                row.budget = PrefixPct(JOBS[job].prefix, now) .. "%"
+                row.th = meter.thJobs[job]
+                h.perMin, h.th = h.perMin + per, h.th + meter.thJobs[job]
+                local lines, n = RefusedLines(job)
+                refused = refused + n
+                tip[#tip + 1] = format(L["Last minute: %d messages. Held back or refused since you logged in: %d."], per, meter.thJobs[job])
+                for _, l in ipairs(lines) do tip[#tip + 1] = l end
+            elseif entry.p then
+                row.budget = Pct(entry.p, BEACON_EVERY) .. "%"
+                row.th = entry.th or 0
+                h.perMin, h.th = h.perMin + entry.p, h.th + (entry.th or 0)
+                tip[#tip + 1] = format(job == "map" and L["Last minute: %d positions in %d messages (%d bytes), most waiting %d, held back or refused %d."]
+                    or L["Last minute: %d lines in %d messages (%d bytes), most waiting %d, held back or refused %d."],
+                    entry.sent or 0, entry.p, entry.b or 0, entry.maxq or 0, entry.th or 0)
+            end
+            if (row.th or 0) > 0 then row.thLevel = "warn" end
+        else
+            if mine and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job) then why = "officers" end
+            row.holder = why and format(L["nobody (%s)"], Relay.WhyText(why)) or L["nobody"]
+            row.holderLevel = "off"
+            tip[#tip + 1] = row.holder
+        end
+        if up and online > 0 then
+            row.up = up
+            row.upLevel = up < UP_WARN and "warn" or "ok"
+            tip[#tip + 1] = format(L["this hour: up %d%% of the time, holder changes: %d planned, %d unplanned"], up, planned, unplanned)
+                .. ", " .. format(L["lost with nobody taking over: %d"], lost)
+            if lost > 0 then row.upLevel = "warn" end
+        end
+        row.tip = tip
+        card.rows[#card.rows + 1] = row
+    end
+    -- One player holding several jobs: their load, all jobs together (the channel throttle counts
+    -- every message they send on the alliance channel).
+    for _, h in pairs(holders) do
+        if h.jobs > 1 then
+            card.who = h.me and format(L["You hold both jobs · %d messages/min · held back or refused %d"], h.perMin, h.th)
+                or format(L["%s holds both jobs · %d messages/min · held back or refused %d"], h.name, h.perMin, h.th)
+            card.whoLevel = (h.th > 0 or h.perMin >= HEAVY_PER_MIN) and "warn" or nil
+        end
+    end
+    local playersOnline = Relay:HasPlayersOnline(g.name)
+    if refused > 0 then
+        card.badge, card.badgeLevel = format(L["%d refused"], refused), "warn"
+        card.badgeTip = { L["Refused by the game"] }
+        for _, l in ipairs((RefusedLines())) do card.badgeTip[#card.badgeTip + 1] = l end
+        card.badgeTip[#card.badgeTip + 1] = L["A refused chat line is sent again once; a holder's signal or a map batch goes out again on its usual schedule."]
+    elseif held == #JOB_ORDER then
+        card.badge, card.badgeLevel = L["relayed"], "ok"
+    elseif held > 0 then
+        card.badge, card.badgeLevel = L["partly relayed"], "warn"
+    elseif playersOnline then
+        card.badge, card.badgeLevel = L["nobody relays"], "warn"
+    else
+        card.badge, card.badgeLevel = L["no La Taverne player online"], "off"
+        card.empty = true
+    end
+    return card
+end
+
+-- Everything the window shows: guilds (cards), tiles (since login), mine (Your guild tab: sections
+-- of rows), sending (Your sending tab: tiles and sections), events.
+function Relay:WindowData()
+    local now, server = GetTime(), GetServerTime()
+    local data = { guilds = {}, mine = {}, sending = { sections = {} }, events = {} }
+    data.active = ns.Alliance:IsActive()
+    for _, g in ipairs(ns.Alliance:GetGuilds()) do
+        local card = GuildCard(g, now, server)
+        -- My guild first.
+        if card.mine then table.insert(data.guilds, 1, card) else data.guilds[#data.guilds + 1] = card end
+    end
+
+    local s, a, m = stats, ns.AllyChat.stats, ns.AllyMap.stats
+    local _, refused = RefusedLines()
+    data.tiles = {
+        { value = tostring(a.relayed or 0), label = L["lines received"],
+          tip = { L["lines received"], L["Guild chat lines of the allied guilds' members without La Taverne, passed on by their relay."] } },
+        { value = tostring(m.relayed or 0), label = L["positions received"],
+          tip = { L["positions received"], L["Map positions of the allied guilds' members without La Taverne, passed on by their relay."] } },
+        { value = s.sent .. " / " .. s.lost, label = L["lines relayed / lost"], level = s.lost > 0 and "warn" or nil,
+          tip = { L["lines relayed / lost"], L["Lines of your guild you passed on as the relay, and lines of your guild that needed a relay and never got one."] } },
+        { value = tostring(refused), label = L["refused"], level = refused > 0 and "warn" or nil, tip = (function()
+            local t = { L["Refused by the game"] }
+            for _, l in ipairs((RefusedLines())) do t[#t + 1] = l end
+            if #t == 1 then t[2] = L["None since you logged in."] end
+            return t
+        end)() },
+    }
+
+    -- Your guild: me, each job's election as I see it, who can relay.
+    local you = { title = L["You"], rows = {} }
+    local function Row(sec, label, value, level, tip) sec.rows[#sec.rows + 1] = { label = label, value = value, level = level, tip = tip } end
+    local stateText = Plain(Relay:MyStateText())
+    local holdingAny = false
+    for _, job in ipairs(JOB_ORDER) do if jobs[job].holding then holdingAny = true end end
+    Row(you, L["State"], stateText, holdingAny and "ok" or nil)
+    Row(you, L["Switch"], ns.db.relay.help and L["switch on"] or L["switch off"], not ns.db.relay.help and "off" or nil)
+    Row(you, L["Guild Info"], ns.Alliance:IsInfoKnown() and L["Guild Info read"] or L["Guild Info not read yet"],
+        not ns.Alliance:IsInfoKnown() and "warn" or nil)
+    Row(you, L["Officers' line"], tostring(ns.Alliance.RelayLine(ns.Alliance:GetRelayRule()) or L["none (every job allowed)"]))
+    if newerRp then Row(you, L["Newer relay"], format(L["A newer relay protocol is in use in your guild: %d."], newerRp), "warn") end
+    data.mine[#data.mine + 1] = you
+    local election = { title = L["Jobs in your guild"], rows = {} }
+    for _, job in ipairs(JOB_ORDER) do
+        local st = jobs[job]
+        local h = st.holder
+        local claims = 0
+        for _ in pairs(st.claims) do claims = claims + 1 end
+        local value, level
+        if st.holding then
+            value, level = format(L["you hold it since %s (%s)"], Since(st.since), Relay.TierText(st.heldTier)), "ok"
+        elseif h then
+            value = format(L["%s holds it (%s), heard %d s ago, %d waiting"], h.name, Relay.TierText(h.tier), math.floor(now - h.heard), h.q or 0)
+        else
+            value, level = L["nobody holds it"], "warn"
+        end
+        if st.free then
+            value = value .. "; " .. format(L["election open: %d claims"], claims)
+            if st.stall then value = value .. " " .. L["(the holder went quiet)"] end
+            if st.claimAt then value = value .. ", " .. format(L["your claim in %.1f s"], st.claimAt - now) end
+            if st.settleAt then value = value .. ", " .. format(L["settling in %.1f s"], st.settleAt - now) end
+            if st.quiet then value = value .. ", " .. L["you stay quiet (a claim as good as yours)"] end
+        end
+        Row(election, Relay.JobText(job), value, level)
+    end
+    data.mine[#data.mine + 1] = election
+    for _, job in ipairs(JOB_ORDER) do
+        local tiers, cant, unknown, probable = TierCounts(job)
+        local sec = { title = format(L["Who can relay: %s"], Relay.JobText(job)),
+            hint = L["You now, the others as of their last hello (up to 5 min old)."], rows = {} }
+        local parts = {}
+        for t = 0, 3 do parts[#parts + 1] = Relay.TierText(t) .. " " .. tiers[t] end
+        local can = tiers[0] + tiers[1] + tiers[2] + tiers[3]
+        Row(sec, L["Can relay"], table.concat(parts, " · "), can > 1 and "ok" or (can == 0 and "warn" or nil),
+            { L["Can relay"], L["Players who can take the job, by tier: city first, last resort last."] })
+        parts = {}
+        for code, n in pairs(cant) do parts[#parts + 1] = Relay.WhyText(code) .. " " .. n end
+        table.sort(parts)
+        if #parts > 0 then Row(sec, L["Can't"], table.concat(parts, " · "), "off") end
+        if unknown > 0 then Row(sec, L["Tier not said"], tostring(unknown), "warn",
+            { L["Tier not said"], L["Their hello says they can relay but gives no tier: probably an early test version of the relay."] }) end
+        if probable > 0 then Row(sec, L["Probably can"], tostring(probable), nil,
+            { L["Probably can"], L["Not heard since you logged in; their last hello before it said they could."] }) end
+        data.mine[#data.mine + 1] = sec
+    end
+
+    -- Your sending: tiles, then the details, then the counts since login.
+    local sec10, minute = math.floor(now), math.floor(now / 60)
+    local lastMin = Sum(meter.sec, sec10, 60, "m")
+    local chatPct, mapPct = PrefixPct(PREFIX, now), PrefixPct(MAP_PREFIX, now)
+    data.sending.tiles = {
+        { value = tostring(lastMin), label = L["messages last minute"], level = lastMin >= HEAVY_PER_MIN and "warn" or nil },
+        { value = chatPct .. "%", label = L["chat budget"], level = chatPct >= BUDGET_WARN and "warn" or nil,
+          tip = { L["chat budget"], L["Messages in the last minute on the chat job's prefix, as a share of the game's limit (1 a second)."] } },
+        { value = mapPct .. "%", label = L["map budget"], level = mapPct >= BUDGET_WARN and "warn" or nil,
+          tip = { L["map budget"], L["Messages in the last minute on the map job's prefix, as a share of the game's limit (1 a second)."] } },
+        data.tiles[4],
+    }
+    local send = { title = L["What you send for the relay"], rows = {} }
+    Row(send, L["Messages (bytes)"], format(L["last 10 s %d (%d) · last minute %d (%d) · last 10 min %d (%d)"],
+        Sum(meter.sec, sec10, 10, "m"), Sum(meter.sec, sec10, 10, "b"), lastMin, Sum(meter.sec, sec10, 60, "b"),
+        Sum(meter.min, minute, 10, "m"), Sum(meter.min, minute, 10, "b")))
+    Row(send, L["Busiest minute"], format(L["%d messages"], meter.peak))
+    Row(send, L["Budget warnings"], format(L["%d (at %d%% for %d min)"], meter.warnings, BUDGET_WARN, BUDGET_WARN_FOR / 60),
+        meter.warnings > 0 and "warn" or nil)
+    Row(send, L["Messages per line"], format(L["average %.1f, max %d"], meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts))
+    Row(send, L["Coordination"], format(L["%d%% of what you sent"], Pct(meter.rly, meter.all)))
+    Row(send, L["Held back 1 s or more"], tostring(meter.held), meter.held > 0 and "warn" or nil)
+    local resent = 0
+    for _, n in pairs(meter.resent) do resent = resent + n end
+    Row(send, L["Refused"], format(L["%d messages · chat lines hit %d · sent again %d · refused again %d"],
+        meter.failed, meter.hitLines, resent, meter.lostAgain), meter.failed > 0 and "warn" or nil, data.tiles[4].tip)
+    local owed = 0
+    for _, e in ipairs(buffer) do if not e.covered then owed = owed + 1 end end
+    Row(send, L["Lines kept"], format(L["%d (%d not passed on yet) · queue %d · burst left %.1f of %d"], #buffer, owed, #queue, tokens, BURST),
+        owed > 0 and "warn" or nil)
+    Row(send, L["Sending"], SendingPaused() and L["paused (a fight)"] or L["ok"], SendingPaused() and "warn" or "ok")
+    local kept, recent, stops = 0, 0, 0
+    for _, e in pairs(places) do
+        kept = kept + 1
+        if now - e.heard < 60 then recent = recent + 1 end
+    end
+    for _ in pairs(gone) do stops = stops + 1 end
+    Row(send, L["Map"], format(L["players kept %d (heard in the last minute %d) · stops owed %d · steps %s"],
+        kept, recent, stops, mapSlow and L["slowed (busy)"] or L["normal"]), mapSlow and "warn" or nil)
+    data.sending.sections[#data.sending.sections + 1] = send
+
+    local since = { title = L["Since you logged in"], rows = {} }
+    Row(since, L["Guild lines"], format(L["%d · needed a relay %d (%d%%) · passed on within %d s %d (%d%%) · late %d · lost %d · sent by their author %d"],
+        s.lines, s.needed, Pct(s.needed, s.lines), STALL_OWED, s.onTime, Pct(s.onTime, s.needed), s.late, s.lost, s.byAuthor),
+        (s.lost > 0 or s.late > 0) and "warn" or nil)
+    Row(since, L["As the relay"], format(L["sent %d (gap fills %d) · wait average %.1f s, max %.1f s · max queue %d"],
+        s.sent, s.gapFills, s.sent > 0 and s.waitTotal / s.sent or 0, s.waitMax, s.maxQueue))
+    Row(since, L["Jobs"], format(L["took %d · gave up %d · stalls %d · elections %d · your claims %d"],
+        s.took, s.released, s.stalls, s.elections, s.claims), s.stalls > 0 and "warn" or nil)
+    Row(since, L["Received"], format(L["relayed lines %d · copies dropped %d · refused %d"], a.relayed or 0, a.copies or 0, a.refused or 0),
+        (a.refused or 0) > 0 and "warn" or nil)
+    local heardFrom, skippedFrom = 0, 0
+    for _ in pairs(mapHeardFrom) do heardFrom = heardFrom + 1 end
+    for _ in pairs(mapSkippedFrom) do skippedFrom = skippedFrom + 1 end
+    Row(since, L["Map, from OpenMap"], format(L["%d positions from %d players without La Taverne · skipped %d from %d players with it · refused %d"],
+        s.mapHeard, heardFrom, s.mapSkipped, skippedFrom, s.mapBad))
+    Row(since, L["Map, sent as the relay"], format(L["%d positions in %d messages · %d players stopped sharing"], s.mapSent, s.mapBatches, s.mapOffs))
+    Row(since, L["Map, received"], format(L["relayed positions %d · refused %d"], m.relayed or 0, m.relayedRefused or 0),
+        (m.relayedRefused or 0) > 0 and "warn" or nil)
+    data.sending.sections[#data.sending.sections + 1] = since
+
+    -- Events, newest first.
+    for i = #events, 1, -1 do
+        local e = events[i]
+        local ok, text = pcall(format, L[e.fmt], unpack(e.args, 1, e.args.n))
+        data.events[#data.events + 1] = { time = date("%H:%M:%S", e.t), text = ok and text or e.fmt }
+    end
+    return data
+end
+
+Relay.LIVE_EVERY = LIVE_EVERY
+
+-- The window when it's there (RelayWindow.lua), else the text.
 function Relay:ShowLive()
+    if ns.RelayWindow then return ns.RelayWindow:Toggle() end
+    Relay:ShowReport()
+end
+
+-- The text, to copy and paste (the window's Copy report).
+function Relay:ShowReport()
     ns.TextDialog({
         kind = "relay",
         title = L["Guild relay"],
