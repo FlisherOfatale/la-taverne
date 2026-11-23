@@ -754,7 +754,7 @@ Comm.lastSend = { parts = 0, bytes = 0 }
 
 -- Parts on a watched prefix report back once ChatThrottleLib really sends them (it holds them
 -- while its budget or the game's throttle says wait): fn(didSend, waited seconds, the game's
--- result code, message type). A message sent again (below) tells onResend(message type, parts,
+-- result code, message type, with its op if any: "RLY hold"). A message sent again (below) tells onResend(message type, parts,
 -- bytes), so its sending is measured too. Relay.lua.
 local partWatch, resendWatch = {}, {}
 function Comm:WatchParts(prefix, fn, onResend)
@@ -858,7 +858,9 @@ function Comm:SendAlly(msgType, payload, priority, noQueue, prefix, retry)
     payload.n = math.random(1, 1000000) * 1000 + allySerial % 1000
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
     Comm.lastSend.parts, Comm.lastSend.bytes = 0, 0
-    local opts = { kind = msgType, retry = retry }
+    -- kind: what the part watchers are told, with the payload's op when it has one ("RLY hold").
+    local kind = type(payload.op) == "string" and (msgType .. " " .. payload.op) or msgType
+    local opts = { kind = kind, retry = retry }
     if SendAllyText(text, priority, prefix, opts) then
         Trace("out", "ally", msgType, nil, #text, "sent", payload)
         return true

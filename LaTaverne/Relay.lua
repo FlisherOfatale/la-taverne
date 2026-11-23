@@ -338,7 +338,7 @@ end
 
 -- ChatThrottleLib tells when it really sent each part (Comm.lua): one held back a second or more
 -- (its budget, or the game's throttle), or refused, counts as throttled. Refused: per code and
--- per message type (failKinds: RCHAT a line, RMAP a map batch, RLY coordination). A chat line
+-- per message type (failKinds: RCHAT a line, RMAP a map batch, "RLY claim"... coordination). A chat line
 -- refused by the channel throttle goes out once more (Comm.lua): resent[message type], and its
 -- sending is measured like the first one.
 for _, job in ipairs(JOB_ORDER) do
@@ -1871,10 +1871,22 @@ local function ReportText()
     local codes = {}
     for code, n in pairs(meter.failCodes) do codes[#codes + 1] = code .. " x" .. n end
     table.sort(codes)
-    local KIND_NAMES = { RCHAT = "chat lines", RMAP = "map batches", RLY = "coordination" }
-    local kinds = {}
+    -- Coordination ("RLY claim"...) as one count, with which messages they were.
+    local KIND_NAMES = { RCHAT = "chat lines", RMAP = "map batches" }
+    local OP_NAMES = { claim = "claim", hold = "holder's signal", off = "giving it up", ask = "asking who relays" }
+    local kinds, ops, rly = {}, {}, 0
     for kind, n in pairs(meter.failKinds) do
-        kinds[#kinds + 1] = (KIND_NAMES[kind] and L[KIND_NAMES[kind]] or kind) .. " " .. n
+        local op = kind:match("^RLY (%S+)$")
+        if op or kind == "RLY" then
+            rly = rly + n
+            if op then ops[#ops + 1] = (OP_NAMES[op] and L[OP_NAMES[op]] or op) .. " " .. n end
+        else
+            kinds[#kinds + 1] = (KIND_NAMES[kind] and L[KIND_NAMES[kind]] or kind) .. " " .. n
+        end
+    end
+    table.sort(ops)
+    if rly > 0 then
+        kinds[#kinds + 1] = L["coordination"] .. " " .. rly .. (#ops > 0 and (" (" .. table.concat(ops, ", ") .. ")") or "")
     end
     table.sort(kinds)
     local resent = 0
