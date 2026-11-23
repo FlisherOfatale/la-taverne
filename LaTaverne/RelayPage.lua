@@ -365,9 +365,11 @@ Fill = function()
         y = Lines(y, width, rows)
     end
     content:SetHeight(math.max(1, y + PAD))
-    -- A tooltip open over the page: filled again with the new figures.
+    -- A tooltip open over the page (under the mouse, or the gamepad's highlight): filled again
+    -- with the new figures.
     local owner = GameTooltip:IsShown() and GameTooltip:GetOwner()
-    if owner and owner.tip and owner:IsVisible() and owner:IsMouseOver() then TipEnter(owner) end
+    local padFocus = ns.Gamepad and ns.Gamepad.IsActive() and ns.Gamepad.Focused() == owner
+    if owner and owner.tip and owner:IsVisible() and (owner:IsMouseOver() or padFocus) then TipEnter(owner) end
 end
 
 -- The page ---------------------------------------------------------------------------------------
