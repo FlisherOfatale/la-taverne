@@ -816,6 +816,10 @@ if GetLocale() == "frFR" then
     L["Players who fit your group: %d"] = "Joueurs qui conviennent à votre groupe : %d"
     L["Available players: %d"] = "Joueurs disponibles : %d"
     L["Click to open or close. Right-click: quick menu."] = "Clic : ouvrir ou fermer. Clic droit : menu rapide."
+    -- Gamepad: button hints under the window
+    L["Choose"] = "Choisir"
+    L["Close"] = "Fermer"
+    L["Sections"] = "Sections"
 end
 
 -- Role helpers ----------------------------------------------------------------------

@@ -4931,6 +4931,8 @@ local function CreateMainFrame()
     end)
     frame:HookScript("OnHide", function() UI.focusGroup = nil end)
     frame:Hide()
+    -- With the gamepad UI on: the pad's buttons while the window is open (Gamepad.lua).
+    if ns.Gamepad then ns.Gamepad.Attach(frame) end
 end
 
 -- The page to land on when the current one isn't allowed anymore.
@@ -4985,6 +4987,11 @@ function UI:ShowPage(page)
     self:Refresh()
 end
 
+-- The page shown (Gamepad.lua: what the d-pad goes through).
+function UI:CurrentPanel()
+    return panels[currentPage]
+end
+
 -- A section opens on the page last seen there.
 function UI:ShowSection(key)
     for _, section in ipairs(SECTIONS) do
@@ -4997,6 +5004,21 @@ function UI:ShowSection(key)
             return
         end
     end
+end
+
+-- LB / RB (Gamepad.lua): the previous or next section with a side tab, round the end. Not the
+-- test mode tools.
+function UI:CycleSection(delta)
+    local shown, at = {}, nil
+    for _, section in ipairs(SECTIONS) do
+        if not section.tool and #VisiblePages(section) > 0 then
+            shown[#shown + 1] = section
+            if section == sectionOf[currentPage] then at = #shown end
+        end
+    end
+    if #shown == 0 then return end
+    local i = at and (at - 1 + delta) % #shown + 1 or (delta > 0 and 1 or #shown)
+    self:ShowSection(shown[i].key)
 end
 
 -- From the chat's [View] link: Browse, scrolled to that group (My group when it's mine).

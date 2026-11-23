@@ -164,16 +164,21 @@ local function Fill(root, minWidth)
     menu:SetSize(width, #root.items * ROW_H + 2 * PAD)
 end
 
--- Context menu at the cursor. generator(owner, root) builds it, as for MenuUtil.CreateContextMenu.
+-- Context menu at the cursor (with the gamepad: under its owner, the highlighted element).
+-- generator(owner, root) builds it, as for MenuUtil.CreateContextMenu.
 function ns.ContextMenu(owner, generator)
     if not menu then BuildMenu() end
     Close()
     menu.owner = owner
     Fill(Describe(generator, owner))
-    local x, y = GetCursorPosition()
-    local scale = menu:GetEffectiveScale()
     menu:ClearAllPoints()
-    menu:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+    if ns.Gamepad and ns.Gamepad.IsActive() then
+        menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+    else
+        local x, y = GetCursorPosition()
+        local scale = menu:GetEffectiveScale()
+        menu:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+    end
     menu:Show()
 end
 
