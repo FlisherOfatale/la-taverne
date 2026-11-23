@@ -109,7 +109,7 @@ local function MyPayload()
     end
     return {
         roles = ns.Groups.RoleList(ns.Groups:GetMyRoles()), dungeons = dungeons,
-        note = s.note ~= "" and s.note or nil, afk = UnitIsAFK and UnitIsAFK("player") or nil,
+        note = s.note ~= "" and s.note or nil, afk = ns.IsAway() or nil,
         class = class, level = UnitLevel("player"), vis = Shared() and "ally" or nil,
     }
 end
@@ -485,7 +485,6 @@ OnBoth("AVAIL", function(sender, p, isSelf, scope)
         note = type(p.note) == "string" and p.note:sub(1, NOTE_MAX) or nil,
         afk = p.afk and true or nil, seen = GetServerTime(), scope = scope,
         tag = scope == "ally" and ns.Alliance:GetTag(p.g) or nil,
-        unverified = scope == "ally" and ns.Vouch and ns.Vouch:GetState(sender) == "unverified" or nil,
     }
     available[key] = a
     if scope == "guild" then Players:NoteAddon(sender, a.class, a.level) end
@@ -523,6 +522,101 @@ ns.Comm:On("HERE", function(sender, p, isSelf)
     Players:NoteAddon(sender, p.class, p.level)
     Changed()
 end)
+
+-- My guildmates' hellos on the alliance channel (Vouch.lua: when they join it, when they answer
+-- an allied hello, every 4-4.5 minutes, and when something they say changes). Comm.lua already
+-- counted them as running La Taverne; this keeps what they say about themselves: away (afk), and
+-- the relay fields (Relay.lua): rl = relay switch on, cap = jobs they can do, rp = relay protocol,
+-- tr = their tier for the chat job (0-3, or "x" can't, then tw = why: a short code).
+-- Only while there's an alliance: no alliance channel, no hellos.
+ns.Comm:On("HI", function(sender, p, isSelf)
+    if isSelf then return end
+    local key = ns.NameKey(sender)
+    local entry = present[key]
+    if not entry then return end -- (Comm.lua noted them just before)
+    local old = entry.hello
+    local now = GetServerTime()
+    entry.hello = {
+        t = now,
+        afk = p.afk and true or nil,
+        rl = (p.rl == 1 or p.rl == true) or nil,
+        cap = type(p.cap) == "string" and #p.cap <= 64 and p.cap or nil,
+        rp = tonumber(p.rp),
+        tr = (p.tr == "x" or tonumber(p.tr)) and p.tr or nil,
+        tw = type(p.tw) == "string" and #p.tw <= 16 and p.tw or nil,
+    }
+    -- Saved too: after my next login, what they said last stands in until they say it again.
+    local item = (Memory() or {})[key]
+    if item then item.rl, item.cap = entry.hello.rl, entry.hello.cap end
+    -- The Players page only cares about someone new, or someone going away or coming back.
+    if not old or now - old.t >= PRESENCE_AGE or (old.afk or false) ~= (entry.hello.afk or false) then
+        Changed()
+    end
+end)
+
+-- Right after I join the alliance channel, the guildmates already online haven't said hello yet
+-- (they do every 4-4.5 min, 5 at most). For those first minutes, one seen with La Taverne before
+-- (the saved memory) and online in the roster counts as running it, and what their last hello
+-- said as what it says now. After that, every guildmate who runs it has said hello: only what
+-- was heard counts, so a wrong guess never lasts more than 5 minutes.
+local HELLO_ROUND = 300
+local allyReadyAt -- GetTime() my alliance channel got ready
+ns.Comm:OnReady(function(role)
+    if role == "ally" then allyReadyAt = GetTime() end
+end)
+
+-- Has every guildmate running La Taverne said hello since I joined the alliance channel?
+function Players:HellosComplete()
+    return allyReadyAt ~= nil and GetTime() - allyReadyAt >= HELLO_ROUND
+end
+
+-- Seen with La Taverne before, online now, and not heard yet: the saved memory's entry, during
+-- my first minutes on the alliance channel only.
+local function Remembered(key, name)
+    if Players:HellosComplete() then return nil end
+    local item = (Memory() or {})[key]
+    local member = item and ns.Guild:GetMember(name or item.name)
+    return member and member.online and item or nil
+end
+
+-- Does this guildmate run La Taverne (heard from in the last 20 minutes, or remembered while
+-- the hellos aren't all in)? Then they share their own guild lines with the allied guilds
+-- (AllyChat.lua): the relay only covers for them. A wrong guess costs little: their line 5 s
+-- late (the relay waits for their own copy first), or one extra copy, dropped by receivers.
+function Players:RunsAddon(name)
+    local key = name and ns.NameKey(name)
+    if not key then return false end
+    local p = present[key]
+    if p and p.seen and GetServerTime() - p.seen < PRESENCE_AGE then return true end
+    return Remembered(key, name) ~= nil
+end
+
+-- Guildmates whose hello I heard in the last maxAge seconds (online in the roster):
+-- { name, t, afk, rl, cap, rp, tr, tw }. For Relay.lua (who else can relay right now). While the hellos
+-- aren't all in, also those remembered from last time and not heard yet: { name, rl, cap,
+-- probable = true }.
+function Players:GetGuildHellos(maxAge)
+    local out, now = {}, GetServerTime()
+    local listed = {}
+    for key, entry in pairs(present) do
+        local h = entry.hello
+        local member = h and now - h.t < maxAge and ns.Guild:GetMember(entry.name)
+        if member and member.online then
+            out[#out + 1] = { name = entry.name, t = h.t, afk = h.afk, rl = h.rl, cap = h.cap, rp = h.rp,
+                tr = h.tr, tw = h.tw }
+            listed[key] = true
+        end
+    end
+    if not self:HellosComplete() then
+        for key, item in pairs(Memory() or {}) do
+            if not listed[key] and type(item) == "table" and item.name and not ns.IsMe(item.name)
+                and Remembered(key, item.name) then
+                out[#out + 1] = { name = item.name, rl = item.rl, cap = item.cap, probable = true }
+            end
+        end
+    end
+    return out
+end
 
 -- Expiry popup ---------------------------------------------------------------------------------
 -- A confirmation window at the top of the screen like a ready check (ns.ConfirmDialog, not the

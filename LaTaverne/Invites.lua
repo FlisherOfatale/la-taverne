@@ -4,6 +4,8 @@
 -- - The Auto-invite tab's Queue page is where you follow and send the invites; its side tab
 --   shows how many are waiting, and "when I click" mode prints a chat line for each new one.
 -- - "Right away" mode invites from the queue on its own; "When I click" mode waits for a click.
+--   An allied player not confirmed by vouching (not checked yet, disputed) always waits for a
+--   click.
 -- - Only whole messages count ("+1", "inv pls"), not words inside a sentence.
 -- - Several people can be inviting at once: "already in a group" or a declined invite takes the
 --   player off the queue. Typing the keyword again puts them back.
@@ -127,16 +129,25 @@ function Invites:ClearResults()
     Changed()
 end
 
+-- An allied player their guild isn't confirmed for (not checked yet, disputed) is never invited
+-- on its own: they wait for a click, even in "Right away" mode. Read each time (they may be
+-- confirmed while they wait).
+local function WaitsForClick(entry)
+    return entry.source == "ally" and ns.Vouch ~= nil and not ns.Vouch:IsConfirmed(entry.name)
+end
+
 local function Add(name, source)
     local key = ns.NameKey(name)
     local entry = Find(key)
     if entry then
         if entry.status ~= "invited" then entry.time = GetServerTime() end
     else
-        queue[#queue + 1] = { name = name, key = key, source = source, time = GetServerTime(), status = "queued" }
+        entry = { name = name, key = key, source = source, time = GetServerTime(), status = "queued" }
+        queue[#queue + 1] = entry
         -- Waiting for my click: say so in chat, with a link to the queue.
-        if not Settings().auto then
+        if not Settings().auto or WaitsForClick(entry) then
             ns.Print(format(L["%s wants an invite (queue: %d)."], name, #queue)
+                .. (source == "ally" and ns.Vouch and ns.Vouch:Mark(name) or "")
                 .. " |Haddon:LaTaverne:autoinvite:queue|h|cff71d5ff[" .. L["View"] .. "]|r|h")
         end
     end
@@ -212,10 +223,13 @@ function Invites:InviteNext()
 end
 
 -- Right away mode: one invite at a time, a little apart.
+-- (Players who wait for a click are skipped: see WaitsForClick.)
 function Invites:Process()
     if not active or not Settings().auto then return end
     if GetTime() - lastInvite < THROTTLE then return end
-    self:InviteNext()
+    for _, entry in ipairs(queue) do
+        if entry.status == "queued" and not WaitsForClick(entry) then return self:InviteNow(entry) end
+    end
 end
 
 -- Listening --------------------------------------------------------------------------------
@@ -658,10 +672,12 @@ function ns.BuildInvitesPanel()
         local member = ns.Guild:GetMember(entry.name)
         row.name:SetText(K.ClassColored(entry.name, member and member.class))
         local status = entry.status == "invited" and ("|cffffd100" .. L["invited"] .. "|r") or L["waiting"]
-        local source = L[SOURCE_TEXT[entry.source] or entry.source]
-        if entry.source == "ally" and ns.Vouch and ns.Vouch:GetState(entry.name) == "unverified" then
-            source = source .. " |cffff9900(" .. L["not checked yet"] .. ")|r"
+        -- "Right away" mode: an allied player not confirmed yet waits for the Invite button.
+        if entry.status == "queued" and Settings().auto and WaitsForClick(entry) then
+            status = "|cffff9900" .. L["waits for your click"] .. "|r"
         end
+        local source = L[SOURCE_TEXT[entry.source] or entry.source]
+        if entry.source == "ally" and ns.Vouch then source = source .. ns.Vouch:Mark(entry.name) end
         row.info:SetText(status .. "  \194\183  " .. source .. "  \194\183  " .. K.Ago(entry.time))
         row.invite:SetShown(entry.status == "queued")
     end)

@@ -1498,8 +1498,6 @@ OnBoth("APPLY", function(sender, p, isSelf, scope)
     local tag = scope == "ally" and ns.Alliance:GetTag(p.g) or nil
     local entry = NewPending(sender, class, (member and member.level) or p.level,
         #list == 1 and list[1] or nil, "request", offered, p.newbie, tag)
-    -- Nobody from their guild could confirm them: the leader sees it on the request.
-    entry.unverified = scope == "ally" and ns.Vouch and ns.Vouch:GetState(sender) == "unverified" or nil
     l.pending[key] = entry
     seenRequests[key] = nil -- a new request: not seen yet
     local labels = {}

@@ -71,6 +71,15 @@ function ns.FullName(unit)
     return name
 end
 
+-- Am I away (AFK)? true / false, or nil when the game won't say: in some states (a fight, an
+-- encounter) it gives a secret value that an addon can't even test.
+function ns.IsAway()
+    if not UnitIsAFK then return false end
+    local afk = UnitIsAFK("player")
+    if issecretvalue and issecretvalue(afk) then return nil end
+    return afk and true or false
+end
+
 -- Comparison key for a name: trimmed, lowercase.
 function ns.NameKey(name)
     if not name then return nil end
@@ -166,6 +175,7 @@ end
 
 local DEFAULTS = {
     notify = true,    -- chat line when a new group is posted
+    advanced = false, -- Advanced mode (Options): the guild relay's tab, beside Alliance
     showAnnounces = true, -- chat line when a leader clicks "Announce in chat"
     minimap = {},     -- LibDBIcon position and visibility
     chars = {},       -- per character: [fullName] = { listing = ... }
@@ -173,6 +183,8 @@ local DEFAULTS = {
         enabled = true,  -- share guild chat with the allied guilds
         showTag = true,  -- allied guild's tag in front of the name
         showLynx = true, -- the lynx in front of allied lines
+        markRelayed = true, -- relayed lines (authors without La Taverne): grey lynx, or a grey dot
+        markTold = false,   -- the line explaining that mark was shown once
     },
     allyLog = {},
     allyMap = {       -- guild and allied players on the world map (AllyMap.lua)
@@ -181,6 +193,10 @@ local DEFAULTS = {
         showAllies = true, -- dots for the allied guilds' members
         button = true,     -- the lynx button on the game's map (not with OpenMap's map)
         told = false,      -- the "your position is shared" line was shown once
+    },
+    relay = {         -- guild relay (Relay.lua)
+        help = true,         -- I may relay my guild for the allied guilds
+        told = false,        -- the "you're relaying" line was shown once
     },
     invites = {       -- keyword auto-invite (always off at login)
         auto = true,      -- invite right away, or wait for a click
@@ -397,7 +413,7 @@ local AUTO_EVERY, AUTO_PAUSE = 2, 5 -- seconds
 local function AutoFill(f, elapsed)
     f.autoWait = f.autoWait - elapsed
     if f.autoWait > 0 then return end
-    f.autoWait = AUTO_EVERY
+    f.autoWait = f.autoEvery or AUTO_EVERY
     -- Not while the player is selecting, scrolling or copying.
     if f.holder:IsMouseOver() or (f.keyAt and GetTime() - f.keyAt < AUTO_PAUSE) then return end
     local text = f.autoFill() or ""
@@ -488,6 +504,15 @@ function ns.CloseTextDialog(kind)
     if textDialog and textDialog:IsShown() and textDialog.kind == kind then textDialog:Hide() end
 end
 
+-- Select all of the text window's text, ready for Ctrl+C (a Copy button). Its auto-fill waits a
+-- moment, as after a key in it, so the selection stays.
+function ns.SelectTextDialog()
+    if not (textDialog and textDialog:IsShown()) then return end
+    textDialog.keyAt = GetTime()
+    textDialog.edit:SetFocus()
+    textDialog.edit:HighlightText()
+end
+
 function ns.TextDialog(opts)
     if not textDialog then BuildTextDialog() end
     local f = textDialog
@@ -563,8 +588,9 @@ function ns.TextDialog(opts)
         f.holder:SetPoint("TOPLEFT", f.hint, "BOTTOMLEFT", -2, -10)
     end
     -- opts.autoFill = function() return text end: the text box is filled again every AUTO_EVERY
-    -- seconds when the text changed (message log's auto-refresh).
-    f.autoFill, f.autoWait, f.followBottom = opts.autoFill, AUTO_EVERY, false
+    -- seconds (opts.autoEvery: another period) when the text changed (message log's auto-refresh).
+    f.autoEvery = opts.autoEvery
+    f.autoFill, f.autoWait, f.followBottom = opts.autoFill, opts.autoEvery or AUTO_EVERY, false
     f:SetScript("OnUpdate", opts.autoFill and AutoFill or nil)
     -- The text box goes down to the bottom when there's no button under it.
     f.holder:SetPoint("BOTTOMRIGHT", -10, opts.button and 44 or 10)
@@ -685,6 +711,7 @@ SlashCmdList.LATAVERNE = function(msg)
         ns.Print("/taverne - open or close the window")
         ns.Print("/taverne autoinvite - turn keyword auto-invite on or off")
         ns.Print("/taverne errors [clear] - error report to send to the author")
+        ns.Print("/taverne relay - guild relay report: who relays for each guild, and how it goes")
         -- Testing and diagnostics: listed only in test mode (they still work outside it).
         if ns.db and ns.db.dev and ns.db.dev.sandbox then
             ns.Print("Test mode:")
@@ -694,6 +721,7 @@ SlashCmdList.LATAVERNE = function(msg)
             ns.Print("/taverne map - positions on the map: what's shared and shown")
             ns.Print("/taverne test [all|env|api|names|guild|chan] - run diagnostics")
             ns.Print("/taverne who <name> - look a name up in the guild roster")
+            ns.Print("/taverne probe - relay measurements (list)")
             ns.Print("/taverne copy - reopen the output window")
         end
     end
