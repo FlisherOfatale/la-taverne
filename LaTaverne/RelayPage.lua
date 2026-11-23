@@ -344,6 +344,8 @@ local panel -- the page
 Fill = function()
     if not (panel and panel:IsVisible()) then return end
     local data = ns.Relay:WindowData()
+    -- The gamepad's highlighted widget: ReleaseAll hides it, which closes its tooltip.
+    local padOwner = ns.Gamepad and ns.Gamepad.IsActive() and ns.Gamepad.Focused()
     ReleaseAll()
     local width = math.max(300, panel.scroll:GetWidth() - 4)
     content:SetWidth(width)
@@ -365,11 +367,11 @@ Fill = function()
         y = Lines(y, width, rows)
     end
     content:SetHeight(math.max(1, y + PAD))
-    -- A tooltip open over the page (under the mouse, or the gamepad's highlight): filled again
-    -- with the new figures.
+    -- A tooltip open over the page: filled again with the new figures.
     local owner = GameTooltip:IsShown() and GameTooltip:GetOwner()
-    local padFocus = ns.Gamepad and ns.Gamepad.IsActive() and ns.Gamepad.Focused() == owner
-    if owner and owner.tip and owner:IsVisible() and (owner:IsMouseOver() or padFocus) then TipEnter(owner) end
+    if owner and owner.tip and owner:IsVisible() and owner:IsMouseOver() then TipEnter(owner) end
+    -- Under the gamepad's highlight: shown again (its widget may show another item now).
+    if padOwner and padOwner.tip and padOwner:IsVisible() then TipEnter(padOwner) end
 end
 
 -- The page ---------------------------------------------------------------------------------------

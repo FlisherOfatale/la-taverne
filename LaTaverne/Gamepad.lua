@@ -721,21 +721,30 @@ function Gamepad.Attach(frame)
     end)
 end
 
-ns.On("PLAYER_REGEN_DISABLED", function()
+-- An error in the gamepad's work (a page's tooltip code, run by Focus) is reported, never
+-- stops the other modules' handlers of the same event (the relay's fight end).
+local function Safe(fn)
+    return function(...)
+        local args = { ... }
+        xpcall(function() fn(unpack(args)) end, geterrorhandler())
+    end
+end
+
+ns.On("PLAYER_REGEN_DISABLED", Safe(function()
     fighting = true
     Bind(false)
-end)
+end))
 
-ns.On("PLAYER_REGEN_ENABLED", function()
+ns.On("PLAYER_REGEN_ENABLED", Safe(function()
     fighting = false
     if pendingClear then Bind(false) end
     Take("resume")
-end)
+end))
 
 -- The gamepad UI turned back on (InputUtil.lua listens to the same event) with the window open:
 -- a resume. Turned off, the follow-up gives the buttons back. Registered only where the client
 -- knows the event: an unknown one would be a load error for every player, pad or not.
 local TRANSITION = "INPUT_DEVICE_INTERFACE_TRANSITION"
 if not (C_EventUtils and C_EventUtils.IsEventValid) or C_EventUtils.IsEventValid(TRANSITION) then
-    pcall(ns.On, TRANSITION, function() Take("resume") end)
+    pcall(ns.On, TRANSITION, Safe(function() Take("resume") end))
 end
