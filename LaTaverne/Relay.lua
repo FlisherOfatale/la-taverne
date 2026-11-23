@@ -43,7 +43,7 @@
 -- Monitoring: every client measures its own sending on the relay prefix (messages, bytes,
 -- budget, throttled); the beacon shares the holder's figures, the hello each player's tier (for
 -- the count of candidates per tier); stability (uptime, holder changes) is counted from the
--- beacons heard. /taverne relay (and the Debug tab) shows it all in a live window.
+-- beacons heard. The relay page (RelayPage.lua; /taverne relay) shows it all, and as text.
 local ADDON, ns = ...
 local Relay = ns.NewModule("Relay")
 local L = ns.L
@@ -83,8 +83,8 @@ local BURST, REFILL = 8, 1    -- my own budget on the relay prefix: 8 at once, t
 local BUDGET_WARN = 70        -- messages a minute on the relay prefix, % of the game's 1 a second...
 local BUDGET_WARN_FOR = 120   -- ...held this long: a warning (and a job handed over, see Shed)
 local SLOW_PART = 1           -- a part held back this long before going out: counted as throttled
-local EVENTS_MAX = 20         -- relay events kept for the live window
-local LIVE_EVERY = 3          -- the live window's refresh
+local EVENTS_MAX = 20         -- relay events kept for the relay page
+local LIVE_EVERY = 3          -- the relay page's refresh
 local BUSY_REST = 600         -- a job handed over for being too busy: not claimed back for this long
 -- Map job
 local MAP_BATCH = 10          -- a batch at most this often (the steps below say who's in it)
@@ -836,7 +836,7 @@ end)
 
 -- What my hello says about relaying (Vouch.lua): switch on (rl), jobs I can do (cap), protocol,
 -- and my tier for the chat job (tr: 0-3, or "x" can't and tw why), for my guildmates' count of
--- candidates per tier (the live window). Only in the hellos sent anyway (every 4-4.5 min, and
+-- candidates per tier (the relay page). Only in the hellos sent anyway (every 4-4.5 min, and
 -- when being away or the switch changes): a tier changing (fights) never sends one.
 function Relay:HelloFields(payload)
     payload.rl = ns.db.relay.help and 1 or nil
@@ -1732,8 +1732,8 @@ function Relay:MyStateText()
     return format(L["Ready to relay (%s)"], text)
 end
 
--- The live window (/taverne relay, the Debug tab) ---------------------------------------------
--- Everything about the relay, filled again every LIVE_EVERY seconds, in both modes (test mode
+-- The text report (the relay page's Copy report) ------------------------------------------
+-- Everything about the relay as text, in both modes (test mode
 -- carries only the test guild's lines, so the real guild's load shows only outside it). Top
 -- first: every guild's relay, my guild's candidates per tier, me and the election, my sending,
 -- the counts since login, the last events. Copy selects it all (to paste in a message).

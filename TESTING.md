@@ -17,6 +17,14 @@ To start the vouching tests from a clean slate (keeps every setting):
 ## 1. Alone: essential (stability, and the new features doing their main job)
 - [ ] Away check (nothing to set up, just play with script errors on): no "secret boolean" error
       from `Vouch.lua` or `Players.lua` after fights and boss encounters.
+- [ ] Advanced mode (Options, General): ticked, a small tab with a flare shows right of the
+      Alliance tab (not over it, not far from it; Mind vision or a torch if the client has no
+      flare), a green dot on it while you relay; unticked, it's gone, and the relay page, if it
+      was open, gives way to the Alliance page.
+- [ ] Relay page: the guild cards fit (in French too), the folds open and close, the tooltips
+      (job rows, the badge, the counts) show, Copy report opens the text over the window.
+      `/taverne relay` opens the page without Advanced mode.
+- [ ] Minimap button's tooltip: each guild's relay line shows both jobs (chat and map).
 
 ## 2. Alone: useful, not urgent
 - [ ] Probe: `/taverne probe roster` with the guild window's "show offline members" box unticked
@@ -31,11 +39,11 @@ To start the vouching tests from a clean slate (keeps every setting):
       record expires.
 
 ## 3. With a second player: essential
-- [ ] Guild relay live window, two PCs: the other PC sees the holder's "last minute" figures
-      (from its beacon) and counts the candidates per tier within 5 minutes; a handover shows as
-      a planned holder change, a killed game as unplanned.
-- [ ] Guild relay, two candidates (same guild, both on this version): exactly one relays
-      (`/taverne relay` on both).
+Needs two players **in the same guild**, both on this version (the tests across two guilds
+passed: see "Done").
+- [ ] Guild relay, two candidates: exactly one relays (`/taverne relay` on both).
+- [ ] Relay page, same guild: a handover shows as a planned holder change, a killed game as
+      unplanned; the other candidate shows in "Who can relay" within 5 minutes.
 - [ ] Guild relay: `/taverne dev say Firstname Lastname: text` (test mode) shows once on the
       allied PC; the La Taverne players' own lines also show once (no double line).
 - [ ] Guild relay, handover: switch "Help relay for my guild" off (popup first), `/reload`, log
@@ -51,14 +59,11 @@ To start the vouching tests from a clean slate (keeps every setting):
 - [ ] Vouching: auto-invite in "Right away" mode: an allied player not checked yet (or disputed)
       is queued for a click, not invited.
 
-- [ ] Map job, two PCs in allied test guilds: `/taverne dev walk Firstname Lastname` on one;
-      the other sees the dot (tooltip "Passed on by ..."), moving about every 30 s; stopped:
-      gone within ~10 s. Each guild's own PC shows no relayed dot for its own guild.
-
 ## 4. With a second player: later
-- [ ] Map job, real guild: a guildmate without La Taverne sharing through OpenMap ("Share where
-      you are"): the allied guild sees their dot; one with La Taverne and OpenMap: never relayed
-      (they share their own).
+- [ ] Map job, dots: on the allied side, a relayed dot's tooltip says "Passed on by ...", it
+      moves about every 30 s, and it's gone within ~10 s once that player stops sharing.
+- [ ] A chat line sent again (relay page, Your sending: "sent again" above 0): the allied side
+      shows it once.
 - [ ] Relayed line mark: the guild window (Communities) and the test guild window show the same
       mark, also after closing and reopening them. With Chattynator: the mark shows there too.
 - [ ] Guild relay, real guild, profanity filter on for one player: a La Taverne author's swear
@@ -67,10 +72,21 @@ To start the vouching tests from a clean slate (keeps every setting):
       guild: do the lines match (in English and French clients)?
 
 ## Done
-- 2026-11-22: guild relay live window, alone, test mode and the real guild: fills itself every
-  3 s (pauses under the mouse), Copy selects it all, you counted per tier, your sending and the
-  last events shown; real guild: guild lines counted, 9 OpenMap sharers without La Taverne
-  relayed (map about 8 % of the game's limit), 47 La Taverne users skipped.
+- 2026-11-22: guild relay across two real guilds, one relay each side ([NDQ] and [NDQA]): 12
+  relayed lines and 176 relayed map positions received from the other guild, none refused; each
+  side sees the other relay's figures from its beacon ("last minute", budget, throttled); players
+  with La Taverne are never relayed (their own places skipped: 1445 from 60 players).
+- 2026-11-22: refused messages in play: game code 8 (channel throttle) on chat lines and
+  coordination, mostly in the seconds after taking both jobs; code 9 (general error) twice on a
+  holder's signal. Chat lines sent again (2), none lost.
+- 2026-11-22: an early test build of the relay in [NDQ] (chat only): it holds that guild's chat,
+  its beacon has no load figures and its hello no tier ("tier not said"); [NDQ]'s map then has no
+  relay. No errors on either side.
+- 2026-11-22: guild relay live window (now the relay page's Copy report), alone, test mode and
+  the real guild: fills itself every 3 s (pauses under the mouse), Copy selects it all, you
+  counted per tier, your sending and the last events shown; real guild: guild lines counted, 9
+  OpenMap sharers without La Taverne relayed (map about 8 % of the game's limit), 47 La Taverne
+  users skipped.
 - 2026-11-22: map job, alone (test mode, `/taverne dev walk`, a pretend ally in the test Guild
   Info): you hold "Map positions" with chat, places heard every 10 s, a position passed on about
   every 30 s, a stop counted, map budget 5 %, nothing refused. (No dot on your own map: by design.)

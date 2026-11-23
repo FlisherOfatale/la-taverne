@@ -561,7 +561,7 @@ function ns.BuildDebugPanel()
     -- Fake people inviting (auto-invite page: "2 others are inviting" and its tooltip).
     local fakeRunners = K.NewButton(p, "", W, 24)
     fakeRunners:SetPoint("TOPLEFT", 8, -294)
-    -- The guild relay's live window (also /taverne relay), at the end of this row.
+    -- The guild relay's page (also /taverne relay), at the end of this row.
     local relay = K.NewButton(p, L["Guild relay"], W, 24)
     relay:SetPoint("TOPLEFT", 8 + 2 * (W + 8), -294)
     K.WithTooltip(relay, { L["Guild relay"], L["Every guild's relay, who can relay in your guild, what you send for it and the last events, filled again every 3 seconds (also /taverne relay)."] })

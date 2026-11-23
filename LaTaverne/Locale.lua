@@ -904,7 +904,7 @@ if GetLocale() == "frFR" then
     L["another relay"] = "un autre relais"
     L["too busy"] = "trop occupé"
     L["La Taverne without the relay"] = "La Taverne sans le relais"
-    -- Relay live window (/taverne relay, Debug tab)
+    -- Relay text report and page (/taverne relay, Debug tab)
     L["Every guild's relay, who can relay in your guild, what you send for it and the last events, filled again every 3 seconds (also /taverne relay)."] = "Le relais de chaque guilde, qui peut relayer dans votre guilde, ce que vous envoyez pour lui et les derniers événements, actualisé toutes les 3 secondes (aussi /taverne relay)."
     L["Filled again every 3 seconds (it waits while the mouse is over the text). Copy selects it all: then Ctrl+C."] = "Actualisé toutes les 3 secondes (en pause tant que la souris est sur le texte). Copier sélectionne tout : puis Ctrl+C."
     L["Copy"] = "Copier"
@@ -951,7 +951,7 @@ if GetLocale() == "frFR" then
     L["received: relayed lines %d, copies dropped %d, refused %d"] = "reçu : lignes relayées %d, copies écartées %d, refusées %d"
     L["Last events"] = "Derniers événements"
     L["none yet"] = "aucun pour l'instant"
-    -- Relay events (the live window; job names and reasons stay as sent)
+    -- Relay events (the relay page; job names and reasons stay as sent)
     L["%s is free (%s)"] = "%s est libre (%s)"
     L["I hold %s (tier %s)"] = "Je tiens %s (rang %s)"
     L["I give %s up (%s)"] = "Je laisse %s (%s)"

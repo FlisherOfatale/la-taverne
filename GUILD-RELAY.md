@@ -1,8 +1,11 @@
 # Guild relay: handover notes
 
-Status (2026-11-22): **phase 1 (guild chat) written, solo tests passing; monitoring (part C) and phase 2 (map) written, not tested in game yet.**
-Phase 3 and a second pass on phase 1 are still to do (see "What's left"). These notes are
-for whoever continues (Oylex or Flisher). Not in the addon zip (`.pkgmeta` ignores this file).
+Status (2026-11-22): **phase 1 (guild chat), phase 2 (map) and the monitoring work in the real
+guilds:** one relay per guild, each side receiving the other's relayed lines and map positions.
+Still to test with two players in the same guild: handovers, fights, the choice of one relay
+among several (`TESTING.md`). Phase 3 and a second pass on phase 1 are still to do (see "What's
+left"). These notes are for whoever continues (Oylex or Flisher). Not in the addon zip
+(`.pkgmeta` ignores this file).
 
 ## What it does
 Today an allied guild only sees the guild chat of players who run La Taverne: each player's own
@@ -56,17 +59,18 @@ and (map job) the map positions of members without La Taverne who share them thr
 ## Where it lives
 | File | What |
 |---|---|
-| `Relay.lua` (new) | tiers, elections, beacons, chat job (buffer, queue, stall, gap fill), status, switch + popup, `/taverne relay` |
+| `Relay.lua` (new) | tiers, elections, beacons, chat job (buffer, queue, stall, gap fill), status, switch + popup, monitoring, the text report and `WindowData` (the page's figures), `/taverne relay` |
+| `RelayPage.lua` (new) | the relay's page in La Taverne's window: guild cards, counts since login, Your guild / Your sending / Events folded, Copy report |
 | `Comm.lua` | `LaTaverneR` prefix; my guild's `HI`, `CHAT`, `RCHAT`, `RLY` on the alliance channel go to the guild handlers; message log counters |
 | `AllyChat.lua` | `TextKey`, copy check for `CHAT` and `RCHAT`, `RCHAT` receive checks and flood cap, test-mode fake member |
 | `Alliance.lua` | `LT:r` parse / write, `RelayAllows`, `IsInfoKnown` |
 | `Vouch.lua`, `Players.lua` | hello fields, `GetGuildHellos`, `RunsAddon` |
-| `UI.lua` | Setup page "Guild relay"; Alliance page relay rows (and "You"); Options "Help relay for my guild" |
-| `Minimap.lua` | speech-bubble badge while I relay; one tooltip line per guild |
-| `Core.lua`, `Locale.lua` | `relay = { help, told }` defaults; every string in French |
+| `UI.lua` | Setup page "Guild relay"; Alliance page relay rows (and "You"); Options "Help relay for my guild" and "Advanced mode"; the relay's small tab beside Alliance (Advanced mode) |
+| `Minimap.lua` | speech-bubble badge while I relay; one tooltip line per guild, both jobs |
+| `Core.lua`, `Locale.lua` | `relay = { help, told }` and `advanced` defaults; every string in French |
 | `Dev.lua`, `Tests.lua` | `/taverne dev say`; `/taverne probe` (phase 0 measurements) |
-| `Comm.lua` | `lastSend` (parts and bytes of the last send), `WatchParts` (ChatThrottleLib's callback: parts held back or refused) |
-| `DebugUI.lua` | "Guild relay" button (the live window) |
+| `Comm.lua` | `lastSend` (parts and bytes of the last send), `WatchParts` (ChatThrottleLib's callback: parts held back or refused, with the message's type), a chat line refused by the channel throttle sent again once |
+| `DebugUI.lua` | "Guild relay" button (opens the relay's page) |
 | `AllyMap.lua` | `RMAP` receive: relayed dots (allied guilds only, 300 s lease, never over a player's own `POS`), "Passed on by" tooltip line |
 | `Comm.lua`, `Vouch.lua` | `LaTaverneM` prefix; my guild's `RMAP` read by the relay only; `RMAP` passive ("quiet") for vouching |
 | `Dev.lua` | `/taverne dev walk` (test mode: a fake OpenMap sharer) |
@@ -107,13 +111,34 @@ and (map job) the map positions of members without La Taverne who share them thr
 - The hello carries `tr` (tier for chat, 0-3, or `x` and `tw` why): the count of candidates per
   tier. Only in hellos sent anyway, never one just because the tier changed.
 - Stability, from the beacons heard: uptime this hour (fresh beacon while that guild has a La
-  Taverne player online) and holder changes (planned: after an `off`; unplanned: it went quiet).
+  Taverne player online), holder changes (planned: after an `off`; unplanned: it went quiet), and
+  relays lost with nobody taking over (a guild that had a relay, none for 30 s while it has La
+  Taverne players online).
+- **Refused messages.** ChatThrottleLib waits and tries again only for the add-on message limit
+  (result 3). Anything else the game refuses is dropped: seen in play, 8 (channel throttle, in
+  bursts, e.g. right after taking both jobs) and 9 (general error). Refusals are counted per job,
+  message type (chat line, map batch, claim, holder's signal...) and result code; a chat line
+  counts once however many of its parts were refused. A chat line (`RCHAT`, and an author's own
+  `CHAT`) refused by the channel throttle goes out once more, whole, 2 s later; receivers drop
+  it if the first one came through (same message number). Map batches and coordination aren't
+  sent again: the next batch or beacon replaces them. Counted: lines hit, sent again, refused
+  again (lost for the allied guilds).
+
+## Seeing it
+- **Everyone:** the Alliance page's relay rows (each guild, each job) and the minimap button's
+  tooltip (`[TAG] Relay: chat: who (tier) · map: who (tier)`; "nobody" in orange when that guild
+  has La Taverne players online).
+- **Advanced mode** (Options, General, off by default): a small tab with a flare beside the
+  Alliance tab, opening the relay's page (`RelayPage.lua`): one card per guild (who holds each
+  job, tier, uptime bar, budget, held back or refused; one line for a player holding both jobs,
+  with their messages a minute; refusals in orange, details in the tooltips), the counts since
+  login, then Your guild, Your sending and Events, folded. Filled again every 3 s. Copy report
+  gives the same figures as text, to paste when reporting a problem. A green dot on the tab
+  while I relay.
 
 ## Commands
-- `/taverne relay` (or the Debug tab's "Guild relay" button): the live window, filled again
-  every 3 s, in both modes. Every guild's relay with its load and stability, my guild's
-  candidates per tier, me and the election, my sending, the counts since login, the last 20
-  relay events. Copy selects it all: paste it when reporting a problem.
+- `/taverne relay` (or the Debug tab's "Guild relay" button): opens the relay's page, also
+  without Advanced mode (until another page is shown).
 - `/taverne probe`: phase 0 measurements (chat readable or secret, throttles, logout, resting).
 - Test mode: `/taverne dev say Firstname Lastname: text`: a test guild member without La Taverne
   says a line (the relay passes it on). Only the test guild's fake chat is relayed in test mode,
@@ -122,7 +147,8 @@ and (map job) the map positions of members without La Taverne who share them thr
   shares their place through OpenMap, walking a circle around where you stood (one place every
   10 s); again to stop. `/taverne map` lists the dots, relayed ones with who passed them on.
 
-## Testing (not done yet)
+## Testing
+What's done and what's left: `TESTING.md`. The setup and the checks:
 1. Two PCs in the same test guild, a third in an allied test guild (or 2 PCs, one per guild),
    `/console scriptErrors 1`.
 2. One candidate alone holds the job within ~15 s ("You're relaying..." line once, badge,
@@ -136,8 +162,8 @@ and (map job) the map positions of members without La Taverne who share them thr
    "turned off by the officers".
 7. Profanity filter on one PC (real guild): a La Taverne author's swear word shows once on the
    allied side.
-8. Bring back `/taverne relay` (Copy), the message log and `/taverne errors` from each PC.
-9. Live window: the allied PC sees the holder's load from its beacon (messages, bytes, budget);
+8. Bring back `/taverne relay` (Copy report), the message log and `/taverne errors` from each PC.
+9. Relay page: the allied PC sees the holder's load from its beacon (messages, bytes, budget);
    the candidates per tier fill in within 5 min of a login; a handover counts as planned, a
    killed game as unplanned.
 10. Map job: `/taverne dev walk Firstname Lastname` on a PC of one test guild: the allied PC
@@ -145,10 +171,14 @@ and (map job) the map positions of members without La Taverne who share them thr
    walking again (stop); the relay's own guild shows none from the relay.
 
 ## What's left
-**Phase 2: map relay.** Written (2026-11-22, not tested in game), see "Map job". Later, only if
-the live window shows a high map budget: short ids instead of names (full refresh carries name,
+**Phase 2: map relay.** Works in the real guilds (2026-11-22), see "Map job". Later, only if the
+relay page shows a high map budget: short ids instead of names (full refresh carries name,
 class, level, id; updates only the id). Allied guilds whose players are all on a version without
-the map job show "nobody" (orange) for it on the Alliance page until they update.
+the map job show "nobody" (orange) for it on the Alliance page until they update; an early test
+build of the relay (chat only, no tier in its hello) shows as "tier not said".
+
+**Tuning, from play.** The relay page marks one player's relay load as busy from 20 messages a
+minute (`HEAVY_PER_MIN`) and uptime under 90 % (`UP_WARN`): first guesses.
 
 **Phase 3, only if testing shows a need.** A compact format instead of AceSerializer; several
 waiting lines packed in one message; catch-up: the last 30 min of allied lines for a player who
@@ -162,7 +192,7 @@ just logged in (one answer for everyone who asked in the same 10 s).
 - Saving the buffer and queue at logout / `/reload`, sent at login if under 60 s old.
 - `LT:rv:N`: minimum relay protocol in a guild (officers), repeated in the beacon.
 - 48 h history per hour (lines, coverage, queue, budget, minutes without a relay); warnings in
-  the message log; a relay panel in the Debug tab.
+  the message log. (The live figures are on the relay's page.)
 - Authors could stop sending their own `CHAT` once no old receivers are left (only then: an old
   receiver can't read `RCHAT`).
 - Maybe: a minimap ring when a guild has no relay (dropped for now: players can't act on it).
