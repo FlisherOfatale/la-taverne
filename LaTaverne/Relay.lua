@@ -307,7 +307,7 @@ end
 -- (held) or refused (failed, and failCodes: [the game's result code] = count); budget warnings.
 -- prefix: [prefix] = ring of seconds, the same per prefix (the game's limit is per prefix).
 local meter = { sec = {}, min = {}, prefix = {}, peak = 0, items = 0, parts = 0, maxParts = 0, rly = 0, all = 0,
-    held = 0, failed = 0, failCodes = {}, failKinds = {}, resent = {}, warnings = 0 }
+    held = 0, failed = 0, failCodes = {}, failKinds = {}, resent = {}, hitLines = 0, lostAgain = 0, warnings = 0 }
 for _, job in ipairs(JOB_ORDER) do meter.prefix[JOBS[job].prefix] = {} end
 
 -- resend: a message sent again (Comm.lua), counted in the sending but not as one more message.
@@ -340,9 +340,11 @@ end
 -- (its budget, or the game's throttle), or refused, counts as throttled. Refused: per code and
 -- per message type (failKinds: RCHAT a line, RMAP a map batch, "RLY claim"... coordination). A chat line
 -- refused by the channel throttle goes out once more (Comm.lua): resent[message type], and its
--- sending is measured like the first one.
+-- sending is measured like the first one. Per message rather than per part (a line can be up
+-- to 3): hitLines, lines with a part refused the first time; lostAgain, lines sent again and
+-- refused again (gone for the allied guilds: not sent a third time).
 for _, job in ipairs(JOB_ORDER) do
-    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited, result, kind)
+    ns.Comm:WatchParts(JOBS[job].prefix, function(didSend, waited, result, msg)
         if didSend and waited < SLOW_PART then return end
         if didSend then
             meter.held = meter.held + 1
@@ -350,8 +352,16 @@ for _, job in ipairs(JOB_ORDER) do
             meter.failed = meter.failed + 1
             local code = tostring(result)
             meter.failCodes[code] = (meter.failCodes[code] or 0) + 1
-            kind = kind or "?"
+            local kind = msg and msg.kind or "?"
             meter.failKinds[kind] = (meter.failKinds[kind] or 0) + 1
+            if kind == "RCHAT" and not msg.counted then
+                msg.counted = true -- once per line, whatever the number of its parts refused
+                if msg.resent then
+                    meter.lostAgain = meter.lostAgain + 1
+                else
+                    meter.hitLines = meter.hitLines + 1
+                end
+            end
         end
         local st = jobs[job]
         if st.holding then st.report.th = st.report.th + 1 end
@@ -1872,7 +1882,7 @@ local function ReportText()
     for code, n in pairs(meter.failCodes) do codes[#codes + 1] = code .. " x" .. n end
     table.sort(codes)
     -- Coordination ("RLY claim"...) as one count, with which messages they were.
-    local KIND_NAMES = { RCHAT = "chat lines", RMAP = "map batches" }
+    local KIND_NAMES = { RMAP = "map batches" }
     local OP_NAMES = { claim = "claim", hold = "holder's signal", off = "giving it up", ask = "asking who relays" }
     local kinds, ops, rly = {}, {}, 0
     for kind, n in pairs(meter.failKinds) do
@@ -1880,6 +1890,9 @@ local function ReportText()
         if op or kind == "RLY" then
             rly = rly + n
             if op then ops[#ops + 1] = (OP_NAMES[op] and L[OP_NAMES[op]] or op) .. " " .. n end
+        elseif kind == "RCHAT" then
+            -- Lines, then their messages (parts) refused.
+            kinds[#kinds + 1] = format(L["chat lines %d (%d messages)"], meter.hitLines, n)
         else
             kinds[#kinds + 1] = (KIND_NAMES[kind] and L[KIND_NAMES[kind]] or kind) .. " " .. n
         end
@@ -1894,7 +1907,7 @@ local function ReportText()
     local details = {}
     if #codes > 0 then details[#details + 1] = L["game codes:"] .. " " .. table.concat(codes, ", ") end
     if #kinds > 0 then details[#details + 1] = table.concat(kinds, ", ") end
-    if resent > 0 then details[#details + 1] = format(L["sent again %d"], resent) end
+    if resent > 0 then details[#details + 1] = format(L["sent again %d, refused again %d"], resent, meter.lostAgain) end
     Add("    " .. format(L["messages per line: average %.1f, max %d; coordination %d%% of what you sent; held back 1 s or more %d, refused %d"],
         meter.items > 0 and meter.parts / meter.items or 0, meter.maxParts, Pct(meter.rly, meter.all), meter.held, meter.failed)
         .. (#details > 0 and (" (" .. table.concat(details, "; ") .. ")") or ""))

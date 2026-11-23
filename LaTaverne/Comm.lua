@@ -754,8 +754,10 @@ Comm.lastSend = { parts = 0, bytes = 0 }
 
 -- Parts on a watched prefix report back once ChatThrottleLib really sends them (it holds them
 -- while its budget or the game's throttle says wait): fn(didSend, waited seconds, the game's
--- result code, message type, with its op if any: "RLY hold"). A message sent again (below) tells onResend(message type, parts,
--- bytes), so its sending is measured too. Relay.lua.
+-- result code, msg). msg is the same table for every part of one message: msg.kind (its type,
+-- with its op if any: "RLY hold"), msg.resent (this is the second sending, below); a watcher
+-- may mark it, to count a message once. A message sent again tells onResend(message type,
+-- parts, bytes), so its sending is measured too. Relay.lua.
 local partWatch, resendWatch = {}, {}
 function Comm:WatchParts(prefix, fn, onResend)
     partWatch[prefix] = fn
@@ -773,7 +775,7 @@ local SendOnChannel
 
 local function PartDone(arg, didSend, result)
     local fn = partWatch[arg.prefix]
-    if fn then fn(didSend and true or false, GetTime() - arg.at, result, arg.msg.kind) end
+    if fn then fn(didSend and true or false, GetTime() - arg.at, result, arg.msg) end
     local msg = arg.msg
     if not didSend and result == CHANNEL_THROTTLE and msg.retry and not msg.resent then
         msg.resent = true -- once per message, even when several of its parts are refused
