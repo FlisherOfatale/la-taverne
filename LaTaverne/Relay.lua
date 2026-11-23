@@ -81,7 +81,7 @@ local COPY_WINDOW = 10        -- two copies of one line: their times differ by t
 local EARLY_COPY_KEEP = 30    -- a copy heard before the guild line itself: kept this long
 local BURST, REFILL = 8, 1    -- my own budget on the relay prefix: 8 at once, then 1 a second
 local BUDGET_WARN = 70        -- messages a minute on the relay prefix, % of the game's 1 a second...
-local BUDGET_WARN_FOR = 120   -- ...held this long: a warning (and a job handed over, see Shed)
+local BUDGET_WARN_FOR = 120   -- ...held this long: a warning (see WatchBudget)
 local SLOW_PART = 1           -- a part held back this long before going out: counted as throttled
 local EVENTS_MAX = 20         -- relay events kept for the relay page
 local LIVE_EVERY = 3          -- the relay page's refresh
@@ -98,11 +98,10 @@ local MAP_STALL = 90          -- the holder not heard this long (it beacons ever
 local MAP_SLOW_BELOW = 50     -- slowed down (steps doubled): back to normal under this % of the budget
 
 -- Jobs: name, what HI says I can do (cap), claim delay offset, prefix (the game limits messages
--- per prefix: each job has its own). shed: handed to someone else first when I'm too busy and
--- hold another job too; chat is never shed, it queues.
+-- per prefix: each job has its own, and its own busy watch, WatchBudget).
 local JOBS = {
-    chat = { name = "chat", cap = "c1", offset = 0, shed = false, prefix = PREFIX },
-    map = { name = "map", cap = "m1", offset = 5, shed = true, prefix = MAP_PREFIX },
+    chat = { name = "chat", cap = "c1", offset = 0, prefix = PREFIX },
+    map = { name = "map", cap = "m1", offset = 5, prefix = MAP_PREFIX },
 }
 local JOB_ORDER = { "chat", "map" }
 
@@ -896,17 +895,13 @@ local function Cover(author, text, t, by)
     for _, e in ipairs(buffer) do
         if Matches(e, akey, key, t) then return end -- a second copy of a covered line
     end
-    -- No line with this text: the author's oldest line still owed from about then.
-    for _, e in ipairs(buffer) do
-        if not e.covered and Near(e, akey, t) then
-            e.covered, e.by = GetTime(), by
-            CountCovered(e)
-            return
-        end
-    end
+    -- No line with this text (yet): kept. Its own line usually comes a moment later
+    -- (TakeEarlyCopy); a copy still unmatched after that covers another line (UseLeftovers).
     earlyCopies[#earlyCopies + 1] = { akey = akey, key = key, t = t, at = GetTime(), by = by }
 end
 
+-- The guild line a copy was waiting for: only the same text. (Another text from the same author
+-- may be a different line, typed just before; see UseLeftovers.)
 local function TakeEarlyCopy(e)
     for i, c in ipairs(earlyCopies) do
         if Matches(e, c.akey, c.key, c.t) then
@@ -914,19 +909,38 @@ local function TakeEarlyCopy(e)
             return c.by
         end
     end
-    for i, c in ipairs(earlyCopies) do
-        if Near(e, c.akey, c.t) then
-            table.remove(earlyCopies, i)
-            return c.by
-        end
-    end
     return nil
+end
+
+-- A copy no guild line matched for LEFTOVER_AFTER: its text differs from mine (the game's
+-- profanity filter changes the lines I get, not what the author typed). It covers the author's
+-- oldest line still owed from about then. Only once it had time to meet its own line: earlier,
+-- it could cover a different line of the same author (one whose own copy was lost) and that
+-- line would never be passed on.
+local LEFTOVER_AFTER = 2
+local function UseLeftovers(now)
+    local i = 1
+    while i <= #earlyCopies do
+        local c, used = earlyCopies[i], false
+        if now - c.at >= LEFTOVER_AFTER then
+            for _, e in ipairs(buffer) do
+                if not e.covered and Near(e, c.akey, c.t) then
+                    e.covered, e.by = now, c.by
+                    CountCovered(e)
+                    used = true
+                    break
+                end
+            end
+        end
+        if used then table.remove(earlyCopies, i) else i = i + 1 end
+    end
 end
 
 local function Prune()
     local now = GetTime()
     local inFight = Fighting() or (lastFight and now - lastFight < BUFFER_AGE_FIGHT)
     local age, max = inFight and BUFFER_AGE_FIGHT or BUFFER_AGE, inFight and BUFFER_MAX_FIGHT or BUFFER_MAX
+    UseLeftovers(now)
     while #buffer > 0 and (#buffer > max or now - buffer[1].seen > age) do
         local e = table.remove(buffer, 1)
         -- (Still in my queue as the relay: not lost yet, Pump sends it or counts it.)
@@ -1436,31 +1450,16 @@ local function TickJob(job)
     end
 end
 
--- Too busy: messages on the relay prefix at BUDGET_WARN % of the game's limit or more for
--- BUDGET_WARN_FOR: one warning (marked "!!" in the message log), and while I hold two jobs or
--- more, a job that can be shed goes to someone else (chat never: it queues).
-local function Shed()
-    local held = 0
-    for _, job in ipairs(JOB_ORDER) do
-        if jobs[job].holding then held = held + 1 end
-    end
-    if held < 2 then return end
-    for i = #JOB_ORDER, 1, -1 do
-        local job = JOB_ORDER[i]
-        if JOBS[job].shed and jobs[job].holding then
-            Release(job, "busy")
-            return
-        end
-    end
-end
-
 -- Messages on a prefix in the last 60 s, as a % of the game's limit (1 a second per prefix).
 local function PrefixPct(prefix, now)
     return math.floor(Sum(meter.prefix[prefix], math.floor(now), 60, "m") * 100 / 60)
 end
 
--- The chat prefix: a warning, and a job handed over (Shed). The map prefix: slower steps at once,
--- and still busy BUDGET_WARN_FOR later, the map job handed over (chat untouched).
+-- Too busy, per prefix (the game limits each one on its own). The chat prefix at BUDGET_WARN %
+-- or more for BUDGET_WARN_FOR: one warning (marked "!!" in the message log), nothing handed
+-- over (chat queues; the map job is on its own prefix, handing it over wouldn't lighten chat).
+-- The map prefix: slower steps at once, and still busy BUDGET_WARN_FOR later, the map job
+-- handed over (chat untouched).
 local function WatchBudget()
     local now = GetTime()
     local last = Sum(meter.sec, math.floor(now), 60, "m")
@@ -1474,7 +1473,6 @@ local function WatchBudget()
             meter.warned = true
             meter.warnings = meter.warnings + 1
             Record("relay busy", "busy: %d%% of the game's limit for %d s", pct, BUDGET_WARN_FOR)
-            Shed()
         end
     end
     if not jobs.map.holding then return end

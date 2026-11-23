@@ -7,7 +7,8 @@
 --   tier 2: told by someone I trust (later: guildmates, a guild's relay).
 --   tier 3: their claim only.
 -- The newest tier 1-2 record wins (the tier only breaks a tie; a claim never overrides one):
--- "in B" confirms a claim of B; "in C" or "missing from B's roster" denies it. Records are kept
+-- "in B" confirms a claim of B; "in C" denies it; "missing from B's roster" only disputes it
+-- (that roster was saved by one of my other characters, they may have joined since). Records are kept
 -- 7 days (tier 1) or 1 day (tier 2). If the game shows no guild, that's no evidence at all.
 --
 -- With no record, the older questions decide, as a fallback: the first time we hear from
@@ -39,7 +40,7 @@ local HELLO_MIN, HELLO_MAX = 2, 15     -- random delay before answering a hello
 
 -- Evidence ledger.
 local TIER_KEEP = { 7 * 24 * 3600, 24 * 3600 } -- records kept: tier 1, tier 2
-local SNAPSHOT_DENY = 24 * 3600 -- missing from a roster snapshot this recent: not in that guild
+local SNAPSHOT_DENY = 24 * 3600 -- missing from a roster snapshot this recent: disputed (not denied)
 local OTHER_DENY = 24 * 3600    -- seen in another guild this recent: denied (older: disputed)
 local RECORD_QUIET = 60         -- the same sighting again within a minute isn't written
 local RECORDS_MAX = 6           -- records kept per player (the newest)
@@ -139,8 +140,10 @@ local function Evidence(key, claimed)
             end
         end
     end
-    -- My characters' rosters: on one, they're in that guild. Missing from the claimed guild's:
-    -- not in it, only while the snapshot is recent (they may have joined since) and complete.
+    -- My characters' rosters: on one, they're in that guild. Missing from the claimed guild's
+    -- (ok = false): only a doubt, while the snapshot is recent and complete. It was saved by one
+    -- of my other characters (an allied guild is never my current one): they may have joined
+    -- since, so an answer from that guild still decides (StateOf).
     for _, snap in pairs(Snapshots() or {}) do
         if type(snap) == "table" and type(snap.names) == "table" and snap.t and now - snap.t < TIER_KEEP[1]
             and Better(snap.t, 1, best) then
@@ -155,17 +158,22 @@ local function Evidence(key, claimed)
 end
 
 -- What a deciding record says about a claim. Seen in another guild long ago: they may have
--- moved since, only disputed.
+-- moved since, only disputed. Missing from an old roster: disputed too.
 local function Verdict(rec, claimed)
-    if not rec.ok then return "denied" end
+    if not rec.ok then return "disputed" end
     if SameGuild(rec.g, claimed) then return "confirmed" end
     return GetServerTime() - rec.t < OTHER_DENY and "denied" or "disputed"
 end
 
 -- A player's state: the evidence first, the answers otherwise. Returns the state and the
 -- deciding record (nil when the answers decide).
+-- Only a doubt (missing from an old roster, Evidence): the answers still decide when they said
+-- yes or no; otherwise disputed. The questions go on meanwhile (Gate).
+local function Absence(rec) return rec ~= nil and not rec.ok end
+
 local function StateOf(entry)
     local rec = Evidence(ns.NameKey(entry.name), entry.guild)
+    if Absence(rec) and (entry.state == "confirmed" or entry.state == "denied") then return entry.state, nil end
     if rec then return Verdict(rec, entry.guild), rec end
     return entry.state, nil
 end
@@ -174,7 +182,7 @@ end
 local function Vouched(name, guild)
     local key = ns.NameKey(name)
     local rec = Evidence(key, guild)
-    if rec then return Verdict(rec, guild) == "confirmed" end
+    if rec and rec.ok then return Verdict(rec, guild) == "confirmed" end
     local entry = players[key]
     return entry ~= nil and SameGuild(entry.guild, guild) and entry.state == "confirmed"
 end
@@ -243,7 +251,7 @@ local function Recheck(entry)
     entry.shown = state
     if state ~= old and state and state ~= "checking" then Vouch.stats[state] = (Vouch.stats[state] or 0) + 1 end
     -- The evidence decided: no need to ask (or wait for the answer). Asked again if it expires.
-    if rec and entry.timer then
+    if rec and rec.ok and entry.timer then
         entry.timer:Cancel()
         entry.timer, entry.asking = nil, nil
     end
@@ -471,8 +479,9 @@ function Vouch:Gate(sender, guild, fn, passive)
         return false
     end
     if state == "confirmed" or state == "unverified" or state == "disputed" then
-        -- Old answer (and no evidence): let it through and ask again in the background.
-        if not rec and not Fresh(entry) and not entry.timer then Ask(entry) end
+        -- Old answer (and no evidence, or only a doubt): let it through and ask again in the
+        -- background.
+        if (not rec or Absence(rec)) and not Fresh(entry) and not entry.timer then Ask(entry) end
         Changed()
         fn()
         return true

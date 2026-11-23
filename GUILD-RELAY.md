@@ -87,8 +87,8 @@ and (map job) the map positions of members without La Taverne who share them thr
   that stopped (L0, or no word for 150 s), `q` players still due, `rp`.
 - **Busy** (map prefix ≥ 70 % of the game's 1 message a second): steps doubled at once, back to
   normal under 50 %; still ≥ 70 % 2 min later, the map job is handed over (`why = busy`) and not
-  claimed back for 10 min. The chat prefix busy for 2 min (warning) also sheds the map job when
-  the holder has both.
+  claimed back for 10 min. The chat prefix being busy never hands the map job over: it has its
+  own prefix, so that wouldn't lighten chat.
 - **Stall**: a watcher hears places come in while the holder is silent 90 s (it beacons every
   60 s): stall election, void if the holder is heard again.
 - **Receivers**: allied guilds only (my own guild sees OpenMap's own dots, faster). Relayed dots
@@ -104,8 +104,8 @@ and (map job) the map positions of members without La Taverne who share them thr
   second), the busiest minute, messages per line, the coordination share (`RLY` among all), and
   parts ChatThrottleLib held back 1 s or more, or refused (throttled).
 - Budget per prefix (the game limits each prefix on its own). Chat at 70 % or more for 2 min:
-  one warning, marked "!!" in the message log; a holder of both jobs then hands the map job over
-  (chat is never shed). Map: see "Map job".
+  one warning, marked "!!" in the message log; nothing is handed over (chat queues). Map: see
+  "Map job".
 - The beacon carries `sent`, `mq`, `b` (bytes), `p` (parts), `th` (throttled) since the previous
   one: every guild sees every relay's load.
 - The hello carries `tr` (tier for chat, 0-3, or `x` and `tw` why): the count of candidates per

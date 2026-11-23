@@ -395,29 +395,32 @@ end
 
 -- Copies: one allied line can come twice (its author's own copy and a relay's, two relays at
 -- once, a copy the game held during a fight): same guild, author and text (TextKey), typed
--- within 10 s of each other. Kept 15 min. A "+1" typed again later still shows.
+-- within 10 s of each other, passed on by someone else (source: "author" for the author's own
+-- copy, the relay's name otherwise). The same source twice is the line typed again (a "+1"
+-- repeated): it shows. Kept 15 min.
 local COPY_WINDOW, COPY_KEEP = 10, 15 * 60
-local copies = {} -- [guild \0 author \0 key] = { server times }
+local copies = {} -- [guild \0 author \0 key] = { { t = server time, src = source }, ... }
 
-local function IsCopy(guild, author, text, t)
+local function IsCopy(guild, author, text, t, source)
     local key = AllyChat.TextKey(text)
     if not key or type(guild) ~= "string" or type(author) ~= "string" then return false end
     local id = strtrim(guild):lower() .. "\0" .. ns.NameKey(author) .. "\0" .. key
     local now = GetServerTime()
     t = tonumber(t) or now
+    source = source == "author" and "\0" or ns.NameKey(source) or "?"
     local list = copies[id]
     if list then
         for _, seen in ipairs(list) do
-            if math.abs(seen - t) <= COPY_WINDOW then return true end
+            if seen.src ~= source and math.abs(seen.t - t) <= COPY_WINDOW then return true end
         end
     else
         list = {}
         copies[id] = list
     end
-    list[#list + 1] = t
+    list[#list + 1] = { t = t, src = source }
     if math.random(1, 50) == 1 then
-        for other, times in pairs(copies) do
-            if now - times[#times] > COPY_KEEP then copies[other] = nil end
+        for other, seen in pairs(copies) do
+            if now - seen[#seen].t > COPY_KEEP then copies[other] = nil end
         end
     end
     return false
@@ -425,7 +428,7 @@ end
 
 ns.Comm:OnAlly("CHAT", function(sender, payload, isSelf)
     if isSelf or not Enabled() then return end
-    if IsCopy(payload.g, sender, payload.m, payload.t) then
+    if IsCopy(payload.g, sender, payload.m, payload.t, "author") then
         AllyChat.stats.copies = AllyChat.stats.copies + 1
         return
     end
@@ -471,7 +474,7 @@ ns.Comm:OnAlly("RCHAT", function(sender, payload, isSelf)
     if not t or math.abs(now - t) > TIME_DRIFT then t = now end
     -- A copy (two relays for a moment, a gap fill, the author's own) is dropped before the flood
     -- count: only lines that would show count.
-    if IsCopy(payload.g, author, payload.m, t) then
+    if IsCopy(payload.g, author, payload.m, t, sender) then
         AllyChat.stats.copies = AllyChat.stats.copies + 1
         return
     end
