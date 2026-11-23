@@ -175,6 +175,7 @@ end
 
 local DEFAULTS = {
     notify = true,    -- chat line when a new group is posted
+    advanced = false, -- Advanced mode (Options): the guild relay's tab, beside Alliance
     showAnnounces = true, -- chat line when a leader clicks "Announce in chat"
     minimap = {},     -- LibDBIcon position and visibility
     chars = {},       -- per character: [fullName] = { listing = ... }

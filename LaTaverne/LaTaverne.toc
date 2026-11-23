@@ -35,7 +35,7 @@ Players.lua
 Lynx.lua
 
 UI.lua
-RelayWindow.lua
+RelayPage.lua
 Minimap.lua
 Dev.lua
 Tests.lua

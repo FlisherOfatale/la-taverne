@@ -1989,8 +1989,8 @@ local function ReportText()
     return table.concat(out, "\n")
 end
 
--- The window (RelayWindow.lua) ----------------------------------------------------------------
--- The same figures as the text, as data for the window's tabs. Levels color them: "ok" (green),
+-- The page (RelayPage.lua) --------------------------------------------------------------------
+-- The same figures as the text, as data for the relay's page. Levels color them: "ok" (green),
 -- "warn" (orange: worth a look), "off" (grey), nil (plain). Rows: { label, value, level, tip }
 -- (tip: tooltip lines, the first one its title).
 
@@ -2109,8 +2109,8 @@ local function GuildCard(g, now, server)
     return card
 end
 
--- Everything the window shows: guilds (cards), tiles (since login), mine (Your guild tab: sections
--- of rows), sending (Your sending tab: tiles and sections), events.
+-- Everything the page shows: guilds (cards), tiles (since login), mine (Your guild: sections of
+-- rows, mineSummary), sending (Your sending: tiles and sections, sendingSummary), events.
 function Relay:WindowData()
     local now, server = GetTime(), GetServerTime()
     local data = { guilds = {}, mine = {}, sending = { sections = {} }, events = {} }
@@ -2145,6 +2145,7 @@ function Relay:WindowData()
     local holdingAny = false
     for _, job in ipairs(JOB_ORDER) do if jobs[job].holding then holdingAny = true end end
     Row(you, L["State"], stateText, holdingAny and "ok" or nil)
+    data.mineSummary = stateText -- next to the folded header
     Row(you, L["Switch"], ns.db.relay.help and L["switch on"] or L["switch off"], not ns.db.relay.help and "off" or nil)
     Row(you, L["Guild Info"], ns.Alliance:IsInfoKnown() and L["Guild Info read"] or L["Guild Info not read yet"],
         not ns.Alliance:IsInfoKnown() and "warn" or nil)
@@ -2207,6 +2208,7 @@ function Relay:WindowData()
           tip = { L["map budget"], L["Messages in the last minute on the map job's prefix, as a share of the game's limit (1 a second)."] } },
         data.tiles[4],
     }
+    data.sendingSummary = format(L["%d messages last minute · refused %d"], lastMin, meter.failed)
     local send = { title = L["What you send for the relay"], rows = {} }
     Row(send, L["Messages (bytes)"], format(L["last 10 s %d (%d) · last minute %d (%d) · last 10 min %d (%d)"],
         Sum(meter.sec, sec10, 10, "m"), Sum(meter.sec, sec10, 10, "b"), lastMin, Sum(meter.sec, sec10, 60, "b"),
@@ -2267,16 +2269,21 @@ end
 
 Relay.LIVE_EVERY = LIVE_EVERY
 
--- The window when it's there (RelayWindow.lua), else the text. ShowLive opens or closes it
--- (/taverne relay); ShowWindow only opens it (the Alliance page, the minimap button's menu).
-function Relay:ShowLive()
-    if ns.RelayWindow then return ns.RelayWindow:Toggle() end
-    Relay:ShowReport()
-end
-
+-- The relay's page in La Taverne's window (RelayPage.lua): its tab beside Alliance in Advanced
+-- mode; /taverne relay and the Debug tab open it without Advanced mode too (until another page
+-- is shown).
 function Relay:ShowWindow()
-    if ns.RelayWindow then return ns.RelayWindow:Show() end
-    Relay:ShowReport()
+    ns.UI.relayAsked = true
+    ns.UI:Open()
+    ns.UI:ShowPage("relay")
+end
+Relay.ShowLive = Relay.ShowWindow
+
+-- A guild's relay for each job, on one line (the minimap button's tooltip, the relay tab's).
+function Relay:JobsLine(guild)
+    local playersOnline = self:HasPlayersOnline(guild)
+    return L["chat:"] .. " " .. (self:StatusText(guild, "chat", playersOnline)) .. "  ·  "
+        .. L["map:"] .. " " .. (self:StatusText(guild, "map", playersOnline))
 end
 
 -- The text, to copy and paste (the window's Copy report).

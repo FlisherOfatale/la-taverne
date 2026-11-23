@@ -3973,18 +3973,10 @@ local function BuildNetworkPanel()
         L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."],
         L["Disputed: someone says they aren't in that guild, but nobody vouches for that someone. They still get through."],
         L["Auto-invite waits for your click for players not checked yet or disputed."] })
-    -- Top right: Setup (players who can edit the Guild Info), Guild relay (its window, while the
-    -- guild is in an alliance), then the channel left of them.
+    -- Top right: Setup (players who can edit the Guild Info), then the channel left of it.
     local setupPage = NewButton(p, L["Setup"], 130, 24)
     setupPage:SetPoint("TOPRIGHT", -2, -4)
     setupPage:SetScript("OnClick", function() UI:ShowPage("officers") end)
-    local relayButton = NewButton(p, L["Guild relay"], 130, 24)
-    relayButton:SetScript("OnClick", function() ns.Relay:ShowWindow() end)
-    relayButton:SetScript("OnEnter", function(self)
-        ShowTooltip(self, { L["Guild relay"],
-            L["Who passes on each guild's chat and map positions for its members without La Taverne, and how it's going."] })
-    end)
-    relayButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
     local status = NewLabel(p, "", "GameFontHighlight")
     local statusHit = CreateFrame("Frame", nil, p)
     statusHit:SetAllPoints(status)
@@ -4113,18 +4105,8 @@ local function BuildNetworkPanel()
         local active = ns.Alliance:IsActive()
         local officer = ns.Guild:IsOfficer() and ns.Alliance:IsLoaded()
         setupPage:SetShown(officer)
-        -- Guild relay: left of Setup (or in its place), then the channel left of the buttons.
-        relayButton:SetShown(active)
-        relayButton:ClearAllPoints()
-        if officer then relayButton:SetPoint("RIGHT", setupPage, "LEFT", -8, 0) else relayButton:SetPoint("TOPRIGHT", -2, -4) end
         status:ClearAllPoints()
-        if active then
-            status:SetPoint("RIGHT", relayButton, "LEFT", -14, 0)
-        elseif officer then
-            status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0)
-        else
-            status:SetPoint("TOPRIGHT", -8, -12)
-        end
+        if officer then status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0) else status:SetPoint("TOPRIGHT", -8, -12) end
         list:SetShown(active)
         status:SetShown(active)
         sortLabel:SetShown(active)
@@ -4449,6 +4431,17 @@ local function BuildOptionsPanel()
         cb.key = lang.key
         langChecks[#langChecks + 1] = cb
     end
+    -- Advanced mode: the guild relay's tab beside Alliance (its figures; most players don't need
+    -- them). (On p: fewer locals here.)
+    rowY = Row()
+    p.advanced = NewCheckbox(c, L["Advanced mode"], function(self)
+        ns.db.advanced = self:GetChecked() and true or false
+        UI:Refresh()
+    end)
+    p.advanced:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(p.advanced, { L["Advanced mode"],
+        L["Adds the Guild relay tab beside Alliance: who passes on each guild's chat and map positions, and how it's going, in detail."],
+        L["The relay works the same either way: this only shows it."] })
     EndSection()
 
     -- Minimap ------------------------------------------------------------------
@@ -4699,6 +4692,7 @@ local function BuildOptionsPanel()
             openMapNote:SetText(L["The dots show on the game's map."])
         end
         for _, cb in ipairs(langChecks) do cb:SetChecked((ns.db.dungeonLanguages or {})[cb.key] == true) end
+        p.advanced:SetChecked(ns.db.advanced == true)
 
         local active = ns.Alliance:IsActive()
         chatOff:SetShown(not active)
@@ -4759,9 +4753,14 @@ local SECTIONS = {
     { key = "availability", label = "Availability",
       icon = { "Interface\\Icons\\INV_Misc_PocketWatch_01", "Interface\\Icons\\INV_Misc_Note_01" },
       pages = { "players" } },
-    -- The Guild Alliance; its Setup page only for players who can edit the Guild Info.
     { key = "network", label = "Alliance", icon = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
       pages = { "network" } },
+    -- The guild relay (RelayPage.lua): a small tab beside Alliance's, in Advanced mode (Options).
+    -- A flare: a signal passed along.
+    { key = "relay", label = "Guild relay", beside = "network",
+      icon = { "Interface\\Icons\\Spell_Fire_Flare", "Interface\\Icons\\Spell_Holy_MindVision",
+          "Interface\\Icons\\INV_Torch_Lit" },
+      pages = { "relay" } },
     -- Auto-invite: a horn, calling people in.
     { key = "autoinvite", label = "Auto-invite",
       icon = { "Interface\\Icons\\INV_Misc_Horn_01", "Interface\\Icons\\Ability_Warrior_BattleShout" },
@@ -4797,6 +4796,8 @@ local function PageAllowed(page)
     if page == "officers" then return ns.Guild:IsOfficer() and true or false end
     if page == "debug" then return ns.Guild:IsSandbox() and true or false end
     if page == "autoinvite" or page == "autoinviteSettings" then return ns.Invites:IsAllowed() end
+    -- Advanced mode, or opened by /taverne relay (until another page is shown).
+    if page == "relay" then return (ns.db.advanced or UI.relayAsked) and true or false end
     return true
 end
 
@@ -4828,6 +4829,7 @@ local function SectionActive(section)
     if section.key == "groups" then return (ns.Groups:GetMine() or ns.Groups:GetJoined()) and true or false end
     if section.key == "availability" then return ns.Players:IsActive() and true or false end
     if section.key == "autoinvite" then return ns.Invites:IsActive() and true or false end
+    if section.key == "relay" then return (ns.Relay:IsHolding("chat") or ns.Relay:IsHolding("map")) and true or false end
     return false
 end
 
@@ -4858,6 +4860,12 @@ local function SectionStatus(section)
         lines[#lines + 1] = { format(L["Available players: %d"], P:CountAvailable()), 0.8, 0.8, 0.8 }
     elseif section.key == "autoinvite" and ns.Invites:IsActive() then
         lines[#lines + 1] = { format(L["Auto-invite: %d in the queue"], #ns.Invites:GetQueue()), 1, 1, 1 }
+    elseif section.key == "relay" then
+        -- Each guild's relay, per job; then mine.
+        for _, g in ipairs(ns.Alliance:GetGuilds()) do
+            lines[#lines + 1] = { "|cff8fb8e8[" .. (g.tag or "?") .. "]|r " .. ns.Relay:JobsLine(g.name), 1, 1, 1 }
+        end
+        lines[#lines + 1] = { ns.Relay:MyStateText(), 0.8, 0.8, 0.8 }
     end
     return lines
 end
@@ -4865,7 +4873,7 @@ end
 -- Side tab: the spellbook's skill line tab look, the section's icon, a count in the corner.
 -- Icon size and spacing; the tab's frame texture scales with the icon (64 px for a 32 px icon).
 local SIDE_SIZE, SIDE_STEP = 42, 58
-local SIDE_SCALE = SIDE_SIZE / 32
+local BESIDE_SIZE, BESIDE_GAP = 28, 12 -- a tab beside another (the relay's): size, room between
 local TOOL_SIZE = 26 -- test mode tools, above the title bar
 local TOOL_RIGHT = 40 -- their gap from the window's right edge (clear of the close button)
 
@@ -4882,11 +4890,14 @@ local function NewSideTab(section)
             b:SetBackdropBorderColor(1, 0.6, 0, 1)
         end
     else
-        b:SetSize(SIDE_SIZE, SIDE_SIZE)
+        -- A tab beside another (the relay's, beside Alliance): the same look, smaller.
+        local size = section.beside and BESIDE_SIZE or SIDE_SIZE
+        local scale = size / 32
+        b:SetSize(size, size)
         local bg = b:CreateTexture(nil, "BACKGROUND")
         bg:SetTexture("Interface\\SpellBook\\SpellBook-SkillLineTab")
-        bg:SetSize(64 * SIDE_SCALE, 64 * SIDE_SCALE)
-        bg:SetPoint("TOPLEFT", -3 * SIDE_SCALE, 11 * SIDE_SCALE)
+        bg:SetSize(64 * scale, 64 * scale)
+        bg:SetPoint("TOPLEFT", -3 * scale, 11 * scale)
     end
     b.icon = b:CreateTexture(nil, "ARTWORK")
     if section.tool then
@@ -4912,8 +4923,9 @@ local function NewSideTab(section)
     -- Something of mine running there: a green dot, top right (like the minimap button's).
     b.dot = b:CreateTexture(nil, "OVERLAY", nil, 2)
     b.dot:SetTexture("Interface\\FriendsFrame\\StatusIcon-Online")
-    b.dot:SetSize(24, 24)
-    b.dot:SetPoint("TOPRIGHT", 8, 8)
+    local dot = section.beside and 16 or 24
+    b.dot:SetSize(dot, dot)
+    b.dot:SetPoint("TOPRIGHT", dot / 3, dot / 3)
     b.dot:Hide()
     b:SetScript("OnClick", function()
         if section.action then section.action() else UI:ShowSection(section.key) end
@@ -4938,8 +4950,9 @@ end
 local function LayoutSideTabs()
     local currentSection = sectionOf[currentPage]
     local y = -36
-    local shownBottom, shownTools = {}, {}
+    local shownBottom, shownTools, shownBeside, byKey = {}, {}, {}, {}
     for _, b in ipairs(frame.SideTabs) do
+        byKey[b.section.key] = b
         local section = b.section
         local shown
         if section.action then
@@ -4956,6 +4969,8 @@ local function LayoutSideTabs()
             b:ClearAllPoints()
             if section.tool then
                 shownTools[#shownTools + 1] = b
+            elseif section.beside then
+                shownBeside[#shownBeside + 1] = b
             elseif section.bottom then
                 shownBottom[#shownBottom + 1] = b
             else
@@ -4963,6 +4978,21 @@ local function LayoutSideTabs()
                 y = y - SIDE_STEP
             end
         end
+    end
+    -- Tabs beside another one (the relay's, beside Alliance): to its right, centered on it.
+    local besideShown = false
+    for _, b in ipairs(shownBeside) do
+        local host = byKey[b.section.beside]
+        if host and host:IsShown() then
+            b:SetPoint("LEFT", host, "RIGHT", BESIDE_GAP, 0)
+            besideShown = true
+        else
+            b:Hide()
+        end
+    end
+    -- Kept on screen with the side tabs, and the one beside when there's one.
+    if frame.SetClampRectInsets then
+        frame:SetClampRectInsets(0, SIDE_SIZE + 6 + (besideShown and (BESIDE_GAP + BESIDE_SIZE) or 0), TOOL_SIZE + 2, 0)
     end
     -- Bottom group, stacked upwards from the bottom of the frame.
     local by = 24
@@ -5055,6 +5085,7 @@ local function CreateMainFrame()
         autoinvite = ns.BuildInvitesPanel,
         autoinviteSettings = ns.BuildInvitesSettingsPanel,
         network = BuildNetworkPanel,
+        relay = ns.BuildRelayPanel,
         officers = BuildOfficerPanel,
         options = BuildOptionsPanel,
         debug = ns.BuildDebugPanel,
@@ -5084,6 +5115,12 @@ end
 local function Fallback(page)
     local section = sectionOf[page]
     local visible = section and VisiblePages(section) or {}
+    -- A tab beside another (the relay's, Advanced mode turned off): back to that one's page.
+    if not visible[1] and section and section.beside then
+        for _, s in ipairs(SECTIONS) do
+            if s.key == section.beside then visible = VisiblePages(s) end
+        end
+    end
     return visible[1] or "browse"
 end
 
@@ -5122,6 +5159,8 @@ function UI:ShowPage(page)
         self.repost = ns.Groups:TakeRepost()
         page = "mygroup"
     end
+    -- /taverne relay without Advanced mode: its page until another one is shown.
+    if page ~= "relay" then self.relayAsked = nil end
     if not PageAllowed(page) then page = Fallback(page) end
     if page ~= "browse" then self.focusGroup = nil end
     currentPage = page

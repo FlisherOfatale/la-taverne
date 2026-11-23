@@ -1,27 +1,15 @@
--- The guild relay's window (/taverne relay, the Debug tab's Guild relay button): four tabs over
--- the figures of Relay:WindowData(), filled again every few seconds while it's open.
--- - Guilds: one card per guild of the alliance (mine first), a row per job: who holds it, their
---   tier, uptime this hour (a bar), budget, held back or refused; a line when one player holds
---   several jobs (their load, all jobs together); the counts since login at the bottom.
--- - Your guild: me, each job's election as I see it, who can relay.
--- - Your sending: what I send for the relay, and the counts since login.
--- - Events: the last relay events.
+-- The guild relay's page in La Taverne's window: its own small tab beside Alliance's, in
+-- Advanced mode (Options); /taverne relay opens it too. The figures of Relay:WindowData(),
+-- filled again every few seconds while it's shown:
+-- - one card per guild of the alliance (mine first), a row per job: who holds it, their tier,
+--   uptime this hour (a bar), budget, held back or refused; a line when one player holds several
+--   jobs (their load, all jobs together); then the counts since login;
+-- - below, folded until asked for: Your guild (me, each job's election as I see it, who can
+--   relay), Your sending (what I send for the relay, the counts since login), Events.
 -- Copy report: the same figures as text (Relay:ShowReport), to paste in a message.
 -- Colors: green ok, orange worth a look, grey nobody / off. Tooltips give the details.
 local ADDON, ns = ...
 local L = ns.L
-
-local RelayWindow = {}
-ns.RelayWindow = RelayWindow
-
-local frame
-local tab = "guilds"
-local TABS = {
-    { key = "guilds", text = "Guilds" },
-    { key = "mine", text = "Your guild" },
-    { key = "sending", text = "Your sending" },
-    { key = "events", text = "Events" },
-}
 
 local COLORS = { ok = { 0.25, 1, 0.25 }, warn = { 1, 0.6, 0 }, off = { 0.6, 0.6, 0.6 } }
 local function SetLevel(fs, level)
@@ -313,104 +301,107 @@ local function FillGuilds(data, width)
     return Tiles(y, width, data.tiles)
 end
 
-local function Fill()
-    if not (frame and frame:IsShown()) then return end
+-- A foldable part of the page: a gold header with the Alliance page's +/- (click: open or
+-- fold), a thin line under it. open[key]: kept while the game runs.
+local FOLD_OPEN = "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
+local FOLD_CLOSED = "|TInterface\\Buttons\\UI-PlusButton-Up:16:16|t "
+local SECTION_FONT = _G.GameFontNormalMed2 and "GameFontNormalMed2" or "GameFontNormal"
+local open = {}
+local Fill
+
+local function MakeFold(parent)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetHeight(22)
+    b.text = NewText(b, SECTION_FONT)
+    b.text:SetPoint("LEFT")
+    b.text:SetWordWrap(false)
+    b.line = b:CreateTexture(nil, "ARTWORK")
+    b.line:SetColorTexture(1, 0.82, 0, 0.25)
+    b.line:SetHeight(1)
+    b.line:SetPoint("BOTTOMLEFT")
+    b.line:SetPoint("BOTTOMRIGHT")
+    b:SetScript("OnClick", function(self)
+        open[self.key] = not open[self.key]
+        Fill()
+    end)
+    WithTip(b)
+    return b
+end
+
+local function Fold(y, width, key, title, summary)
+    local b = Take("fold", function() return MakeFold(content) end)
+    b:SetPoint("TOPLEFT", 0, -y)
+    b:SetWidth(width)
+    b.key = key
+    b.text:SetText((open[key] and FOLD_OPEN or FOLD_CLOSED) .. title
+        .. (summary and summary ~= "" and ("  |cff808080" .. summary .. "|r") or ""))
+    b.tip = { title, open[key] and L["Click to fold."] or L["Click to open."] }
+    return y + 22 + 6, open[key]
+end
+
+local panel -- the page
+
+Fill = function()
+    if not (panel and panel:IsVisible()) then return end
     local data = ns.Relay:WindowData()
     ReleaseAll()
-    local width = math.max(300, frame.scroll:GetWidth() - 4)
+    local width = math.max(300, panel.scroll:GetWidth() - 4)
     content:SetWidth(width)
-    local y
-    if tab == "guilds" then
-        y = FillGuilds(data, width)
-    elseif tab == "mine" then
-        y = Sections(PAD, width, data.mine)
-    elseif tab == "sending" then
-        y = Tiles(PAD, width, data.sending.tiles)
-        y = Sections(y, width, data.sending.sections)
-    else
+    -- The guilds and the counts since login, then the details, folded until asked for.
+    local y = FillGuilds(data, width) + 6
+    local shown
+    y, shown = Fold(y, width, "mine", L["Your guild"], data.mineSummary)
+    if shown then y = Sections(y, width, data.mine) + 10 end
+    y, shown = Fold(y, width, "sending", L["Your sending"], data.sendingSummary)
+    if shown then
+        y = Tiles(y, width, data.sending.tiles)
+        y = Sections(y, width, data.sending.sections) + 10
+    end
+    y, shown = Fold(y, width, "events", L["Events"], data.events[1] and (data.events[1].time .. "  " .. data.events[1].text))
+    if shown then
         local rows = {}
         for _, e in ipairs(data.events) do rows[#rows + 1] = { label = e.time, value = e.text } end
         if #rows == 0 then rows[1] = { label = "", value = L["none yet"], level = "off" } end
-        y = Lines(PAD, width, rows)
+        y = Lines(y, width, rows)
     end
-    content:SetHeight(math.max(1, y))
-    -- A tooltip open over the window: filled again with the new figures.
+    content:SetHeight(math.max(1, y + PAD))
+    -- A tooltip open over the page: filled again with the new figures.
     local owner = GameTooltip:IsShown() and GameTooltip:GetOwner()
     if owner and owner.tip and owner:IsVisible() and owner:IsMouseOver() then TipEnter(owner) end
 end
 
--- Window ---------------------------------------------------------------------------------------
+-- The page ---------------------------------------------------------------------------------------
 
-local function SelectTab(key)
-    tab = key
-    for _, b in ipairs(frame.tabs) do
-        if b.key == key then b:LockHighlight() else b:UnlockHighlight() end
-    end
-    frame.scroll:SetVerticalScroll(0)
-    Fill()
-end
-
-local function Build()
+function ns.BuildRelayPanel()
     local K = Kit()
-    frame = CreateFrame("Frame", "LaTaverneRelayWindow", UIParent, "ButtonFrameTemplate")
-    frame:SetSize(760, 560)
-    frame:SetPoint("CENTER")
-    frame:SetFrameStrata("HIGH") -- under the text window (Copy report opens over it)
-    frame:SetToplevel(true)
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    if ButtonFrameTemplate_HidePortrait then ButtonFrameTemplate_HidePortrait(frame) end
-    if ButtonFrameTemplate_HideButtonBar then ButtonFrameTemplate_HideButtonBar(frame) end
-    if ButtonFrameTemplate_HideAttic then ButtonFrameTemplate_HideAttic(frame) end
-    if frame.CloseButton then frame.CloseButton:SetScript("OnClick", function() frame:Hide() end) end
-    if frame.SetTitle then frame:SetTitle(L["Guild relay"]) end
-    tinsert(UISpecialFrames, "LaTaverneRelayWindow")
-    if ns.EscapeFirst then ns.EscapeFirst(frame) end
-
-    local inner = frame.Inset or frame
-    frame.tabs = {}
-    for i, def in ipairs(TABS) do
-        local b = K.NewButton(inner, L[def.text], 130, 22)
-        b.key = def.key
-        b:SetPoint("TOPLEFT", 10 + (i - 1) * 136, -8)
-        b:SetScript("OnClick", function() SelectTab(def.key) end)
-        frame.tabs[i] = b
-    end
-    local copy = K.NewButton(inner, L["Copy report"], 130, 22)
-    copy:SetPoint("TOPRIGHT", -10, -8)
+    local p = K.NewPanel()
+    panel = p
+    K.NewPageTitle(p, L["Guild relay"], { L["Guild relay"],
+        L["One La Taverne player per guild passes on its guild chat and map positions to the allied guilds, for the members without La Taverne."],
+        L["Green: fine. Orange: worth a look. Grey: nobody, or nothing to relay."],
+        L["Hover a row, a badge or a count for the details."] })
+    -- Top right: Copy report.
+    local copy = K.NewButton(p, L["Copy report"], 140, 24)
+    copy:SetPoint("TOPRIGHT", -2, -4)
     K.WithTooltip(copy, { L["Copy report"], L["The same figures as text, to copy and paste in a message (Ctrl+C)."] })
     copy:SetScript("OnClick", function() ns.Relay:ShowReport() end)
 
-    local scroll = CreateFrame("ScrollFrame", nil, inner, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 10, -40)
-    scroll:SetPoint("BOTTOMRIGHT", -30, 8)
+    local scroll = CreateFrame("ScrollFrame", nil, p, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 0, -40)
+    scroll:SetPoint("BOTTOMRIGHT", -24, 0)
     content = CreateFrame("Frame", nil, scroll)
     content:SetSize(680, 1)
     scroll:SetScrollChild(content)
-    frame.scroll = scroll
+    p.scroll = scroll
 
-    -- Filled again every few seconds, and when the relay changes.
+    -- Filled when shown (UI:Refresh), when the relay changes (the same), and every few seconds.
+    p.Refresh = function() Fill() end
     local wait = 0
-    frame:SetScript("OnUpdate", function(_, elapsed)
+    p:SetScript("OnUpdate", function(_, elapsed)
         wait = wait - elapsed
         if wait > 0 then return end
         wait = ns.Relay.LIVE_EVERY or 3
         Fill()
     end)
-    frame:SetScript("OnShow", function() wait = 0 end)
-    ns.Relay:OnChange(Fill)
-end
-
-function RelayWindow:Show()
-    if not frame then Build() end
-    frame:Show()
-    frame:Raise() -- over La Taverne's window when it's opened from there
-    SelectTab(tab)
-end
-
-function RelayWindow:Toggle()
-    if frame and frame:IsShown() then frame:Hide() else self:Show() end
+    return p
 end

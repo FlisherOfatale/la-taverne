@@ -2,8 +2,8 @@
 -- Left-click opens La Taverne; right-click opens a short menu. Idle: Create a group, I'm
 -- available..., then Groups, Availability. In a group of the finder: just My group; available:
 -- Groups and Availability (in green). Then the map's dots (guild members, allied guilds:
--- switched in place), the guild relay's window (in an alliance), auto-invite (Start, or its page
--- in green while it runs: the Stop button is there), Options.
+-- switched in place), auto-invite (Start, or its page in green while it runs: the Stop button is
+-- there), Options.
 -- The tooltip says where I'm at: my group, my availability, auto-invite.
 -- On the button: a golden pulse with a count when something waits for my answer and I haven't
 -- seen it yet (join requests to my group, invitations), a small steady green dot while
@@ -65,11 +65,6 @@ local function QuickMenu(owner)
             end
             Divider(root)
         end
-        -- The guild relay's window (Relay.lua), while the guild is in an alliance.
-        if ns.Relay and ns.Alliance:IsActive() then
-            root:CreateButton(L["Guild relay"], function() ns.Relay:ShowWindow() end)
-            Divider(root)
-        end
         -- Auto-invite: start it, or (running) its page, where the Stop button is. Not at all
         -- when the officers turned it off for my rank.
         if not ns.Invites:IsAllowed() then
@@ -128,11 +123,11 @@ local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
         -- The allied guilds' channel, when the guild is in an alliance (same as the Alliance page).
         if ns.Alliance:IsActive() then
             tooltip:AddLine(L["Alliance channel:"] .. " " .. ns.Comm:AllyStatusText(), 1, 1, 1)
-            -- Who passes on each guild's chat for its members without La Taverne (Relay.lua),
-            -- and whether I do.
+            -- Who passes on each guild's chat and map positions for its members without La
+            -- Taverne (Relay.lua), and whether I do.
             for _, entry in ipairs(ns.Alliance:GetGuilds()) do
                 tooltip:AddLine("|cff8fb8e8[" .. (entry.tag or "?") .. "]|r " .. L["Relay:"] .. " "
-                    .. ns.Relay:StatusText(entry.name, "chat"), 1, 1, 1)
+                    .. ns.Relay:JobsLine(entry.name), 1, 1, 1)
             end
             if ns.Relay:IsHolding("chat") then tooltip:AddLine(ns.Relay:MyStateText()) end
         end
