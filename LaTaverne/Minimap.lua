@@ -173,8 +173,13 @@ local function Decorate(button)
     dot:SetPoint("TOPRIGHT", 1, 1)
     dot:Hide()
 
-    -- While I relay my guild's chat (Relay.lua): a small speech bubble, bottom left.
-    local badge = button:CreateTexture(nil, "OVERLAY")
+    -- While I relay my guild's chat (Relay.lua): a small speech bubble, bottom left. On a frame
+    -- of its own above the button: a minimap skin's mask put on the button's own textures
+    -- doesn't cut it off.
+    local over = CreateFrame("Frame", nil, button)
+    over:SetAllPoints()
+    over:SetFrameLevel(button:GetFrameLevel() + 5)
+    local badge = over:CreateTexture(nil, "OVERLAY", nil, 7)
     badge:SetTexture("Interface\\GossipFrame\\GossipGossipIcon")
     badge:SetSize(12, 12)
     badge:SetPoint("BOTTOMLEFT", 1, 1)
