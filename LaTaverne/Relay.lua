@@ -858,8 +858,10 @@ end
 local buffer, earlyCopies, queue = {}, {}, {}
 local tokens, lastRefill = BURST, 0
 
+-- A copy of this line: the same author, about then, my text or the text of the copy that already
+-- covered it (copyKey, when it differed: UseLeftovers), so its other copies stay with it.
 local function Matches(e, akey, key, t)
-    return e.akey == akey and e.key == key and math.abs((t or e.t) - e.t) <= COPY_WINDOW
+    return e.akey == akey and (e.key == key or e.copyKey == key) and math.abs((t or e.t) - e.t) <= COPY_WINDOW
 end
 
 -- The same author at about the same time, whatever the text: a copy's text can differ from
@@ -923,12 +925,26 @@ local function UseLeftovers(now)
     while i <= #earlyCopies do
         local c, used = earlyCopies[i], false
         if now - c.at >= LEFTOVER_AFTER then
+            -- Another copy of a line a leftover already covered (the relay's and a gap fill, the
+            -- author's and a relay's): it stays with that line, never covers the next one.
             for _, e in ipairs(buffer) do
-                if not e.covered and Near(e, c.akey, c.t) then
-                    e.covered, e.by = now, c.by
-                    CountCovered(e)
+                if Matches(e, c.akey, c.key, c.t) then
+                    if not e.covered then
+                        e.covered, e.by = now, c.by
+                        CountCovered(e)
+                    end
                     used = true
                     break
+                end
+            end
+            if not used then
+                for _, e in ipairs(buffer) do
+                    if not e.covered and Near(e, c.akey, c.t) then
+                        e.covered, e.by, e.copyKey = now, c.by, c.key
+                        CountCovered(e)
+                        used = true
+                        break
+                    end
                 end
             end
         end

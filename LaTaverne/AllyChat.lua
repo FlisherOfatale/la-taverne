@@ -397,8 +397,10 @@ end
 -- once, a copy the game held during a fight): same guild, author and text (TextKey), typed
 -- within 10 s of each other, passed on by someone else (source: "author" for the author's own
 -- copy, the relay's name otherwise). The same source twice is the line typed again (a "+1"
--- repeated): it shows. Kept 15 min.
-local COPY_WINDOW, COPY_KEEP = 10, 15 * 60
+-- repeated): it shows. Two relays' copies carry the time each one saw the guild line, a second
+-- or two apart: closer than that (RELAYS_WINDOW), so a line typed again across a relay handover
+-- still shows. Kept 15 min.
+local COPY_WINDOW, RELAYS_WINDOW, COPY_KEEP = 10, 3, 15 * 60
 local copies = {} -- [guild \0 author \0 key] = { { t = server time, src = source }, ... }
 
 local function IsCopy(guild, author, text, t, source)
@@ -411,7 +413,8 @@ local function IsCopy(guild, author, text, t, source)
     local list = copies[id]
     if list then
         for _, seen in ipairs(list) do
-            if seen.src ~= source and math.abs(seen.t - t) <= COPY_WINDOW then return true end
+            local window = (seen.src ~= "\0" and source ~= "\0") and RELAYS_WINDOW or COPY_WINDOW
+            if seen.src ~= source and math.abs(seen.t - t) <= window then return true end
         end
     else
         list = {}
