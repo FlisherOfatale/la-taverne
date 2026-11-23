@@ -733,7 +733,9 @@ ns.On("PLAYER_REGEN_ENABLED", function()
 end)
 
 -- The gamepad UI turned back on (InputUtil.lua listens to the same event) with the window open:
--- a resume. Turned off, the follow-up gives the buttons back.
-ns.On("INPUT_DEVICE_INTERFACE_TRANSITION", function()
-    Take("resume")
-end)
+-- a resume. Turned off, the follow-up gives the buttons back. Registered only where the client
+-- knows the event: an unknown one would be a load error for every player, pad or not.
+local TRANSITION = "INPUT_DEVICE_INTERFACE_TRANSITION"
+if not (C_EventUtils and C_EventUtils.IsEventValid) or C_EventUtils.IsEventValid(TRANSITION) then
+    pcall(ns.On, TRANSITION, function() Take("resume") end)
+end

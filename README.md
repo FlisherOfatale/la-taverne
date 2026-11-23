@@ -98,7 +98,7 @@ Window size, the chat window for La Taverne's lines, the minimap button and its 
 - **OpenMap:** the dots also show on OpenMap's map, at any zoom, and their tooltips look like OpenMap's. Its menu gets La Taverne's two map switches, and its own "Guild members on the map" switch hides La Taverne's guild and allied dots too. A player who already shares through OpenMap doesn't get a second dot.
 - **Chattynator:** allied guild chat shows in Chattynator's windows like your own guild's. To choose the tab for La Taverne's own messages, use the tab's settings in Chattynator (Add-ons).
 - **GuildUnion:** **Import > From GuildUnion** copies its guilds and tags, and both addons' lines fit side by side in the Guild Info. While both are installed, keep only one of them sharing guild chat (in La Taverne: **Options**), or allied lines show twice.
-- **Controller (gamepad) interface:** La Taverne's menus and confirmation windows work with it, without "action blocked" errors.
+- **Controller (gamepad) interface:** La Taverne is used with the controller: the d-pad moves between the window's elements, A chooses, Y goes back or closes, LB / RB change section. B and X stay the game's, and in combat the controller goes back to the game. Menus and confirmation windows work without "action blocked" errors. To open La Taverne with a button: game Options, Keybindings, AddOns.
 - **BugSack / BugGrabber:** La Taverne's errors also go to its own error report.
 
 ### Commands
@@ -213,7 +213,7 @@ Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de
 - **OpenMap :** les points s'affichent aussi sur la carte d'OpenMap, à tous les niveaux de zoom, et leurs infobulles ressemblent à celles d'OpenMap. Son menu reçoit les deux options de carte de La Taverne, et sa propre option « Membres de guilde sur la carte » cache aussi les points de guilde et d'alliés de La Taverne. Un joueur qui partage déjà sa position par OpenMap n'a pas de deuxième point.
 - **Chattynator :** le chat des guildes alliées s'affiche dans les fenêtres de Chattynator comme celui de votre guilde. Pour choisir l'onglet des messages de La Taverne, passez par les paramètres de l'onglet dans Chattynator (Add-ons).
 - **GuildUnion :** **Importer > Depuis GuildUnion** reprend ses guildes et ses tags, et les lignes des deux addons tiennent ensemble dans les infos de guilde. Tant que les deux sont installés, ne laissez qu'un seul des deux partager le chat de guilde (dans La Taverne : **Options**), sinon les lignes alliées s'affichent deux fois.
-- **Interface manette :** les menus et les fenêtres de confirmation de La Taverne fonctionnent avec elle, sans erreurs « action bloquée ».
+- **Interface manette :** La Taverne s'utilise à la manette : la croix passe d'un élément à l'autre de la fenêtre, A choisit, Y revient en arrière ou ferme, LB / RB changent de section. B et X restent au jeu, et en combat la manette revient au jeu. Les menus et les fenêtres de confirmation fonctionnent sans erreurs « action bloquée ». Pour ouvrir La Taverne avec un bouton : Options du jeu, Raccourcis, AddOns.
 - **BugSack / BugGrabber :** les erreurs de La Taverne vont aussi dans son propre rapport d'erreurs.
 
 ### Commandes
