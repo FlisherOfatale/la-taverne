@@ -3973,10 +3973,18 @@ local function BuildNetworkPanel()
         L["Not checked yet: nobody from their guild was online to confirm them. They still get through, and are checked again later."],
         L["Disputed: someone says they aren't in that guild, but nobody vouches for that someone. They still get through."],
         L["Auto-invite waits for your click for players not checked yet or disputed."] })
-    -- Top right: Setup (players who can edit the Guild Info), then the channel left of it.
+    -- Top right: Setup (players who can edit the Guild Info), Guild relay (its window, while the
+    -- guild is in an alliance), then the channel left of them.
     local setupPage = NewButton(p, L["Setup"], 130, 24)
     setupPage:SetPoint("TOPRIGHT", -2, -4)
     setupPage:SetScript("OnClick", function() UI:ShowPage("officers") end)
+    local relayButton = NewButton(p, L["Guild relay"], 130, 24)
+    relayButton:SetScript("OnClick", function() ns.Relay:ShowWindow() end)
+    relayButton:SetScript("OnEnter", function(self)
+        ShowTooltip(self, { L["Guild relay"],
+            L["Who passes on each guild's chat and map positions for its members without La Taverne, and how it's going."] })
+    end)
+    relayButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
     local status = NewLabel(p, "", "GameFontHighlight")
     local statusHit = CreateFrame("Frame", nil, p)
     statusHit:SetAllPoints(status)
@@ -4105,8 +4113,18 @@ local function BuildNetworkPanel()
         local active = ns.Alliance:IsActive()
         local officer = ns.Guild:IsOfficer() and ns.Alliance:IsLoaded()
         setupPage:SetShown(officer)
+        -- Guild relay: left of Setup (or in its place), then the channel left of the buttons.
+        relayButton:SetShown(active)
+        relayButton:ClearAllPoints()
+        if officer then relayButton:SetPoint("RIGHT", setupPage, "LEFT", -8, 0) else relayButton:SetPoint("TOPRIGHT", -2, -4) end
         status:ClearAllPoints()
-        if officer then status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0) else status:SetPoint("TOPRIGHT", -8, -12) end
+        if active then
+            status:SetPoint("RIGHT", relayButton, "LEFT", -14, 0)
+        elseif officer then
+            status:SetPoint("RIGHT", setupPage, "LEFT", -14, 0)
+        else
+            status:SetPoint("TOPRIGHT", -8, -12)
+        end
         list:SetShown(active)
         status:SetShown(active)
         sortLabel:SetShown(active)

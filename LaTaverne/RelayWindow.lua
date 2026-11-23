@@ -407,6 +407,7 @@ end
 function RelayWindow:Show()
     if not frame then Build() end
     frame:Show()
+    frame:Raise() -- over La Taverne's window when it's opened from there
     SelectTab(tab)
 end
 

@@ -2267,9 +2267,15 @@ end
 
 Relay.LIVE_EVERY = LIVE_EVERY
 
--- The window when it's there (RelayWindow.lua), else the text.
+-- The window when it's there (RelayWindow.lua), else the text. ShowLive opens or closes it
+-- (/taverne relay); ShowWindow only opens it (the Alliance page, the minimap button's menu).
 function Relay:ShowLive()
     if ns.RelayWindow then return ns.RelayWindow:Toggle() end
+    Relay:ShowReport()
+end
+
+function Relay:ShowWindow()
+    if ns.RelayWindow then return ns.RelayWindow:Show() end
     Relay:ShowReport()
 end
 

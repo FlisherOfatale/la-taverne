@@ -976,6 +976,7 @@ if GetLocale() == "frFR" then
     L["Your sending"] = "Vos envois"
     L["Events"] = "Événements"
     L["Copy report"] = "Copier le rapport"
+    L["Who passes on each guild's chat and map positions for its members without La Taverne, and how it's going."] = "Qui transmet le chat et les positions de chaque guilde pour ses membres sans La Taverne, et comment ça se passe."
     L["The same figures as text, to copy and paste in a message (Ctrl+C)."] = "Les mêmes chiffres en texte, à copier et coller dans un message (Ctrl+C)."
     L["Job"] = "Tâche"
     L["Holder"] = "Relais"
