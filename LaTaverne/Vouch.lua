@@ -165,26 +165,46 @@ local function Verdict(rec, claimed)
     return GetServerTime() - rec.t < OTHER_DENY and "denied" or "disputed"
 end
 
+-- Never trust a stranger: anyone with the alliance key can answer, an impostor's friend too.
+-- An answer only counts from someone I can vouch for in that guild: seen in it first-hand
+-- (Evidence), or confirmed themselves by such an answer (entry.trusted, set when the answer
+-- came). A "yes" from anyone else: "not checked yet"; a "no": disputed (VA).
+
+-- Seen in that guild first-hand (the game, my characters' rosters).
+local function SeenIn(name, guild)
+    local rec = Evidence(ns.NameKey(name), guild)
+    return rec ~= nil and rec.ok and Verdict(rec, guild) == "confirmed"
+end
+
+-- Did this answer come from someone I can vouch for? Then, or now (its author seen in the guild
+-- since).
+local function Trusted(entry)
+    return entry.trusted or (entry.by ~= nil and SeenIn(entry.by, entry.guild)) or false
+end
+
 -- A player's state: the evidence first, the answers otherwise. Returns the state and the
 -- deciding record (nil when the answers decide).
--- Only a doubt (missing from an old roster, Evidence): the answers still decide when they said
--- yes or no; otherwise disputed. The questions go on meanwhile (Gate).
+-- Only a doubt (missing from an old roster, Evidence): a trusted answer still decides when it
+-- said yes or no; otherwise disputed. The questions go on meanwhile (Gate).
 local function Absence(rec) return rec ~= nil and not rec.ok end
 
 local function StateOf(entry)
     local rec = Evidence(ns.NameKey(entry.name), entry.guild)
-    if Absence(rec) and (entry.state == "confirmed" or entry.state == "denied") then return entry.state, nil end
+    if Absence(rec) and Trusted(entry) and (entry.state == "confirmed" or entry.state == "denied") then
+        return entry.state, nil
+    end
     if rec then return Verdict(rec, entry.guild), rec end
+    if entry.state == "confirmed" and not Trusted(entry) then return "unverified", nil end
     return entry.state, nil
 end
 
--- Someone I can vouch for in that guild: evidence, or confirmed by an answer.
+-- Someone I can vouch for in that guild: evidence, or confirmed by a trusted answer.
 local function Vouched(name, guild)
     local key = ns.NameKey(name)
     local rec = Evidence(key, guild)
     if rec and rec.ok then return Verdict(rec, guild) == "confirmed" end
     local entry = players[key]
-    return entry ~= nil and SameGuild(entry.guild, guild) and entry.state == "confirmed"
+    return entry ~= nil and SameGuild(entry.guild, guild) and entry.state == "confirmed" and Trusted(entry)
 end
 
 local SOURCE_TEXT = { group = "in the group", target = "target", mouseover = "mouseover",
@@ -199,7 +219,13 @@ local function Reason(rec, entry)
         end
         return L["Not on the [%s] roster %s saw %s."]:format(TagOf(rec.g), rec.w or "?", Ago(rec.t))
     end
-    if entry.state == "confirmed" then return L["Confirmed by %s"]:format(entry.by or "?") end
+    if entry.state == "confirmed" then
+        if not Trusted(entry) then
+            return L["Only %s says this player is in [%s], and nobody vouches for %s."]:format(entry.by or "?",
+                TagOf(entry.guild), entry.by or "?")
+        end
+        return L["Confirmed by %s"]:format(entry.by or "?")
+    end
     if entry.state == "denied" then
         return L["%s, a member of [%s], says this player isn't in it."]:format(entry.by or "?", TagOf(entry.guild))
     end
@@ -396,15 +422,19 @@ end
 
 -- Questions -----------------------------------------------------------------------------------
 
+-- Not checked yet (nobody answered, or only someone nobody vouches for): asked again sooner.
 local function Fresh(entry)
     if not entry.t then return false end
     local age = GetServerTime() - entry.t
-    return age < (entry.state == "unverified" and KEEP_UNVERIFIED or KEEP)
+    local unsure = entry.state == "unverified" or (entry.state == "confirmed" and not Trusted(entry))
+    return age < (unsure and KEEP_UNVERIFIED or KEEP)
 end
 
--- An answer (or no answer): the fallback when there's no evidence.
-local function Settle(entry, state, by, source)
+-- An answer (or no answer): the fallback when there's no evidence. trusted: from someone I can
+-- vouch for in that guild (only such an answer outweighs a doubt, StateOf).
+local function Settle(entry, state, by, source, trusted)
     entry.state, entry.by, entry.source, entry.t = state, by, source, GetServerTime()
+    entry.trusted = trusted and true or nil
     if entry.timer then entry.timer:Cancel() entry.timer = nil end
     entry.asking = nil
     Recheck(entry)
@@ -574,7 +604,8 @@ local function Item(entry)
     return {
         name = entry.name, guild = entry.guild, tag = ns.Alliance:GetTag(entry.guild),
         state = state, by = entry.by, source = rec and rec.src or entry.source, t = rec and rec.t or entry.t,
-        reason = state and state ~= "checking" and state ~= "unverified" and Reason(rec, entry) or nil,
+        -- (Not checked yet: a reason only when someone nobody vouches for said yes.)
+        reason = state and state ~= "checking" and Reason(rec, entry) or nil,
         hidden = entry.hidden,
     }
 end
@@ -612,6 +643,8 @@ function Vouch.StateText(item)
         return "|cffff4040" .. (item.reason and L["Not in [%s]: %s"]:format(tag, item.reason) or L["Not in [%s]"]:format(tag)) .. "|r"
     elseif item.state == "disputed" then
         return "|cffff9900" .. (item.reason and L["Disputed: %s"]:format(item.reason) or L["Disputed"]) .. "|r"
+    elseif item.state == "unverified" and item.reason then
+        return "|cffff9900" .. L["Not checked yet: %s"]:format(item.reason) .. "|r"
     elseif item.state == "unverified" then
         return "|cffff9900" .. L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."]:format(tag, tag) .. "|r"
     elseif not item.state then
@@ -728,8 +761,10 @@ ns.Comm:OnAlly("VA", function(sender, payload, isSelf)
     if entry.source == "answer" and Fresh(entry) then
         if state == "confirmed" and (entry.state == "denied" or (entry.state == "disputed" and not trusted)) then return end
         if state == "disputed" and entry.state == "denied" then return end
+        -- A "yes" from someone nobody vouches for doesn't replace one from someone I can.
+        if state == "confirmed" and entry.state == "confirmed" and Trusted(entry) and not trusted then return end
     end
-    Settle(entry, state, sender, "answer")
+    Settle(entry, state, sender, "answer", trusted)
 end)
 
 -- Hello: each addon says it's there when it joins the alliance channel, and the ones already

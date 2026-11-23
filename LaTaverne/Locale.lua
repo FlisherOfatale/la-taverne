@@ -581,6 +581,8 @@ if GetLocale() == "frFR" then
     L["%s says this player isn't in [%s], but %s isn't confirmed either."] = "%s dit que ce joueur n'est pas dans [%s], mais %s n'est pas confirmé non plus."
     L["%s says they're in [%s]. %s Their messages are hidden."] = "%s dit être dans [%s]. %s Ses messages sont masqués."
     L["Not in [%s]: %s"] = "Pas dans [%s] : %s"
+    L["Only %s says this player is in [%s], and nobody vouches for %s."] = "Seul %s dit que ce joueur est dans [%s], et personne ne se porte garant de %s."
+    L["Not checked yet: %s"] = "Pas encore vérifié : %s"
     L["Disputed: %s"] = "Contesté : %s"
     L["Disputed"] = "Contesté"
     L["disputed"] = "contesté"
