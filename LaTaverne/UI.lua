@@ -3574,7 +3574,7 @@ local function BuildOfficerPanel()
     relayHeader:SetPoint("TOPLEFT", below, "TOPLEFT", 8, -116)
     NewInfoIcon(p, { L["Guild relay"],
         L["Members who don't run La Taverne can't share their guild chat with the allied guilds themselves. One La Taverne player of your guild passes it on for them (the relay), picked on its own among those online."],
-        L["Map positions: the places your members without La Taverne share through OpenMap (its option Share where you are), passed on to the allied guilds' maps. Your own guild already sees them through OpenMap."],
+        L["OpenMap positions: the places your members without La Taverne share through OpenMap (its option Share where you are), passed on to the allied guilds' maps. Your own guild already sees them through OpenMap."],
         L["Saved in the Guild Info, for your guild only: Export doesn't send it."],
         L["Each player can also stop relaying, in Options."] }):SetPoint("LEFT", relayHeader, "RIGHT", 6, 0)
     NewLabel(p, L["For members without La Taverne"]):SetPoint("TOPLEFT", below, "TOPLEFT", 16, -150)
@@ -4440,7 +4440,7 @@ local function BuildOptionsPanel()
     end)
     p.advanced:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(p.advanced, { L["Advanced mode"],
-        L["Adds the Guild relay tab beside Alliance: who passes on each guild's chat and map positions, and how it's going, in detail."],
+        L["Adds the Guild relay tab beside Alliance: who passes on each guild's chat and OpenMap positions, and how it's going, in detail."],
         L["The relay works the same either way: this only shows it."] })
     EndSection()
 

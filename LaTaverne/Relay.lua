@@ -1726,7 +1726,7 @@ function Relay.TierText(tier)
     return L[TIER_NAMES[tier] or "unknown"]
 end
 
-local JOB_NAMES = { chat = "Guild chat", map = "Map positions" }
+local JOB_NAMES = { chat = "Guild chat", map = "OpenMap positions" }
 function Relay.JobText(job)
     return L[JOB_NAMES[job] or tostring(job)]
 end
@@ -2141,7 +2141,7 @@ function Relay:WindowData()
         { value = tostring(a.relayed or 0), label = L["lines received"],
           tip = { L["lines received"], L["Guild chat lines of the allied guilds' members without La Taverne, passed on by their relay."] } },
         { value = tostring(m.relayed or 0), label = L["positions received"],
-          tip = { L["positions received"], L["Map positions of the allied guilds' members without La Taverne, passed on by their relay."] } },
+          tip = { L["positions received"], L["Positions the allied guilds' members without La Taverne share through OpenMap, passed on by their relay."] } },
         { value = s.sent .. " / " .. s.lost, label = L["lines relayed / lost"], level = s.lost > 0 and "warn" or nil,
           tip = { L["lines relayed / lost"], L["Lines of your guild you passed on as the relay, and lines of your guild that needed a relay and never got one."] } },
         { value = tostring(refused), label = L["refused"], level = refused > 0 and "warn" or nil, tip = (function()
@@ -2297,7 +2297,7 @@ Relay.ShowLive = Relay.ShowWindow
 function Relay:JobsLine(guild)
     local playersOnline = self:HasPlayersOnline(guild)
     return L["chat:"] .. " " .. (self:StatusText(guild, "chat", playersOnline)) .. "  ·  "
-        .. L["map:"] .. " " .. (self:StatusText(guild, "map", playersOnline))
+        .. L["OpenMap:"] .. " " .. (self:StatusText(guild, "map", playersOnline))
 end
 
 -- The text, to copy and paste (the window's Copy report).

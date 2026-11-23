@@ -95,7 +95,7 @@ and (map job) the map positions of members without La Taverne who share them thr
   last 300 s and glide like the others; a player's own fresh `POS` always wins; refused: names in
   my guild, bad values. They count as allied players' OpenMap sharing (`om`), so my own OpenMap
   drawing a friend keeps one dot.
-- **Officers**: the Setup page has a "Map positions" box next to "Guild chat" (`LT:r:chat` = chat
+- **Officers**: the Setup page has an "OpenMap positions" box next to "Guild chat" (`LT:r:chat` = chat
   only).
 
 ## Monitoring
@@ -126,7 +126,7 @@ and (map job) the map positions of members without La Taverne who share them thr
 
 ## Seeing it
 - **Everyone:** the Alliance page's relay rows (each guild, each job) and the minimap button's
-  tooltip (`[TAG] Relay: chat: who (tier) · map: who (tier)`; "nobody" in orange when that guild
+  tooltip (`[TAG] Relay: chat: who (tier) · OpenMap: who (tier)`; "nobody" in orange when that guild
   has La Taverne players online).
 - **Advanced mode** (Options, General, off by default): a small tab with a flare beside the
   Alliance tab, opening the relay's page (`RelayPage.lua`): one card per guild (who holds each

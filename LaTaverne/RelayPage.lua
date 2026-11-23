@@ -377,7 +377,7 @@ function ns.BuildRelayPanel()
     local p = K.NewPanel()
     panel = p
     K.NewPageTitle(p, L["Guild relay"], { L["Guild relay"],
-        L["One La Taverne player per guild passes on its guild chat and map positions to the allied guilds, for the members without La Taverne."],
+        L["One La Taverne player per guild passes on its guild chat and OpenMap positions to the allied guilds, for the members without La Taverne."],
         L["Green: fine. Orange: worth a look. Grey: nobody, or nothing to relay."],
         L["Hover a row, a badge or a count for the details."] })
     -- Top right: Copy report.

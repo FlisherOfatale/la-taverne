@@ -60,7 +60,7 @@ passed: see "Done").
       is queued for a click, not invited.
 
 ## 4. With a second player: later
-- [ ] Map job, dots: on the allied side, a relayed dot's tooltip says "Passed on by ...", it
+- [ ] Map job, dots: on the allied side, a relayed dot's tooltip says "Shares through OpenMap · passed on by ...", it
       moves about every 30 s, and it's gone within ~10 s once that player stops sharing.
 - [ ] A chat line sent again (relay page, Your sending: "sent again" above 0): the allied side
       shows it once.

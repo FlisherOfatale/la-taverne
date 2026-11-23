@@ -317,7 +317,7 @@ local function ShowTooltip(pin)
         if e.scope == "ally" then who = e.guild or (e.tag and ("[" .. e.tag .. "]")) or who end
         GameTooltip:AddLine(who, 0.6, 0.8, 1)
         if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
-        if e.relayedBy then GameTooltip:AddLine(L["Passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
+        if e.relayedBy then GameTooltip:AddLine(L["Shares through OpenMap · passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
         GameTooltip:Show()
         return
     end
@@ -329,7 +329,7 @@ local function ShowTooltip(pin)
     if e.l and e.l > 0 then GameTooltip:AddLine(L["Level %d"]:format(e.l), 1, 1, 1) end
     GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
     if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
-    if e.relayedBy then GameTooltip:AddLine(L["Passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
+    if e.relayedBy then GameTooltip:AddLine(L["Shares through OpenMap · passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
     GameTooltip:Show()
 end
 
