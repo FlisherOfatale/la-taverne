@@ -461,7 +461,8 @@ function Relay:StatusText(guild, job, playersOnline)
     if playersOnline == nil then playersOnline = self:HasPlayersOnline(guild) end
     local entry, why = self:GetStatus(guild, job)
     if entry then
-        local who = ns.IsMe(entry.name) and L["you"] or entry.name
+        -- "you" in green: me, not a player named that.
+        local who = ns.IsMe(entry.name) and ("|cff40ff40" .. L["you"] .. "|r") or entry.name
         return format("%s (%s)", who, Relay.TierText(entry.tier)), entry
     end
     if ns.Guild:IsMyGuild(guild) and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job) then
@@ -2054,7 +2055,8 @@ local function GuildCard(g, now, server)
         if entry then
             held = held + 1
             local me = ns.IsMe(entry.name)
-            local who = me and L["you"] or entry.name
+            -- "you" in green: me, not a player named that.
+            local who = me and ("|cff40ff40" .. L["you"] .. "|r") or entry.name
             row.holder = format("%s · %s · %s", who, Relay.TierText(entry.tier), format(L["since %s"], Since(entry.since)))
             tip[#tip + 1] = format(L["%s (%s), heard %d s ago, relaying since %s"], who, Relay.TierText(entry.tier),
                 server - entry.heard, Since(entry.since))
