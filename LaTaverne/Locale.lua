@@ -1119,6 +1119,29 @@ if GetLocale() == "frFR" then
     L["One La Taverne player of the guild passes on to the allied guilds the map positions of its members who share them through OpenMap without La Taverne: the relay. Picked on its own, as for the guild chat."] = "Un joueur de la guilde qui utilise La Taverne transmet aux guildes alliées les positions sur la carte de ses membres qui les partagent avec OpenMap sans La Taverne : le relais. Choisi tout seul, comme pour le chat de guilde."
     L["Lately: %d positions sent, %d waiting at most."] = "Ces derniers temps : %d positions envoyées, %d en attente au plus."
     L["The relay also passes on, to the allied guilds' maps, the places of your members who share them through OpenMap without La Taverne."] = "Le relais transmet aussi, aux cartes des guildes alliées, les positions de vos membres qui les partagent avec OpenMap sans La Taverne."
+
+    -- Vouching: relayed players, tiers
+    L["Talks in [%s]'s guild chat, passed on by %s (guild relay), %s."] = "Parle dans le chat de guilde de [%s], transmis par %s (relais de guilde), %s."
+    L["On the map, passed on by %s (guild relay)."] = "Sur la carte, transmis par %s (relais de guilde)."
+    L["Lines from %s passed on by [%s]'s relay are hidden. %s"] = "Les messages de %s transmis par le relais de [%s] sont masqués. %s"
+    L["%d d"] = "%d j"
+    L["Tier %d: %s."] = "Niveau %d : %s."
+    L["seen first-hand"] = "vu de vos yeux"
+    L["missing from a roster"] = "absent d'une liste des membres"
+    L["told by someone you vouch for"] = "dit par quelqu'un dont vous vous portez garant"
+    L["their claim only"] = "sa parole seulement"
+    L["Kept %s more."] = "Gardé encore %s."
+    L["Asked again in %s at the earliest."] = "Redemandé dans %s au plus tôt."
+    L["Asked again at their next message."] = "Redemandé à son prochain message."
+    L["not checked: relay not checked yet"] = "pas vérifié : relais pas encore vérifié"
+    L["talks in their guild chat"] = "parle dans son chat de guilde"
+    L["on the map only"] = "sur la carte seulement"
+    L["Doesn't run La Taverne: their guild chat and map position reach you through their guild's relay."] = "N'utilise pas La Taverne : son chat de guilde et sa position sur la carte vous parviennent par le relais de sa guilde."
+    L["Without La Taverne, passed on by the relay: %d online, %d known"] = "Sans La Taverne, transmis par le relais : %d en ligne, %d connus"
+    L["Without La Taverne"] = "Sans La Taverne"
+    L["Members of this guild who don't run La Taverne, heard through its relay this session: their guild chat lines and their OpenMap position."] = "Les membres de cette guilde qui n'utilisent pas La Taverne, entendus par son relais pendant cette session : leurs messages du chat de guilde et leur position OpenMap."
+    L["They're only as checked as the relay that passes them on: confirmed when you vouch for that relay, not checked yet otherwise. A map position alone checks nobody."] = "Ils ne sont vérifiés qu'autant que le relais qui les transmet : confirmés quand vous vous portez garant de ce relais, pas encore vérifiés sinon. Une position sur la carte seule ne vérifie personne."
+    L["Also adds each allied player's vouching tier to their tooltip on the Alliance tab: 1, seen first-hand; 2, told by someone you vouch for; 3, their claim only."] = "Ajoute aussi le niveau de vérification de chaque joueur allié à son infobulle dans l'onglet Alliance : 1, vu de vos yeux ; 2, dit par quelqu'un dont vous vous portez garant ; 3, sa parole seulement."
 end
 
 -- Role helpers ----------------------------------------------------------------------

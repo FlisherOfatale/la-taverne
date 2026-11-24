@@ -301,6 +301,13 @@ local function Lift(pin)
     if ok and type(top) == "number" and pin:GetFrameLevel() <= top then pin:SetFrameLevel(top + 2) end
 end
 
+-- A relayed dot: who passed it on, with "(not checked yet)" / "(disputed)" when nobody vouches
+-- for that relay (Vouch.lua).
+local function RelayedLine(e)
+    local mark = ns.Vouch and ns.Vouch:Mark(e.relayedBy) or ""
+    return L["Shares through OpenMap · passed on by %s (guild relay)"]:format(e.relayedBy .. mark)
+end
+
 local function ShowTooltip(pin)
     local e = pin.entry
     if not e then return end
@@ -317,7 +324,7 @@ local function ShowTooltip(pin)
         if e.scope == "ally" then who = e.guild or (e.tag and ("[" .. e.tag .. "]")) or who end
         GameTooltip:AddLine(who, 0.6, 0.8, 1)
         if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
-        if e.relayedBy then GameTooltip:AddLine(L["Shares through OpenMap · passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
+        if e.relayedBy then GameTooltip:AddLine(RelayedLine(e), 0.6, 0.6, 0.6) end
         GameTooltip:Show()
         return
     end
@@ -329,7 +336,7 @@ local function ShowTooltip(pin)
     if e.l and e.l > 0 then GameTooltip:AddLine(L["Level %d"]:format(e.l), 1, 1, 1) end
     GameTooltip:AddLine(("%s  %.1f, %.1f"):format(info and info.name or "?", e.x * 100, e.y * 100), 1, 1, 1)
     if ago >= 20 then GameTooltip:AddLine(L["Updated %d s ago"]:format(ago), 0.6, 0.6, 0.6) end
-    if e.relayedBy then GameTooltip:AddLine(L["Shares through OpenMap · passed on by %s (guild relay)"]:format(e.relayedBy), 0.6, 0.6, 0.6) end
+    if e.relayedBy then GameTooltip:AddLine(RelayedLine(e), 0.6, 0.6, 0.6) end
     GameTooltip:Show()
 end
 
@@ -634,6 +641,14 @@ ns.Comm:OnAlly("RMAP", function(sender, p, isSelf)
             -- Nobody of my guild, nor me: my guild's places never come from an allied guild.
             if not key or ns.IsMe(name) or ns.Guild:IsMember(name) then
                 st.relayedRefused = st.relayedRefused + 1
+            elseif ns.Vouch and not ns.Vouch:Relayed(name, p.g, sender, "map") then
+                -- The game shows them in another guild lately (Vouch.lua): no dot.
+                st.relayedRefused = st.relayedRefused + 1
+                local old = live[key]
+                if old and old.relayedBy then
+                    live[key] = nil
+                    touched[#touched + 1] = old
+                end
             else
                 local old = live[key]
                 -- Their own position (they run La Taverne) wins while it's fresh.

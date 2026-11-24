@@ -516,6 +516,9 @@ ns.Comm:OnAlly("RCHAT", function(sender, payload, isSelf)
     end
     local guid = type(payload.id) == "string" and payload.id:match("^Player%-[%w%-]+$") or nil
     local class = type(payload.c) == "string" and payload.c:match("^%u+$") or nil
+    -- Vouching: the author is only as checked as their relay (before Receive: auto-invite reads
+    -- it). The game shows them in another guild: hidden.
+    if ns.Vouch and not ns.Vouch:Relayed(author, payload.g, sender, "chat") then return end
     AllyChat.stats.relayed = AllyChat.stats.relayed + 1
     -- The mark says "without La Taverne": not for an author whose La Taverne I heard lately on the
     -- alliance channel (the relay's copy only beat theirs, or theirs was lost on the way).
