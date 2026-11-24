@@ -286,6 +286,11 @@ function Alliance:RelayAllows(job)
     return Alliance.RelayRuleAllows(config.relay, job)
 end
 
+-- The Guild Info couldn't be read lately (a game restriction): what I use may be out of date.
+function Alliance:IsInfoPending()
+    return infoPending
+end
+
 function Alliance:IsInfoKnown()
     return infoKnown
 end
@@ -512,10 +517,9 @@ function Alliance:OnLogin()
     ns.On("PLAYER_REGEN_ENABLED", Retry)
 end
 
--- /taverne ally: what the addon understood from the Guild Info.
-ns.commands.ally = function()
-    local L = ns.Log
-    wipe(ns.log)
+-- /taverne ally: what the addon understood from the Guild Info. L(...) writes one line (ns.Log:
+-- printed and kept for the copy window; /taverne debug: kept only).
+function Alliance.StatusLines(L)
     L("LaTaverne", ns.version, "alliance", date("%Y-%m-%d %H:%M:%S"))
     L("my guild", "[" .. tostring(ns.Guild:GetName()) .. "]", ns.Guild:IsSandbox() and "(fake, sandbox)" or "")
     local guilds = Alliance:GetGuilds()
@@ -546,5 +550,10 @@ ns.commands.ally = function()
         L("last allied message: target", "[" .. tostring(check.target) .. "]", "localID", tostring(check.localID),
             "channelName", "[" .. tostring(check.channelName) .. "]", "accepted", check.ok and "yes" or "no")
     end
+end
+
+ns.commands.ally = function()
+    wipe(ns.log)
+    Alliance.StatusLines(ns.Log)
     ns.ShowCopyWindow()
 end

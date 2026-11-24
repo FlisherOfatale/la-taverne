@@ -586,6 +586,15 @@ end
 
 -- Why the alliance channel looks broken right now, or nil.
 local function ChannelSickness(ch, now)
+    -- A game restriction (boss, Mythic+, chat lockdown) holds or drops messages: nothing to
+    -- judge by meanwhile. And a Guild Info read held back: my guildmates may be on a new key's
+    -- channel I don't know yet.
+    local lockdown = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    local locked = lockdown and select(2, pcall(lockdown)) == true
+    if ns.Guild:Restricted() or locked or ns.Alliance:IsInfoPending() then
+        wipe(health.sends)
+        return nil
+    end
     -- My own messages not coming back.
     if health.echoSeen then
         local missed = 0
@@ -876,6 +885,12 @@ local RESEND_DELAY = 2
 local SendOnChannel
 
 local function PartDone(arg, didSend, result)
+    -- The health check's own messages: counted when the game took them, on my alliance channel.
+    if didSend and arg.msg.ch == channels.ally then
+        local sends = health.sends
+        sends[#sends + 1] = GetTime()
+        if #sends > 10 then table.remove(sends, 1) end
+    end
     local fn = partWatch[arg.prefix]
     if fn then fn(didSend and true or false, GetTime() - arg.at, result, arg.msg) end
     local msg = arg.msg
@@ -896,11 +911,7 @@ local function PartDone(arg, didSend, result)
 end
 
 local function SendPart(prio, prefix, msg, id, info)
-    if partWatch[prefix] or info.retry then
-        CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id, nil, PartDone, { prefix = prefix, at = GetTime(), msg = info })
-    else
-        CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id)
-    end
+    CTL:SendAddonMessage(prio, prefix, msg, "CHANNEL", id, nil, PartDone, { prefix = prefix, at = GetTime(), msg = info })
     local sent = Comm.lastSend
     sent.parts, sent.bytes = sent.parts + 1, sent.bytes + #msg + #prefix
 end
@@ -942,9 +953,6 @@ local function SendAllyText(text, priority, prefix, opts)
     if not (ch and ch.ready) then return false end
     local prio = priority or "NORMAL"
     if not SendOnChannel(ch, text, prio, prefix, opts) then return false end
-    local sends = health.sends
-    sends[#sends + 1] = GetTime()
-    if #sends > 10 then table.remove(sends, 1) end
     local old = channels.allyOld
     if old and old.ready then SendOnChannel(old, text, prio, prefix, opts) end
     Comm.stats.sent = Comm.stats.sent + 1

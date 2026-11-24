@@ -277,3 +277,82 @@ ns.Comm:On("DEV_PONG", function(sender, payload, isSelf)
     L("PONG from", q(sender), q(payload.text))
     if ns.MockGuild then ns.MockGuild:AddSystem("PONG from " .. sender) end
 end)
+
+-- /taverne clearcache: forget what La Taverne remembers about other players (vouching evidence,
+-- guild rosters saved by my characters, players seen with La Taverne), then reload. Settings,
+-- the error report and the allied chat history stay.
+ns.commands.clearcache = function()
+    ns.ClearCache()
+    ns.Print(ns.L["Remembered players forgotten (vouching, guild rosters, players seen). Reloading..."])
+    ReloadUI()
+end
+
+-- /taverne debug: everything useful to look into a problem, in one text to copy: version and
+-- game, the error report, the alliance (as /taverne ally), the guild relay's report, the message
+-- log (if it's recording), and which related addons are loaded. Never the text of chat lines.
+ns.commands.debug = function()
+    local out = {}
+    local function Add(text) out[#out + 1] = text end
+    local function Section(title)
+        Add("")
+        Add("===== " .. title .. " =====")
+    end
+    local function Try(fn)
+        local ok, err = pcall(fn)
+        if not ok then Add("(could not read: " .. tostring(err) .. ")") end
+    end
+    local version, build, _, toc = GetBuildInfo()
+    Add(format("La Taverne %s debug report, %s", tostring(ns.version), date("%Y-%m-%d %H:%M:%S")))
+    Add(format("Me: %s, guild [%s]%s; game %s (%s, toc %s), %s; gamepad UI %s",
+        tostring(ns.FullName("player")), tostring(ns.Guild:GetName()), ns.Guild:IsSandbox() and " (test mode)" or "",
+        tostring(version), tostring(build), tostring(toc), GetLocale(), ns.GamepadUI() and "on" or "off"))
+    local addons = {}
+    for _, name in ipairs({ "GuildUnion", "Chattynator", "OpenMap", "BugSack", "!BugGrabber" }) do
+        local loaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(name)
+        if loaded then
+            local v = C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(name, "Version")
+            addons[#addons + 1] = name .. (v and (" " .. v) or "")
+        end
+    end
+    Add("Related addons loaded: " .. (#addons > 0 and table.concat(addons, ", ") or "none"))
+    Add(format("Remembered: vouching %d players, guild rosters %d, allied chat lines %d (not listed)",
+        ns.db.vouchLedger and (function() local n = 0 for _ in pairs(ns.db.vouchLedger) do n = n + 1 end return n end)() or 0,
+        ns.db.rosterSnapshots and (function() local n = 0 for _ in pairs(ns.db.rosterSnapshots) do n = n + 1 end return n end)() or 0,
+        #(ns.db.allyLog or {})))
+
+    Section("Errors")
+    Try(function() Add(ns.Errors:Report()) end)
+    Section("Alliance")
+    Try(function()
+        ns.Alliance.StatusLines(function(...)
+            local parts = {}
+            for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+            Add(table.concat(parts, " "))
+        end)
+    end)
+    if ns.Relay and ns.Relay.ReportText then
+        Section("Guild relay")
+        Try(function() Add(ns.Relay:ReportText()) end)
+    end
+    Section("Message log")
+    Try(function()
+        if ns.Comm:IsLogging() then
+            Add(ns.Comm:LogText({}, {}))
+        else
+            Add("Off. To include it: /taverne msglog, tick Recording, let it run a few minutes, then /taverne debug again.")
+        end
+    end)
+
+    ns.TextDialog({
+        kind = "debug",
+        title = ns.L["Debug report"],
+        width = 760,
+        hint = ns.L["Everything La Taverne can tell about a problem (no chat text). Copy selects it all: then Ctrl+C, and send it to the author."],
+        text = table.concat(out, "\n"),
+        button = ns.L["Copy"],
+        onButton = function()
+            ns.SelectTextDialog()
+            return false
+        end,
+    })
+end

@@ -844,6 +844,10 @@ if GetLocale() == "frFR" then
     L["Choose"] = "Choisir"
     L["Close"] = "Fermer"
     L["Sections"] = "Sections"
+    -- /taverne debug and /taverne clearcache (Dev.lua)
+    L["Debug report"] = "Rapport de débogage"
+    L["Everything La Taverne can tell about a problem (no chat text). Copy selects it all: then Ctrl+C, and send it to the author."] = "Tout ce que La Taverne peut dire sur un problème (sans le texte du chat). Copier sélectionne tout : puis Ctrl+C, et envoyez-le à l'auteur."
+    L["Remembered players forgotten (vouching, guild rosters, players seen). Reloading..."] = "Joueurs mémorisés oubliés (vérifications, listes de guilde, joueurs vus). Rechargement..."
     -- Alliance channel health check (Comm.lua)
     L["The alliance channel doesn't seem to work properly: allied messages may be missing. A /reload, or restarting the game, usually fixes it."] = "Le canal de l'alliance ne semble pas fonctionner correctement : des messages des guildes alliées peuvent manquer. Un /reload, ou redémarrer le jeu, règle généralement le problème."
 

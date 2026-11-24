@@ -240,11 +240,26 @@ local function ApplyDefaults(target, defaults)
     end
 end
 
+-- What La Taverne remembers about other players (vouching evidence, guild rosters saved by my
+-- characters, players seen with La Taverne): forgotten by /taverne clearcache (Dev.lua), and once
+-- by itself when CACHE_VERSION changes. Raise CACHE_VERSION only in a release that changes how
+-- these are stored, or when what older versions saved is known to be wrong; not at every version
+-- (the vouching evidence takes time to gather again).
+ns.CACHE_FIELDS = { "vouchLedger", "rosterSnapshots", "allySeen", "guildSeen" }
+local CACHE_VERSION = 1
+
+function ns.ClearCache()
+    for _, field in ipairs(ns.CACHE_FIELDS) do ns.db[field] = nil end
+end
+
 ns.On("ADDON_LOADED", function(name)
     if name ~= ADDON then return end
     LaTaverneDB = LaTaverneDB or {}
     ApplyDefaults(LaTaverneDB, DEFAULTS)
     ns.db = LaTaverneDB
+    -- Saved before cache versions existed: taken as the current one (nothing known to be wrong).
+    if ns.db.cacheVersion ~= nil and ns.db.cacheVersion ~= CACHE_VERSION then ns.ClearCache() end
+    ns.db.cacheVersion = CACHE_VERSION
     for _, module in ipairs(ns.modules) do
         if module.OnInit then module:OnInit() end
     end
@@ -712,6 +727,8 @@ SlashCmdList.LATAVERNE = function(msg)
         ns.Print("/taverne autoinvite - turn keyword auto-invite on or off")
         ns.Print("/taverne errors [clear] - error report to send to the author")
         ns.Print("/taverne relay - guild relay report: who relays for each guild, and how it goes")
+        ns.Print("/taverne debug - everything useful about a problem, in one text to copy and send")
+        ns.Print("/taverne clearcache - forget remembered players (vouching, guild rosters), then reload")
         -- Testing and diagnostics: listed only in test mode (they still work outside it).
         if ns.db and ns.db.dev and ns.db.dev.sandbox then
             ns.Print("Test mode:")

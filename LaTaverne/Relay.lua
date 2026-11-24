@@ -496,10 +496,15 @@ local function SendRLY(op, job, fields)
     -- A copy to my guild on the guild channel: the alliance channel can break halfway (looks
     -- ready, some messages lost), and two relays of one guild that don't hear each other both
     -- keep the job. The guild channel is the game's own: they hear each other there.
+    -- Only when the alliance copy went too (my client counts it as sent only then), except
+    -- giving a job up: my guildmates must hear that even when my alliance channel is down.
     local copy = {}
     for k, v in pairs(payload) do copy[k] = v end
+    if not ns.Comm:SendAlly("RLY", payload, "ALERT", true, job and JOBS[job].prefix or PREFIX) then
+        if op == "off" then ns.Comm:Send("RLY", copy, "ALERT", true) end
+        return false
+    end
     ns.Comm:Send("RLY", copy, "ALERT", true)
-    if not ns.Comm:SendAlly("RLY", payload, "ALERT", true, job and JOBS[job].prefix or PREFIX) then return false end
     Measure("RLY", job, ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
     return true
 end
@@ -2331,6 +2336,10 @@ function Relay:JobsLine(guild)
 end
 
 -- The text, to copy and paste (the window's Copy report).
+function Relay:ReportText()
+    return ReportText()
+end
+
 function Relay:ShowReport()
     ns.TextDialog({
         kind = "relay",
