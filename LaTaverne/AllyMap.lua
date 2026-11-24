@@ -567,6 +567,8 @@ local function OnPosition(sender, p, isSelf, scope)
     }
     live[key] = e
     if MapShown() then provider:UpdateOne(e) end
+    -- What they said about themselves: the allied player lists show it too.
+    if scope == "ally" and ns.Vouch then ns.Vouch:NoteLooks(sender, p.c, p.l) end
 end
 
 ns.Comm:On("POS", function(sender, p, isSelf) OnPosition(sender, p, isSelf, "guild") end)

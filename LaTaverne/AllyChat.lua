@@ -402,6 +402,8 @@ local function Receive(author, payload, tag, relayed)
     end
     local class = type(payload.c) == "string" and payload.c or nil
     local guid = type(payload.id) == "string" and payload.id or nil
+    -- An allied author's class: the allied player lists show it too.
+    if tag and class and ns.Vouch then ns.Vouch:NoteLooks(author, class) end
     relayed = (tag and relayed) and true or nil
     ShowLine(author, class, guid, shown, tag, relayed)
     if relayed then TellMark() end

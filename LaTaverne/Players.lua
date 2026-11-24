@@ -322,7 +322,8 @@ function Players:GetDemand()
 end
 
 -- Online guild members, each with: tier "available" | "addon" | "none", and the available entry.
--- Allied available players are added too (tier "available").
+-- Allied available players are added too (tier "available"), and allied players online on the
+-- alliance channel (tier "addon"), with their tag.
 function Players:GetOnline()
     local out, seen = {}, {}
     local now = GetServerTime()
@@ -339,7 +340,20 @@ function Players:GetOnline()
     end
     for key, a in pairs(available) do
         if not seen[key] then
+            seen[key] = true
             out[#out + 1] = { key = key, name = a.name, class = a.class, level = a.level, tier = "available", avail = a, tag = a.tag }
+        end
+    end
+    -- Allied players online on the alliance channel (they run La Taverne), with their guild's
+    -- tag; not those shown to be outside the guild they claim.
+    if ns.Vouch and ns.Alliance and ns.Alliance:IsActive() then
+        for _, item in ipairs(ns.Vouch:GetPlayers()) do
+            local key = ns.NameKey(item.name)
+            if item.online and not seen[key] and not ns.IsMe(item.name) and item.state ~= "denied" then
+                seen[key] = true
+                out[#out + 1] = { key = key, name = item.name, class = item.class, level = item.level, tier = "addon",
+                    tag = item.tag or item.guild or "?" }
+            end
         end
     end
     local order = { available = 1, addon = 2, none = 3 }

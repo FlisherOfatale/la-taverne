@@ -3030,9 +3030,10 @@ function RoleIcons(roles)
     return out
 end
 
--- Rows: a player, the "Other members online (n)" line that folds the rest, or a message.
+-- Rows: a player, the "Players not looking for a group right now (n)" line that folds the rest,
+-- or a message.
 -- Section header rows get room above them (spacing before a section, none after it).
-local PLAYER_ROW, TOGGLE_ROW, MESSAGE_ROW = 38, 40, 24
+local PLAYER_ROW, PLAYER_ROW_SHORT, TOGGLE_ROW, MESSAGE_ROW = 38, 28, 40, 24
 
 function InitPlayerRow(row, e)
     if not row.built then
@@ -3065,11 +3066,14 @@ function InitPlayerRow(row, e)
         row.invite:SetPoint("RIGHT", row.whisper, "LEFT", -10, 0)
         row.invite:SetMotionScriptsWhileDisabled(true)
         row.invite:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- In the invite button's place for someone without the addon (it can't reach them).
+        row.noAddon = NewLabel(row.player, L["Doesn't have La Taverne"], "GameFontDisableSmall")
+        row.noAddon:SetPoint("RIGHT", row.whisper, "LEFT", -10, 0)
 
         row.toggle = CreateFrame("Button", nil, row)
         row.toggle:SetAllPoints()
-        -- A section header that folds the list under it ("Available players", "Other members
-        -- online"): its text at the bottom of the row, the room above it.
+        -- A section header that folds the list under it ("Available players", "Players not
+        -- looking for a group"): its text at the bottom of the row, the room above it.
         row.toggle.text = NewLabel(row.toggle, "", SECTION_FONT)
         row.toggle.text:SetPoint("BOTTOMLEFT", 8, 8)
         row.toggle.line = row.toggle:CreateTexture(nil, "ARTWORK")
@@ -3123,22 +3127,26 @@ function InitPlayerRow(row, e)
     nameTip[#nameTip + 1] = ver and ("La Taverne v" .. ver) or ("|cff808080" .. L["Doesn't have the La Taverne addon"] .. "|r")
     if vouchMark ~= "" then nameTip[#nameTip + 1] = ns.Vouch:Describe(e.name) end
     row.nameHit.tooltip = nameTip
-    if e.tier == "available" then
-
+    -- Available: a second line (roles, dungeons, note). The others: one line, the name centered.
+    local available = e.tier == "available"
+    row.name:ClearAllPoints()
+    if available then
+        row.name:SetPoint("TOPLEFT", 8, -4)
         row.detail:SetText(AvailDetail(a.roles, a.dungeons, a.note, L["any dungeon at their level"]))
         row.detailHit.tooltip = AvailTooltip(NameText(e.name, e.class, tag), a.roles, a.dungeons, a.note, L["any dungeon at their level"])
-    elseif e.tier == "addon" then
-        row.detailHit.tooltip = nil
-        row.detail:SetText("|cffb0b0b0" .. L["At the tavern, but not looking for a group right now"] .. "|r")
     else
+        row.name:SetPoint("LEFT", 8, 0)
+        row.detail:SetText("")
         row.detailHit.tooltip = nil
-        row.detail:SetText("|cff808080" .. L["Not at the tavern: whisper them"] .. "|r")
     end
+    row.detail:SetShown(available)
+    row.detailHit:SetShown(available)
     row.player:SetAlpha((a and a.afk) and 0.5 or 1)
     -- The hover area covers the text, not the empty end of the line.
     local textWidth, lineWidth = row.detail:GetStringWidth() or 0, row.detail:GetWidth() or 0
     row.detailHit:SetWidth(math.max(20, (lineWidth > 0 and math.min(textWidth, lineWidth)) or textWidth))
     row.invite:SetShown(e.tier ~= "none")
+    row.noAddon:SetShown(e.tier == "none")
     local ok, reason = CanInvite(e)
     row.invite:SetEnabled(ok)
     row.invite:SetScript("OnEnter", function(self)
@@ -3153,7 +3161,7 @@ end
 local function PlayerRowHeight(e)
     if e.kind == "toggle" then return TOGGLE_ROW end
     if e.kind == "message" then return MESSAGE_ROW end
-    return PLAYER_ROW
+    return e.tier == "available" and PLAYER_ROW or PLAYER_ROW_SHORT
 end
 
 local function InitDemandRow(row, d)
@@ -3235,6 +3243,7 @@ local function BuildPlayersPanel()
     p.list = NewScrollList(p, PlayerRowHeight, InitPlayerRow)
     p.showAvailable = true
     p.showOthers = false
+    p.showMisfits = false
 
     function p:Layout(available, demandRows, showDemand)
         -- Available: my section (header, status line, note). Otherwise the status line only
@@ -3298,18 +3307,22 @@ local function BuildPlayersPanel()
         self.anyLine:SetText(anyCount > 0 and format(L["%d available for any dungeon at their level"], anyCount) or "")
         self:Layout(active, math.min(#demand, 3), #demand > 0 or anyCount > 0)
 
-        -- Available players first (only those who fit my open group, when ticked), the rest
-        -- behind "Other members online (n)".
+        -- Available players first (only those who fit my open group, when ticked), then the
+        -- available ones who don't fit, then the rest behind "Players not looking for a group
+        -- right now (n)". The last two folded.
         local mine = ns.Groups:GetMine()
         local canFit = mine ~= nil and ns.Groups:IsOpen(mine)
         local fitOnly = canFit and ns.db.playersFitOnly ~= false
-        local shown, others = {}, {}
+        -- Available but not for my group (filter on): their own section.
+        local shown, misfits, others = {}, {}, {}
         for _, e in ipairs(P:GetOnline()) do
             e.kind = "player"
-            if e.tier == "available" and (not fitOnly or P:FitsGroup(e.avail, mine)) then
+            if e.tier ~= "available" then
+                others[#others + 1] = e
+            elseif not fitOnly or P:FitsGroup(e.avail, mine) then
                 shown[#shown + 1] = e
             else
-                others[#others + 1] = e
+                misfits[#misfits + 1] = e
             end
         end
         local list = { { kind = "toggle", label = L["Available players (%d)"], count = #shown,
@@ -3324,8 +3337,16 @@ local function BuildPlayersPanel()
                     or L["Nobody is available right now."] }
             end
         end
+        if #misfits > 0 then
+            list[#list + 1] = { kind = "toggle", label = L["Available, but not for your group (%d)"], count = #misfits,
+                open = self.showMisfits,
+                onClick = function() self.showMisfits = not self.showMisfits self:Refresh() end }
+            if self.showMisfits then
+                for _, e in ipairs(misfits) do list[#list + 1] = e end
+            end
+        end
         if #others > 0 then
-            list[#list + 1] = { kind = "toggle", label = L["Other members online (%d)"], count = #others,
+            list[#list + 1] = { kind = "toggle", label = L["Players not looking for a group right now (%d)"], count = #others,
                 open = self.showOthers,
                 onClick = function() self.showOthers = not self.showOthers self:Refresh() end }
             if self.showOthers then
@@ -3951,7 +3972,7 @@ local function InitAllianceRow(row, item)
                 p.seen and (L["Last heard from:"] .. " " .. Ago(p.seen)) or nil }
         else
             local short = VOUCH_SHORT[p.state]
-            row.name:SetText(p.online and p.name or ("|cff9d9d9d" .. p.name .. "|r"))
+            row.name:SetText(p.online and NameText(p.name, p.class) or ("|cff9d9d9d" .. p.name .. "|r"))
             if p.remembered then
                 row.state:SetText("|cff808080" .. L["Not heard since you logged in"] .. "|r")
             else
@@ -3960,13 +3981,15 @@ local function InitAllianceRow(row, item)
                     or ("|cff808080" .. (p.state and L["Checking..."] or L["online, not checked yet"]) .. "|r"))
                     .. ((p.hidden or 0) > 0 and ("  |cffff4040" .. format(L["%d hidden"], p.hidden) .. "|r") or ""))
             end
-            row.hit.tooltip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",
+            row.hit.tooltip = { NameText(p.name, p.class) .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r",
                 p.remembered and L["Seen before, not heard from since you logged in."] or ns.Vouch.StateText(p) }
             if (p.hidden or 0) > 0 then
                 row.hit.tooltip[#row.hit.tooltip + 1] = format(L["%d messages hidden this session."], p.hidden)
             end
             if p.seen then row.hit.tooltip[#row.hit.tooltip + 1] = L["Last heard from:"] .. " " .. Ago(p.seen) end
         end
+        local level = LevelLine(p.level)
+        if level then table.insert(row.hit.tooltip, 2, level) end
         row.seen:SetText(p.seen and Ago(p.seen) or "")
     else
         row.note:SetText(item.text)

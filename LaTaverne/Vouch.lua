@@ -67,8 +67,8 @@ local told = {}      -- [nameKey] = true: the "messages hidden" line was shown t
 local function IsSecret(v) return issecretvalue ~= nil and issecretvalue(v) end
 
 -- Allied players seen before, saved so the Alliance page isn't empty at login. Kept per guild
--- of mine (test guilds apart): [nameKey] = { name, guild, seen }. Only a name and a time:
--- nothing here is trusted (the evidence has its own ledger).
+-- of mine (test guilds apart): [nameKey] = { name, guild, seen, class, level }. Only what they
+-- say: nothing here is trusted (the evidence has its own ledger).
 local function Memory() return ns.SeenMemory("allySeen") end
 
 local function SameGuild(a, b)
@@ -250,8 +250,10 @@ local function Remember(entry, state)
         if not SameGuild(item.guild, entry.guild) then item.checked = nil end
         item.name, item.guild, item.seen = entry.name, entry.guild, entry.seen
         item.checked = item.checked or checked
+        item.class, item.level = entry.class or item.class, entry.level or item.level
     else
-        memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen, checked = checked }
+        memory[key] = { name = entry.name, guild = entry.guild, seen = entry.seen, checked = checked,
+            class = entry.class, level = entry.level }
     end
 end
 
@@ -598,6 +600,22 @@ function Vouch:Search(text, limit)
     return out
 end
 
+-- An allied player's class (the game's English token, "MAGE") and level, as they say it: in
+-- their hello, map positions or allied chat. Only for a player already heard from (never adds
+-- one), and only what looks right.
+function Vouch:NoteLooks(name, class, level)
+    if type(name) ~= "string" then return end
+    local key = ns.NameKey(name)
+    if type(class) ~= "string" or #class > 20 or not class:match("^%u+$") then class = nil end
+    level = tonumber(level)
+    if level and (level < 1 or level > 200 or level ~= math.floor(level)) then level = nil end
+    if not class and not level then return end
+    local entry = players[key]
+    if entry then entry.class, entry.level = class or entry.class, level or entry.level end
+    local item = (Memory() or {})[key]
+    if item then item.class, item.level = class or item.class, level or item.level end
+end
+
 -- One player as the lists want them: { name, guild, tag, state, by, source, reason, hidden, t }.
 local function Item(entry)
     local state, rec = StateOf(entry)
@@ -610,15 +628,19 @@ local function Item(entry)
     }
 end
 
--- Allied players heard from, most recent first: { name, guild, tag, state, by, source, reason,
--- hidden, seen, t, online }, then the ones seen before this session ({ name, guild, tag, seen,
--- remembered }).
+-- Allied players heard from, most recent first: { name, guild, tag, class, level, state, by,
+-- source, reason, hidden, seen, t, online }, then the ones seen before this session ({ name,
+-- guild, tag, class, level, seen, remembered }). class, level: nil until they said (an old
+-- version doesn't).
 function Vouch:GetPlayers()
     local list = {}
     local now = GetServerTime()
     for _, entry in pairs(players) do
         if entry.seen or entry.manual then
             local item = Item(entry)
+            local saved = (Memory() or {})[ns.NameKey(entry.name)]
+            item.class = entry.class or (saved and saved.class)
+            item.level = entry.level or (saved and saved.level)
             item.seen = entry.seen or entry.asked
             item.online = entry.seen and now - entry.seen < ONLINE or false
             list[#list + 1] = item
@@ -627,7 +649,7 @@ function Vouch:GetPlayers()
     for key, item in pairs(Memory() or {}) do
         if not players[key] then
             list[#list + 1] = { name = item.name, guild = item.guild, tag = ns.Alliance:GetTag(item.guild),
-                seen = item.seen, remembered = true, online = false }
+                class = item.class, level = item.level, seen = item.seen, remembered = true, online = false }
         end
     end
     table.sort(list, function(a, b) return (a.seen or 0) > (b.seen or 0) end)
@@ -786,7 +808,12 @@ local function HelloPayload(answer)
     local away = ns.IsAway()
     local afk
     if away == nil then afk = lastAfk else afk = away and 1 or nil end
-    local payload = { r = answer or nil, afk = afk }
+    -- My class and level: allied lists show them (old versions ignore them).
+    local _, class = UnitClass("player")
+    local level = UnitLevel("player")
+    local payload = { r = answer or nil, afk = afk,
+        c = (not IsSecret(class) and type(class) == "string") and class or nil,
+        l = (not IsSecret(level) and type(level) == "number") and level or nil }
     if ns.Relay and ns.Relay.HelloFields then ns.Relay:HelloFields(payload) end
     return payload
 end
@@ -820,6 +847,7 @@ function Vouch:HelloChanged(now)
 end
 
 ns.Comm:OnAlly("HI", function(sender, payload, isSelf)
+    if not isSelf then Vouch:NoteLooks(sender, payload.c, payload.l) end
     if isSelf or payload.r or helloTimer then return end
     helloTimer = C_Timer.NewTimer(HELLO_MIN + math.random() * (HELLO_MAX - HELLO_MIN), function()
         helloTimer = nil
@@ -842,6 +870,9 @@ function Vouch:OnLogin()
         if away == nil then return end -- the game won't say right now
         if (away and 1 or nil) ~= lastAfk then Vouch:HelloChanged() end
     end)
+    -- A new level: in a hello right away (allied lists show it), once the game has it (a moment
+    -- after the event).
+    ns.On("PLAYER_LEVEL_UP", function() C_Timer.After(2, function() Vouch:HelloChanged(true) end) end)
     ns.PruneSeen("allySeen")
     Prune()
     -- What the game shows: my group, my target, the player under the mouse, nameplates.
