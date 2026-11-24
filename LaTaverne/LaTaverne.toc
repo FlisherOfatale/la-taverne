@@ -38,6 +38,7 @@ UI.lua
 RelayPage.lua
 Gamepad.lua
 Minimap.lua
+InviteCard.lua
 Dev.lua
 Tests.lua
 DebugUI.lua

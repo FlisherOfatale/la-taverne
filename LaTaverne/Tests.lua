@@ -37,6 +37,8 @@ local function TestAPI()
     L("C_LFGList", has(C_LFGList))
     L("C_AddOns", has(C_AddOns), "BackdropTemplate", has(BackdropTemplateMixin))
     L("Ambiguate", has(Ambiguate), "UnitFullName", has(UnitFullName))
+    -- The invitation card (InviteCard.lua): the taskbar flash, the invitation's sound.
+    L("FlashClientIcon", has(FlashClientIcon), "SOUNDKIT.LFG_ROLE_CHECK", has(SOUNDKIT and SOUNDKIT.LFG_ROLE_CHECK))
     L("secret values (issecretvalue)", issecretvalue and "PRESENT" or "absent",
         "ChatFrameUtil.AddMessageEventFilter", has(ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter),
         "ChatFrame_MessageEventHandler", has(ChatFrame_MessageEventHandler))

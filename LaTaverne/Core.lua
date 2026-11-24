@@ -46,16 +46,21 @@ end
 
 -- La Taverne's sounds. kind: "group" (a new group alert, if its sound is on), "request" (my
 -- group: someone asks to join or accepts, if that sound is on), "notice" (invited, my
--- availability ends), "posted" (I listed a group: the game's joining a queue sound). None while quiet.
+-- availability ends), "posted" (I listed a group: the game's joining a queue sound), "invite"
+-- (a group invites me, if that sound is on: on the Master channel, like the game's ready
+-- check, so it's heard with sound effects turned down). None while quiet.
 function ns.Sound(kind)
     if ns.Quiet() or not SOUNDKIT then return end
     if kind == "group" and not ns.db.alertSound then return end
     if kind == "request" and ns.db.requestSound == false then return end
+    if kind == "invite" and ns.db.inviteSound == false then return end
     local id
     if kind == "group" then id = SOUNDKIT.UI_GROUP_FINDER_RECEIVE_APPLICATION or SOUNDKIT.READY_CHECK
     elseif kind == "posted" then id = SOUNDKIT.PVP_ENTER_QUEUE
+    elseif kind == "invite" then id = SOUNDKIT.LFG_ROLE_CHECK or SOUNDKIT.READY_CHECK
     else id = SOUNDKIT.READY_CHECK end
-    if id then PlaySound(id) end
+    if not id then return end
+    if kind == "invite" then PlaySound(id, "Master") else PlaySound(id) end
 end
 
 -- Names ----------------------------------------------------------------------

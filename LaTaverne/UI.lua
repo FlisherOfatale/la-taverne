@@ -4513,6 +4513,23 @@ local function BuildOptionsPanel()
     requestSound:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(requestSound, { L["A sound when someone asks to join my group"],
         L["Also when a player accepts your invitation. The chat line is always there."] })
+    -- A group invites me (InviteCard.lua): the card on screen, and its sound.
+    rowY = Row()
+    local inviteCard = NewCheckbox(c, L["A card on screen when a group invites me"], function(self)
+        ns.db.inviteCard = self:GetChecked() and true or false
+        if ns.InviteCard then ns.InviteCard:Update() end
+    end)
+    inviteCard:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(inviteCard, { L["A card on screen when a group invites me"],
+        L["With the chat line's text and a View button that opens the group, like the line's [View]. Drag it where you like. It waits for the end of a fight, and for the end of a dungeon or raid when Quiet is on."],
+        L["Without a mouse: the key binding Show what's waiting does View (Key Bindings, AddOns)."] })
+    rowY = Row()
+    local inviteSound = NewCheckbox(c, L["A sound when a group invites me"], function(self)
+        ns.db.inviteSound = self:GetChecked() and true or false
+    end)
+    inviteSound:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(inviteSound, { L["A sound when a group invites me"],
+        L["Heard even with sound effects turned down, and once more after 2 minutes if you haven't answered. With the game in the background, only if the game's Sound in Background is on."] })
     rowY = Row()
     local quiet = NewCheckbox(c, L["Quiet in dungeons, raids and combat"], function(self)
         ns.db.quiet = self:GetChecked() and true or nil
@@ -4688,6 +4705,8 @@ local function BuildOptionsPanel()
         lynxCheck:SetChecked(ns.db.lynx ~= false)
         alertSound:SetChecked(ns.db.alertSound == true)
         announces:SetChecked(ns.db.showAnnounces ~= false)
+        inviteCard:SetChecked(ns.db.inviteCard ~= false)
+        inviteSound:SetChecked(ns.db.inviteSound ~= false)
         requestSound:SetChecked(ns.db.requestSound ~= false)
         quiet:SetChecked(ns.db.quiet == true)
         mapShare:SetChecked(ns.db.allyMap.share)

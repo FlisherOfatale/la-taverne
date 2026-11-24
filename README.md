@@ -39,6 +39,7 @@ Everything works inside your own guild right away. Linking allied guilds is done
 - A group in progress is removed on its own when everyone has left (after 5 minutes alone) or after 3 hours, with a warning first. The next time you open La Taverne, the form is filled in to post it again in one click.
 - In the group list, groups in progress or full are folded under their own heading.
 - **Alerts** in the chat window you choose, with a sound if you want: a new group that fits you, or a group in progress looking for a replacement. **[View]** opens the list on that group and makes it glow for a moment.
+- **Invited to a group:** a small card on screen with the same line and a **View** button that does what the chat's **[View]** does, plus its own sound, heard even with sound effects turned down (and once more after 2 minutes without an answer). The card can be dragged, and waits for the end of a fight. Without a mouse, the **Show what's waiting** key binding does View. Both can be turned off (**Options > Alerts**).
 - **Announce in chat** sends a La Taverne message about your group ("... is looking for 1 Tank: ...") to the players who run La Taverne, with a link to it. Nothing goes in guild chat. Not in the group's first 5 minutes, then once every 5 minutes; each player can turn these messages off (**Options > Alerts**).
 - Passing the party lead hands your group over to the new leader if they run La Taverne.
 
@@ -154,6 +155,7 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 - Un groupe en cours est retiré de lui-même quand tout le monde est parti (après 5 minutes seul) ou après 3 heures, avec un avertissement avant. À la prochaine ouverture de La Taverne, le formulaire est déjà rempli pour le republier en un clic.
 - Dans la liste des groupes, les groupes en cours ou complets sont repliés sous leur propre titre.
 - **Alertes** dans la fenêtre de chat de votre choix, avec un son si vous voulez : un nouveau groupe qui vous convient, ou un groupe en cours qui cherche un remplaçant. **[Voir]** ouvre la liste sur ce groupe et le fait briller un instant.
+- **Invité dans un groupe :** une petite carte à l'écran avec la même ligne et un bouton **Voir** qui fait comme le **[Voir]** du chat, et un son à elle, entendu même avec les effets sonores baissés (et une autre fois après 2 minutes sans réponse). La carte se déplace, et attend la fin d'un combat. Sans souris, le raccourci **Afficher ce qui vous attend** fait Voir. Les deux se désactivent (**Options > Alertes**).
 - **Annoncer dans le chat** envoie un message de La Taverne sur votre groupe (« ... cherche 1 Tank : ... ») aux joueurs qui utilisent La Taverne, avec un lien vers le groupe. Rien ne va dans le chat de guilde. Pas dans les 5 premières minutes du groupe, puis une fois toutes les 5 minutes ; chaque joueur peut désactiver ces messages (**Options > Alertes**).
 - En passant le chef du groupe, votre groupe passe au nouveau chef s'il utilise La Taverne.
 

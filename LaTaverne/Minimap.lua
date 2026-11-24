@@ -149,19 +149,52 @@ local function SomethingOn()
 end
 
 local function Decorate(button)
-    local glow = button:CreateTexture(nil, "OVERLAY")
-    glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-    glow:SetBlendMode("ADD")
-    glow:SetVertexColor(1, 0.82, 0)
-    glow:SetSize(58, 58)
-    glow:SetPoint("CENTER", 0, 0)
-    glow:Hide()
-    local pulse = glow:CreateAnimationGroup()
-    pulse:SetLooping("BOUNCE")
-    local fade = pulse:CreateAnimation("Alpha")
-    fade:SetFromAlpha(1)
-    fade:SetToAlpha(0.25)
-    fade:SetDuration(0.8)
+    -- Something waits for me: a round gold glow that pulses, like the button. A soft halo behind
+    -- the button (it shows around it, the icon stays clear), and its round border lit up.
+    local function Pulse(texture)
+        local group = texture:CreateAnimationGroup()
+        group:SetLooping("BOUNCE")
+        local fade = group:CreateAnimation("Alpha")
+        fade:SetFromAlpha(1)
+        fade:SetToAlpha(0.25)
+        fade:SetDuration(0.8)
+        return group
+    end
+    local halo = button:CreateTexture(nil, "BACKGROUND", nil, -8)
+    halo:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    halo:SetBlendMode("ADD")
+    halo:SetVertexColor(1, 0.82, 0)
+    halo:SetSize(56, 56)
+    halo:SetPoint("CENTER", 0, 0)
+    halo:Hide()
+    -- The minimap button's own round border, lit in gold: on LibDBIcon's border itself (50 or
+    -- 53 px depending on the client), so it follows its size and place.
+    local ring = button:CreateTexture(nil, "OVERLAY", nil, 6)
+    ring:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    ring:SetBlendMode("ADD")
+    ring:SetVertexColor(1, 0.82, 0)
+    if button.border then
+        ring:SetAllPoints(button.border)
+    else
+        ring:SetSize(53, 53)
+        ring:SetPoint("TOPLEFT", 0, 0)
+    end
+    ring:Hide()
+    local haloPulse, ringPulse = Pulse(halo), Pulse(ring)
+    local glow = {
+        Show = function()
+            halo:Show()
+            ring:Show()
+            if not haloPulse:IsPlaying() then haloPulse:Play() end
+            if not ringPulse:IsPlaying() then ringPulse:Play() end
+        end,
+        Hide = function()
+            haloPulse:Stop()
+            ringPulse:Stop()
+            halo:Hide()
+            ring:Hide()
+        end,
+    }
 
     local count = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     count:SetPoint("BOTTOMRIGHT", 2, -1)
@@ -190,10 +223,8 @@ local function Decorate(button)
         local unseen = ns.db.minimapGlow ~= false and ns.Groups:CountUnseen() or 0
         if unseen > 0 then
             glow:Show()
-            if not pulse:IsPlaying() then pulse:Play() end
             count:SetText(unseen)
         else
-            pulse:Stop()
             glow:Hide()
             count:SetText("")
         end

@@ -2,4 +2,7 @@
     <Binding name="LATAVERNE_TOGGLE" header="LATAVERNE" category="ADDONS">
         LaTaverne_Toggle()
     </Binding>
+    <Binding name="LATAVERNE_WAITING" category="ADDONS">
+        LaTaverne_ShowWaiting()
+    </Binding>
 </Bindings>
