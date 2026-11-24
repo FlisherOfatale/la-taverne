@@ -325,7 +325,26 @@ end
 local LINK_TYPES = { item = true, spell = true, enchant = true, quest = true, achievement = true, talent = true }
 local LINK_COLORS = { item = "ffffffff", quest = "ffffff00" }
 
-local function SafeLink(kind, data, name)
+-- The color an item link came with, kept only when it's one of the game's item quality colors
+-- ("|cnIQ4:" or its "|cffa335ee"): an item my game hasn't seen yet still shows its rarity.
+local function QualityColor(color)
+    if type(color) ~= "string" then return nil end
+    local qualities = ITEM_QUALITY_COLORS
+    local n = tonumber(color:match("^|cnIQ(%d):$"))
+    if n then
+        local q = qualities and qualities[n]
+        if q and type(q.hex) == "string" then return q.hex end
+        return (n <= 8) and color or nil
+    end
+    local hex = color:match("^|c(%x%x%x%x%x%x%x%x)$")
+    if not hex or type(qualities) ~= "table" then return nil end
+    for _, q in pairs(qualities) do
+        if type(q) == "table" and type(q.hex) == "string" and q.hex:lower() == ("|c" .. hex):lower() then return q.hex end
+    end
+    return nil
+end
+
+local function SafeLink(kind, data, name, color)
     if not LINK_TYPES[kind] or #data > 150 then return nil end
     -- Letters only in an achievement's (a player's ID, and its data isn't used): the others are numbers.
     if kind ~= "achievement" and data:find("[^%d:%-]") then return nil end
@@ -339,21 +358,24 @@ local function SafeLink(kind, data, name)
     -- Achievements (WoW Forever's Legacy objectives, e.g. [Explore Eastern Kingdoms]): the game
     -- has no achievement window to open, so the name in yellow, not a link.
     if kind == "achievement" then return "|cffffff00[" .. name .. "]|r" end
-    return "|c" .. (LINK_COLORS[kind] or "ff71d5ff") .. "|H" .. kind .. ":" .. data .. "|h[" .. name .. "]|h|r"
+    local quality = kind == "item" and QualityColor(color)
+    return (quality or ("|c" .. (LINK_COLORS[kind] or "ff71d5ff"))) .. "|H" .. kind .. ":" .. data .. "|h[" .. name .. "]|h|r"
 end
 
 -- The text as typed: no colors, icons or other "|" codes slipped in, except rebuilt links.
 local function SafeText(text)
     local links = {}
-    local function keep(kind, data, name)
-        local link = SafeLink(kind, data, name)
+    local function keep(kind, data, name, color)
+        local link = SafeLink(kind, data, name, color)
         if not link then return nil end -- left as typed, shown as plain text below
         links[#links + 1] = link
         return "\1" .. #links .. "\2"
     end
     text = text:gsub("[\1\2]", "")
     -- (Link data: numbers, and for achievements the player's ID, letters too: Player-6933-005A8B24.)
-    text = text:gsub("|c[^|]*|H(%a+):([%w:%-]*)|h%[([^%]|]*)%]|h|r", keep)
+    text = text:gsub("(|c[^|]*)|H(%a+):([%w:%-]*)|h%[([^%]|]*)%]|h|r", function(color, kind, data, name)
+        return keep(kind, data, name, color)
+    end)
     text = text:gsub("|H(%a+):([%w:%-]*)|h%[([^%]|]*)%]|h", keep)
     text = text:gsub("|", "||")
     return (text:gsub("\1(%d+)\2", function(i) return links[tonumber(i)] end))
