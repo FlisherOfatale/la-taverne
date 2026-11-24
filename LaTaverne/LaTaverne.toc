@@ -40,5 +40,6 @@ Gamepad.lua
 Minimap.lua
 InviteCard.lua
 Dev.lua
+GuildExport.lua
 Tests.lua
 DebugUI.lua

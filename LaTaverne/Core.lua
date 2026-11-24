@@ -732,6 +732,7 @@ SlashCmdList.LATAVERNE = function(msg)
         ns.Print("/taverne autoinvite - turn keyword auto-invite on or off")
         ns.Print("/taverne errors [clear] - error report to send to the author")
         ns.Print("/taverne relay - guild relay report: who relays for each guild, and how it goes")
+        ns.Print("/taverne roster - guild roster, notes and roster history, as text to copy")
         ns.Print("/taverne debug - everything useful about a problem, in one text to copy and send")
         ns.Print("/taverne clearcache - forget remembered players (vouching, guild rosters), then reload")
         -- Testing and diagnostics: listed only in test mode (they still work outside it).
