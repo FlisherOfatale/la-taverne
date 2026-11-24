@@ -63,6 +63,12 @@ local function RoleText(role)
     return role and (ns.RoleIcon(role) .. " " .. ns.RoleLabel(role)) or ""
 end
 
+-- A player's level, its own tooltip line under their name. nil when unknown.
+local function LevelLine(level)
+    level = tonumber(level)
+    return (level and level > 0) and format(L["Level %d"], level) or nil
+end
+
 local function MyClass()
     local _, class = UnitClass("player")
     return class
@@ -422,6 +428,10 @@ local function RenderSlots(frames, l)
                 -- Role first, like a free spot: the header never changes, the player is under it
                 local name = NameText(e.name, e.class, e.tag or e.guest)
                 if e.key == leaderKey then name = name .. " " .. CROWN end
+                -- The level right under the name, in the same entry: ShowTooltip would put an
+                -- empty line between two entries when the name (with its icon codes) is long.
+                local level = LevelLine(e.level)
+                if level then name = name .. "\n" .. level end
                 f.tooltip = { e.role and RoleText(e.role) or L["Role unknown"], name }
                 if person.kind == "accepted" then
                     f.tooltip[#f.tooltip + 1] = L["Accepted, waiting to join"]
@@ -1104,6 +1114,9 @@ local function FillListingRow(row, l)
     row.leader:SetText(NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN
         .. (icons ~= "" and ("  " .. icons) or "") .. note)
     local tip = { NameText(l.leader, LeaderClass(l), l.tag) .. " " .. CROWN }
+    local leaderMember = l.members[ns.NameKey(l.leader)]
+    local leaderLevel = LevelLine(leaderMember and leaderMember.level)
+    if leaderLevel then tip[#tip + 1] = leaderLevel end
     if vouch == "unverified" then tip[#tip + 1] = format(L["Not checked yet: nobody from [%s] was online to confirm this player is a member."], l.tag) end
     if vouch == "disputed" then tip[#tip + 1] = ns.Vouch:Describe(l.leader) end
     if l.note and l.note ~= "" then tip[#tip + 1] = "|cffffd100" .. L["Note"] .. ":|r " .. l.note end
@@ -3106,9 +3119,10 @@ function InitPlayerRow(row, e)
     -- An allied player: "not checked yet" or "disputed" after the name, the reason in the tooltip.
     local vouchMark = tag and ns.Vouch and ns.Vouch:Mark(e.name) or ""
     row.name:SetText(NameText(e.name, e.class, tag) .. vouchMark .. level .. afk .. verText)
-    row.nameHit.tooltip = { NameText(e.name, e.class, tag),
-        ver and ("La Taverne v" .. ver) or ("|cff808080" .. L["Doesn't have the La Taverne addon"] .. "|r"),
-        vouchMark ~= "" and ns.Vouch:Describe(e.name) or nil }
+    local nameTip = { NameText(e.name, e.class, tag) }
+    nameTip[#nameTip + 1] = ver and ("La Taverne v" .. ver) or ("|cff808080" .. L["Doesn't have the La Taverne addon"] .. "|r")
+    if vouchMark ~= "" then nameTip[#nameTip + 1] = ns.Vouch:Describe(e.name) end
+    row.nameHit.tooltip = nameTip
     if e.tier == "available" then
 
         row.detail:SetText(AvailDetail(a.roles, a.dungeons, a.note, L["any dungeon at their level"]))
