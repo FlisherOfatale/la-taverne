@@ -4,7 +4,8 @@
 -- claims a guild. Trust comes from evidence, kept in a ledger (saved, for the whole account):
 --   tier 1: seen first-hand. The game showed their guild (group, target, mouseover, nameplate),
 --           or one of my characters saw them on that guild's roster (Guild.lua saves it).
---   tier 2: told by someone I trust (later: guildmates, a guild's relay).
+--   tier 2: told by someone I trust: a guild's relay I vouch for passing on their guild chat
+--           lines (later: guildmates).
 --   tier 3: their claim only.
 -- The newest tier 1-2 record wins (the tier only breaks a tie; a claim never overrides one):
 -- "in B" confirms a claim of B; "in C" denies it; "missing from B's roster" only disputes it
@@ -24,6 +25,14 @@
 --               auto-invite waits for a click.
 -- While we wait for the answer (a few seconds, only the first time), their messages are held.
 -- No game evidence in test mode, and the ledger isn't read there: the test guilds aren't real.
+--
+-- Relayed players: members of an allied guild without La Taverne, heard through their guild's
+-- relay (Relay.lua: guild chat lines, OpenMap positions). The relay speaks for them, so they're
+-- only as checked as the relay: a line passed on by a relay I vouch for in that guild is tier 2
+-- evidence for its author; from any other relay, they're "not checked yet". Map positions never
+-- vouch for anyone (OpenMap is left out of trust). The game shows them in another guild: their
+-- relayed lines are hidden. Kept apart from the players above (this session only): they don't
+-- run La Taverne, and the relay counts who does from GetPlayers.
 local ADDON, ns = ...
 local Vouch = ns.NewModule("Vouch")
 local L = ns.L
@@ -43,6 +52,7 @@ local TIER_KEEP = { 7 * 24 * 3600, 24 * 3600 } -- records kept: tier 1, tier 2
 local SNAPSHOT_DENY = 24 * 3600 -- missing from a roster snapshot this recent: disputed (not denied)
 local OTHER_DENY = 24 * 3600    -- seen in another guild this recent: denied (older: disputed)
 local RECORD_QUIET = 60         -- the same sighting again within a minute isn't written
+local RELAY_QUIET = 600         -- a relayed author's tier 2 record: written again at most this often
 local RECORDS_MAX = 6           -- records kept per player (the newest)
 local SECOND_LOOK = 1           -- the game showed no guild: look once more after this (seconds)
 
@@ -53,8 +63,9 @@ Vouch.EXEMPT = { VQ = true, VA = true }
 -- Map positions (every few seconds from each ally) too, and without refreshing the window for
 -- each one ("quiet": only when the player is new).
 -- The relay's coordination (RLY: claims, beacons, Relay.lua) only says who relays: quiet too.
--- So do the positions a relay passes on (RMAP, every 30 s to 2 min).
-Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet", RMAP = "quiet" }
+-- The positions a relay passes on (RMAP, every 30 s to 2 min) are never held either, but they
+-- speak for other players: their relay gets asked about ("check"), as for its chat lines.
+Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet", RMAP = "check" }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer, shown,
 -- hidden }. state, by, source, t: the answers (state: "checking", "confirmed", "unverified",
@@ -63,6 +74,10 @@ Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet", RM
 local players = {}
 local answering = {} -- [nameKey] = timer: I'm about to answer a question about this player
 local told = {}      -- [nameKey] = true: the "messages hidden" line was shown this session
+-- Relayed players (see the top), this session: [nameKey] = { name, guild, by (the relay that
+-- last passed them on), seen, said (time of their last relayed line; nil: map only), vouched
+-- (that line's relay was one I vouch for: test mode, where there's no ledger), hidden, shown }.
+local relayed = {}
 
 local function IsSecret(v) return issecretvalue ~= nil and issecretvalue(v) end
 
@@ -213,6 +228,9 @@ local SOURCE_TEXT = { group = "in the group", target = "target", mouseover = "mo
 -- One line saying why, for the Alliance page and the chat line. nil: nothing to say.
 local function Reason(rec, entry)
     if rec then
+        if rec.ok and rec.src == "relay" then
+            return L["Talks in [%s]'s guild chat, passed on by %s (guild relay), %s."]:format(TagOf(rec.g), rec.w or "?", Ago(rec.t))
+        end
         if rec.ok then
             return L["Seen in [%s] by %s (%s), %s."]:format(TagOf(rec.g), rec.w or "?",
                 L[SOURCE_TEXT[rec.src] or tostring(rec.src)], Ago(rec.t))
@@ -234,6 +252,66 @@ local function Reason(rec, entry)
             TagOf(entry.guild), entry.by or "?")
     end
     return nil
+end
+
+-- A relayed player's state: the evidence first (the game, my characters' rosters, the tier 2
+-- records lines from a relay I vouch for left), then their last relayed line: "confirmed" when
+-- its relay was one I vouch for (test mode: there's no ledger there), "unverified" otherwise.
+-- "map": only heard of on the map, never talked (positions vouch for nobody). Returns the state
+-- and the deciding record.
+local function RelayedState(r)
+    local rec = Evidence(ns.NameKey(r.name), r.guild)
+    if rec then return Verdict(rec, r.guild), rec end
+    if not r.said then return "map", nil end
+    if r.vouched then return "confirmed", nil end
+    return "unverified", nil
+end
+
+local function RelayedReason(r, state, rec)
+    if rec then return Reason(rec, r) end
+    if state == "map" then return L["On the map, passed on by %s (guild relay)."]:format(r.by or "?") end
+    if state == "confirmed" then
+        return L["Talks in [%s]'s guild chat, passed on by %s (guild relay), %s."]:format(TagOf(r.guild), r.by or "?", Ago(r.said))
+    end
+    return L["Only %s says this player is in [%s], and nobody vouches for %s."]:format(r.by or "?", TagOf(r.guild), r.by or "?")
+end
+
+-- A length of time, rounded down: "5 min", "3 h", "2 d" (a minute at least).
+local function Span(seconds)
+    local minutes = math.max(1, math.floor(seconds / 60))
+    if minutes < 60 then return format(L["%d min"], minutes) end
+    local hours = math.floor(minutes / 60)
+    if hours < 48 then return format(L["%d h"], hours) end
+    return format(L["%d d"], math.floor(hours / 24))
+end
+
+-- Advanced mode: how sure we are, in one line. The tier of what decides (1: seen first-hand;
+-- 2: told by someone I vouch for; 3: their claim only) and how long it holds. entry: a player
+-- (its answers), or r: a relayed player. nil: nothing to say yet (a hello only, still
+-- checking, on the map only).
+local function TierLine(state, rec, entry, r)
+    local now = GetServerTime()
+    if rec then
+        local tier = rec.tier or 1
+        local keep = (not rec.ok and rec.src == "roster") and SNAPSHOT_DENY or (TIER_KEEP[tier] or 0)
+        local what = tier == 2 and L["told by someone you vouch for"]
+            or (rec.ok and L["seen first-hand"] or L["missing from a roster"])
+        return L["Tier %d: %s."]:format(tier, what) .. " " .. L["Kept %s more."]:format(Span(rec.t + keep - now))
+    end
+    if not state or state == "checking" or state == "map" then return nil end
+    if r then
+        if state == "confirmed" then return L["Tier %d: %s."]:format(2, L["told by someone you vouch for"]) end
+        return L["Tier %d: %s."]:format(3, L["their claim only"])
+    end
+    local trusted = (state == "confirmed" or state == "denied") and Trusted(entry)
+    local line = L["Tier %d: %s."]:format(trusted and 2 or 3, trusted and L["told by someone you vouch for"] or L["their claim only"])
+    if entry.t then
+        local unsure = entry.state == "unverified" or (entry.state == "confirmed" and not Trusted(entry))
+        local left = entry.t + (unsure and KEEP_UNVERIFIED or KEEP) - now
+        line = line .. " " .. (left > 0 and L["Asked again in %s at the earliest."]:format(Span(left))
+            or L["Asked again at their next message."])
+    end
+    return line
 end
 
 local function Remember(entry, state)
@@ -304,16 +382,13 @@ local function Recheck(entry)
     Changed()
 end
 
--- First-hand: the game shows this player in this guild. Kept for players we heard from (any
--- guild: it may go against their claim) and for the allied guilds' members.
-local function Record(name, guild, src)
-    local key = ns.NameKey(name)
-    local entry = players[key]
-    if not entry and not ns.Alliance:IsAllied(guild) then return end
+-- A record "in this guild" into the ledger: the one of that tier for that guild updated (not
+-- within quiet seconds of the last time), or a new one (the oldest dropped past RECORDS_MAX).
+-- false: nothing written (test mode, or too soon).
+local function Write(key, name, guild, src, witness, tier, quiet)
     local book = Ledger()
-    if not book then return end
+    if not book then return false end
     local now = GetServerTime()
-    local me = ns.FullName("player")
     local item = book[key]
     if type(item) ~= "table" or type(item.recs) ~= "table" then
         item = { recs = {} }
@@ -322,19 +397,30 @@ local function Record(name, guild, src)
     item.name = name
     local rec
     for _, r in ipairs(item.recs) do
-        if r.ok and SameGuild(r.g, guild) then rec = r break end
+        if r.ok and (r.tier or 1) == tier and SameGuild(r.g, guild) then rec = r break end
     end
     if rec then
-        if now - rec.t < RECORD_QUIET then return end
-        rec.g, rec.src, rec.w, rec.t, rec.tier = guild, src, me, now, 1
+        if now - rec.t < quiet then return false end
+        rec.g, rec.src, rec.w, rec.t = guild, src, witness, now
     else
-        table.insert(item.recs, 1, { g = guild, ok = true, src = src, w = me, t = now, tier = 1 })
+        table.insert(item.recs, 1, { g = guild, ok = true, src = src, w = witness, t = now, tier = tier })
         if #item.recs > RECORDS_MAX then
             table.sort(item.recs, function(a, b) return a.t > b.t end)
             for i = #item.recs, RECORDS_MAX + 1, -1 do item.recs[i] = nil end
         end
     end
+    return true
+end
+
+-- First-hand: the game shows this player in this guild. Kept for players we heard from (any
+-- guild: it may go against their claim), relayed players, and the allied guilds' members.
+local function Record(name, guild, src)
+    local key = ns.NameKey(name)
+    local entry = players[key]
+    if not entry and not relayed[key] and not ns.Alliance:IsAllied(guild) then return end
+    if not Write(key, name, guild, src, ns.FullName("player"), 1, RECORD_QUIET) then return end
     if entry then Recheck(entry) end
+    if relayed[key] then Changed() end
 end
 
 -- A yes from the game we can use: true, and not a secret value (testing a secret errors).
@@ -493,7 +579,9 @@ function Vouch:Gate(sender, guild, fn, passive)
     local state, rec = StateOf(entry)
     Remember(entry, state)
     if passive and state ~= "denied" then
-        if passive ~= "quiet" or isNew then Changed() end
+        -- "check" (a relay's map batches): not held, but asked about like a sender who talks.
+        if passive == "check" and (not rec or Absence(rec)) and not Fresh(entry) and not entry.timer then Ask(entry) end
+        if (passive ~= "quiet" and passive ~= "check") or isNew then Changed() end
         fn()
         return true
     end
@@ -527,14 +615,26 @@ function Vouch:Gate(sender, guild, fn, passive)
 end
 
 -- "confirmed", "unverified", "disputed", "denied", "checking", or nil (never heard of them).
+-- A relayed player (not heard from themselves): their relayed state ("unverified" for map only).
 function Vouch:GetState(name)
-    local entry = players[ns.NameKey(name) or ""]
-    if not entry then return nil end
-    return (StateOf(entry))
+    local key = ns.NameKey(name) or ""
+    local entry = players[key]
+    local state = entry and StateOf(entry)
+    if state or not relayed[key] then return state end
+    state = RelayedState(relayed[key])
+    return state == "map" and "unverified" or state
 end
 
 function Vouch:IsDenied(name)
     return self:GetState(name) == "denied"
+end
+
+-- Heard from their La Taverne on the alliance channel lately (a hello, a line, a group...),
+-- as a member of that guild: they run it. For AllyChat.lua: their relayed lines aren't marked.
+function Vouch:HeardRecently(name, guild)
+    local entry = players[ns.NameKey(name) or ""]
+    return entry ~= nil and entry.seen ~= nil and SameGuild(entry.guild, guild)
+        and GetServerTime() - entry.seen < ONLINE
 end
 
 -- Confirmed (not "not checked yet", "disputed", or anything else): auto-invite may invite them
@@ -553,11 +653,13 @@ end
 
 -- The allied guild a player belongs to, as far as we know (never for a denied player).
 function Vouch:GetGuild(name)
-    local entry = players[ns.NameKey(name) or ""]
-    if not entry then return nil end
-    local state = StateOf(entry)
-    if not state or state == "denied" then return nil end
-    return entry.guild
+    local key = ns.NameKey(name) or ""
+    local entry = players[key]
+    local state = entry and StateOf(entry)
+    if state then return state ~= "denied" and entry.guild or nil end
+    local r = relayed[key]
+    if r and RelayedState(r) ~= "denied" then return r.guild end
+    return nil
 end
 
 -- A player we heard from (not denied), or seen in an earlier session (the name autocomplete
@@ -616,7 +718,8 @@ function Vouch:NoteLooks(name, class, level)
     if item then item.class, item.level = class or item.class, level or item.level end
 end
 
--- One player as the lists want them: { name, guild, tag, state, by, source, reason, hidden, t }.
+-- One player as the lists want them: { name, guild, tag, state, by, source, reason, hidden, t,
+-- tierLine (Advanced mode) }.
 local function Item(entry)
     local state, rec = StateOf(entry)
     return {
@@ -625,6 +728,19 @@ local function Item(entry)
         -- (Not checked yet: a reason only when someone nobody vouches for said yes.)
         reason = state and state ~= "checking" and Reason(rec, entry) or nil,
         hidden = entry.hidden,
+        tierLine = TierLine(state, rec, entry),
+    }
+end
+
+-- A relayed player, the same way: { name, guild, tag, state ("map": on the map only), by (their
+-- relay), source, reason, hidden, t, tierLine, relayed = true }.
+local function RelayedItem(r)
+    local state, rec = RelayedState(r)
+    return {
+        name = r.name, guild = r.guild, tag = ns.Alliance:GetTag(r.guild), state = state, by = r.by,
+        source = rec and rec.src or "relay", t = rec and rec.t or r.said,
+        reason = RelayedReason(r, state, rec), hidden = r.hidden, tierLine = TierLine(state, rec, nil, r),
+        relayed = true,
     }
 end
 
@@ -669,6 +785,8 @@ function Vouch.StateText(item)
         return "|cffff9900" .. L["Not checked yet: %s"]:format(item.reason) .. "|r"
     elseif item.state == "unverified" then
         return "|cffff9900" .. L["Not checked yet: nobody from [%s] was online to confirm they're a member. They still get through; it's checked again once someone from [%s] is online."]:format(tag, tag) .. "|r"
+    elseif item.state == "map" then
+        return "|cff808080" .. (item.reason or "") .. "|r"
     elseif not item.state then
         -- Only said hello so far.
         return "|cff808080" .. L["Online. Checked once they post a group or talk."] .. "|r"
@@ -678,11 +796,88 @@ end
 
 -- The state line of one player, or nil if never heard of.
 function Vouch:Describe(name)
-    local entry = players[ns.NameKey(name) or ""]
-    if not entry then return nil end
-    local item = Item(entry)
-    if not item.state then return nil end
+    local key = ns.NameKey(name) or ""
+    local item = players[key] and Item(players[key])
+    if not (item and item.state) then item = relayed[key] and RelayedItem(relayed[key]) end
+    if not (item and item.state) then return nil end
     return Vouch.StateText(item)
+end
+
+-- Relayed players --------------------------------------------------------------------------------
+
+-- One line per relayed player hidden, per session, saying why.
+local function RelayedNotice(r, rec)
+    local key = "relayed:" .. ns.NameKey(r.name)
+    if told[key] then return end
+    told[key] = true
+    ns.Print(L["Lines from %s passed on by [%s]'s relay are hidden. %s"]:format(r.name, TagOf(r.guild),
+        rec and Reason(rec, r) or ""))
+end
+
+-- A guild's relay (sender, already let through by Gate) passed on a member without La Taverne:
+-- a guild chat line (kind "chat") or a map position ("map"). A line from a relay I vouch for in
+-- that guild leaves a tier 2 record for its author. false: the game shows them in another
+-- guild lately, drop it (a line: counted on their row, one chat line per session).
+function Vouch:Relayed(name, guild, relay, kind)
+    local key = ns.NameKey(name)
+    if not key or type(guild) ~= "string" or type(relay) ~= "string" then return true end
+    local r = relayed[key]
+    local isNew = not r or not SameGuild(r.guild, guild)
+    if isNew then
+        r = { name = name, guild = guild }
+        relayed[key] = r
+    end
+    r.name, r.by, r.seen = name, relay, GetServerTime()
+    if kind == "chat" then
+        r.said = r.seen
+        r.vouched = Vouched(relay, guild) or nil
+        if r.vouched then Write(key, name, guild, "relay", relay, 2, RELAY_QUIET) end
+        LookAt(name) -- in my group, targeted...: the game's word first
+    end
+    local state, rec = RelayedState(r)
+    local changed = state ~= r.shown
+    r.shown = state
+    if state == "denied" then
+        if kind == "chat" then
+            r.hidden = (r.hidden or 0) + 1
+            Vouch.stats.dropped = Vouch.stats.dropped + 1
+            RelayedNotice(r, rec)
+            ns.Comm:LogNote(format("relayed line from %s hidden: not in [%s] (%s)", name, tostring(guild),
+                tostring(rec and rec.src)), "denied sender")
+        end
+        Changed()
+        return false
+    end
+    -- (A position: only when it changes something on the page. A line: "last heard" moves too.)
+    if kind == "chat" or isNew or changed then Changed() end
+    return true
+end
+
+-- Relayed players heard this session, most recent first (not the ones heard from themselves:
+-- they run La Taverne, GetPlayers lists them): RelayedItem's fields, plus seen and online.
+function Vouch:GetRelayed()
+    local list = {}
+    local now = GetServerTime()
+    for key, r in pairs(relayed) do
+        local entry = players[key]
+        if not (entry and entry.seen and SameGuild(entry.guild, r.guild)) then
+            local item = RelayedItem(r)
+            item.seen = r.seen
+            item.online = now - r.seen < ONLINE
+            list[#list + 1] = item
+        end
+    end
+    table.sort(list, function(a, b) return (a.seen or 0) > (b.seen or 0) end)
+    return list
+end
+
+-- The tier line (Advanced mode) of a player who runs La Taverne, as a member of that guild (the
+-- guild relay rows), or nil.
+function Vouch:TierLine(name, guild)
+    local entry = players[ns.NameKey(name) or ""]
+    if not entry or not SameGuild(entry.guild, guild) then return nil end
+    local state, rec = StateOf(entry)
+    return TierLine(state, rec, entry)
 end
 
 -- Debug and officer helpers --------------------------------------------------------------------
@@ -712,6 +907,7 @@ function Vouch:Forget()
         if entry.timer then entry.timer:Cancel() end
     end
     wipe(players)
+    wipe(relayed)
     Changed()
 end
 
@@ -896,5 +1092,11 @@ function Vouch:Report(log)
     for _, item in ipairs(self:GetPlayers()) do
         log("  ", item.name, "[" .. tostring(item.tag or item.guild) .. "]", item.state or "?",
             item.source or "", item.by and ("by " .. item.by) or "", item.hidden and ("hidden " .. item.hidden) or "")
+    end
+    local relayedList = self:GetRelayed()
+    log("relayed players (without La Taverne)", #relayedList)
+    for _, item in ipairs(relayedList) do
+        log("  ", item.name, "[" .. tostring(item.tag or item.guild) .. "]", item.state or "?", item.source or "",
+            "relay " .. tostring(item.by), item.hidden and ("hidden " .. item.hidden) or "")
     end
 end

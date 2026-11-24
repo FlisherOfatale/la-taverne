@@ -90,7 +90,10 @@ local function SendTo(scope, msgType, payload)
 end
 
 -- Same handler for both scopes: fn(sender, payload, isSelf, scope).
+-- (Kept by type too: test mode's fake invitation goes through the real LIST handler.)
+local handlerOf = {}
 local function OnBoth(msgType, fn)
+    handlerOf[msgType] = fn
     ns.Comm:On(msgType, function(sender, p, isSelf) fn(sender, p, isSelf, "guild") end)
     ns.Comm:OnAlly(msgType, function(sender, p, isSelf) fn(sender, p, isSelf, "ally") end)
 end
@@ -679,6 +682,7 @@ end
 function Groups:MarkInvitationsSeen()
     for _, l in ipairs(self:GetInvitations()) do seenInvitations[l.id] = true end
     if ns.Minimap.Update then ns.Minimap.Update() end -- stops glowing
+    if ns.InviteCard and ns.InviteCard.Update then ns.InviteCard:Update() end -- the card goes away
 end
 
 -- My group page was shown: the join requests on it are seen (the minimap button stops glowing).
@@ -690,13 +694,18 @@ function Groups:MarkRequestsSeen()
     if ns.Minimap.Update then ns.Minimap.Update() end
 end
 
--- Invitations I haven't answered and haven't seen yet.
-local function CountUnseenInvitations()
-    local n = 0
-    for _, l in ipairs(Groups:GetInvitations()) do
-        if not myInviteReplies[l.id] and not seenInvitations[l.id] then n = n + 1 end
+-- Invitations I haven't answered and haven't seen yet, newest first (the invitation card
+-- shows the first one, see InviteCard.lua).
+function Groups:GetWaitingInvitations()
+    local out = {}
+    for _, l in ipairs(self:GetInvitations()) do
+        if not myInviteReplies[l.id] and not seenInvitations[l.id] then out[#out + 1] = l end
     end
-    return n
+    return out
+end
+
+local function CountUnseenInvitations()
+    return #Groups:GetWaitingInvitations()
 end
 
 -- Things waiting for my answer that I haven't seen yet: join requests to my group, invitations.
@@ -754,6 +763,12 @@ local function DungeonWithRange(key)
     local range = ns.DungeonRange(ns.DungeonByKey(key))
     return ns.DungeonName(key) .. (range ~= "" and (" " .. range) or "")
 end
+
+-- "Oylex invites you to The Hall of Thanes 13-20.": the chat line and the invitation card.
+function Groups:InvitationText(l)
+    return format(L["%s invites you to %s."], l.leader, DungeonWithRange(l.dungeon))
+end
+Groups.GroupLink = GroupLink
 
 -- A new group, (replacement) a group in progress looking for players again, or (announce) the
 -- leader's "Announce in chat". New groups and replacements follow my alert setting; announces
@@ -1439,10 +1454,13 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
         myInviteReplies[l.id] = nil
         seenInvitations[l.id] = nil
     end
+    -- Not invited any more: the card announces the next invitation to it again.
+    if not Groups:IsInvolved(l) and ns.InviteCard then ns.InviteCard:Forget(l.id) end
     if newInvite then
-        ns.Print(format(L["%s invites you to %s."], sender, DungeonWithRange(l.dungeon)) .. " " .. GroupLink(l)
+        ns.Print(Groups:InvitationText(l) .. " " .. GroupLink(l)
             .. ((not Groups:GetMine() and ns.InParty()) and (" |cffff9900" .. L["Leave your party first."] .. "|r") or ""))
-        ns.Sound("notice")
+        -- The sound, the taskbar flash, the card and the reminder (InviteCard.lua).
+        if ns.InviteCard then ns.InviteCard:OnNewInvitation(l) else ns.Sound("notice") end
     end
     Changed()
 end)
@@ -1457,6 +1475,7 @@ OnBoth("DELIST", function(sender, p)
     end
     myApplications[p.id] = nil
     myInviteReplies[p.id] = nil
+    if ns.InviteCard then ns.InviteCard:Forget(p.id) end
     Changed()
 end)
 
@@ -1726,4 +1745,47 @@ function Groups:OnLogin()
         end
         if removed then Changed() end
     end)
+end
+
+-- Test mode: a fake invitation ---------------------------------------------------------
+-- A made-up leader's group that invites me (Debug tab), through the real LIST handler: the chat
+-- line, the sound, the invitation card and the Invitations list, as for a real one. Sent again
+-- every minute like a real leader's listing, so it doesn't expire. Nothing goes to anyone
+-- (my answer only reaches the test channel); no party invite ever comes.
+local FAKE_LEADER = "Gaspard Lenoir"
+local fake -- { payload, ticker }
+
+local function FakeDungeon()
+    for _, d in ipairs(ns.Dungeons or {}) do
+        local kind = ns.DungeonDifficulty(d)
+        if ns.DungeonShown(d) and (d.size or 5) == 5 and kind ~= "impossible" and kind ~= "trivial" then return d.key end
+    end
+    return "HOT"
+end
+
+function Groups:HasFakeInvitation()
+    return fake ~= nil
+end
+
+function Groups:FakeInvitation(on)
+    if fake then
+        fake.ticker:Cancel()
+        handlerOf.DELIST(FAKE_LEADER, { id = fake.payload.id }, false, "guild")
+        fake = nil
+    end
+    if not on or not ns.Guild:IsSandbox() then
+        Changed()
+        return
+    end
+    local _, class = UnitClass("player")
+    local level = UnitLevel("player")
+    local payload = {
+        id = "fake:" .. GetServerTime(), leader = FAKE_LEADER, dungeon = FakeDungeon(), size = 5,
+        created = GetServerTime(), note = "",
+        members = { { name = FAKE_LEADER, class = "WARRIOR", level = level, role = "TANK" } },
+        pending = { { name = ns.FullName("player"), class = class, level = level, status = "invited" } },
+    }
+    local function Send() handlerOf.LIST(FAKE_LEADER, payload, false, "guild") end
+    fake = { payload = payload, ticker = C_Timer.NewTicker(HEARTBEAT, Send) }
+    Send()
 end

@@ -3898,6 +3898,21 @@ local VOUCH_SHORT = {
     denied = { NO_ICON, "ff4040", "not in this guild" },
 }
 
+-- A relayed player's (Vouch.lua: a member without La Taverne, heard through their guild's
+-- relay) the same way. confirmed: "talks in their guild chat" when their relay vouched for them.
+local RELAYED_SHORT = {
+    confirmed = { READY_ICON, "20ff20", "confirmed" },
+    unverified = { WAIT_ICON, "ff9900", "not checked: relay not checked yet" },
+    disputed = { WAIT_ICON, "ff9900", "disputed" },
+    denied = { NO_ICON, "ff4040", "not in this guild" },
+}
+local LYNX_GREY = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon_grey:0|t "
+
+-- Advanced mode (Options): a player's vouching tier (Vouch.lua) as the tooltip's last line.
+local function AddTierLine(tip, line)
+    if ns.db.advanced and line then tip[#tip + 1] = "|cffa0a0a0" .. line .. "|r" end
+end
+
 local CARD_HEADER, CARD_ROW, CARD_GAP = 34, 24, 12
 
 local FOLD_OPEN = "|TInterface\\Buttons\\UI-MinusButton-Up:16:16|t "
@@ -3935,14 +3950,16 @@ local function InitAllianceRow(row, item)
     end
     local header, player, relay = item.kind == "guild", item.kind == "player", item.kind == "relay"
     local note = item.kind == "note"
+    -- Relayed players: their own folded part of the card (sub), then a row each (relayedRow).
+    local sub, relayedRow = item.kind == "subhead", item.kind == "relayed"
     row.card:SetShown(header)
     row.title:SetShown(header)
     row.side:SetShown(header)
-    row.name:SetShown(player or relay)
-    row.state:SetShown(player or relay)
-    row.seen:SetShown(player or relay)
+    row.name:SetShown(player or relay or sub or relayedRow)
+    row.state:SetShown(player or relay or relayedRow)
+    row.seen:SetShown(player or relay or relayedRow)
     row.note:SetShown(note)
-    row.hit:EnableMouse(header or player or relay)
+    row.hit:EnableMouse(header or player or relay or sub or relayedRow)
     row.hit.tooltip = nil
     row.hit.onClick = item.onClick
     if header then
@@ -3956,6 +3973,25 @@ local function InitAllianceRow(row, item)
         row.state:SetText(item.state or "")
         row.seen:SetText(item.heard and Ago(item.heard) or "")
         row.hit.tooltip = item.tooltip
+    elseif sub then
+        row.name:SetText((item.open and FOLD_OPEN or FOLD_CLOSED) .. "|cffc0c0c0" .. item.text .. "|r")
+        row.hit.tooltip = item.tooltip
+    elseif relayedRow then
+        local p = item.player
+        row.name:SetText(LYNX_GREY .. (p.online and p.name or ("|cff9d9d9d" .. p.name .. "|r")))
+        local short = RELAYED_SHORT[p.state]
+        local label = short and L[short[3]]
+        if p.state == "confirmed" and p.source == "relay" then label = L["talks in their guild chat"] end
+        row.state:SetText((short and (short[1] .. " |cff" .. short[2] .. label .. "|r")
+            or ("|cff808080" .. L["on the map only"] .. "|r"))
+            .. ((p.hidden or 0) > 0 and ("  |cffff4040" .. format(L["%d hidden"], p.hidden) .. "|r") or ""))
+        local tip = { p.name .. "  |cff8fb8e8[" .. (p.tag or p.guild or "?") .. "]|r", ns.Vouch.StateText(p),
+            L["Doesn't run La Taverne: their guild chat and map position reach you through their guild's relay."] }
+        if (p.hidden or 0) > 0 then tip[#tip + 1] = format(L["%d messages hidden this session."], p.hidden) end
+        if p.seen then tip[#tip + 1] = L["Last heard from:"] .. " " .. Ago(p.seen) end
+        AddTierLine(tip, p.tierLine)
+        row.hit.tooltip = tip
+        row.seen:SetText(p.seen and Ago(p.seen) or "")
     elseif player then
         local p = item.player
         -- Not heard from lately (or only seen before this session): greyed.
@@ -3987,6 +4023,7 @@ local function InitAllianceRow(row, item)
                 row.hit.tooltip[#row.hit.tooltip + 1] = format(L["%d messages hidden this session."], p.hidden)
             end
             if p.seen then row.hit.tooltip[#row.hit.tooltip + 1] = L["Last heard from:"] .. " " .. Ago(p.seen) end
+            if not p.remembered then AddTierLine(row.hit.tooltip, p.tierLine) end
         end
         local level = LevelLine(p.level)
         if level then table.insert(row.hit.tooltip, 2, level) end
@@ -4024,8 +4061,10 @@ local function BuildNetworkPanel()
     end)
     statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Folded cards, per guild (lowercased name).
+    -- Folded cards, per guild (lowercased name). openRelayed: each card's relayed players' part
+    -- (folded by default: a big guild's chat brings many).
     p.open = {}
+    p.openRelayed = {}
     -- My guild's members with La Taverne: asked once when the page opens.
     p:SetScript("OnShow", function() ns.Players:AskWho() end)
 
@@ -4135,6 +4174,8 @@ local function BuildNetworkPanel()
         else
             lines[#lines + 1] = L["Nobody of this guild with La Taverne is online to relay."]
         end
+        -- Advanced mode: how checked another guild's relay is (what it passes on is no more).
+        if entry and not g.mine and not ns.IsMe(entry.name) then AddTierLine(lines, ns.Vouch:TierLine(entry.name, g.name)) end
         return lines
     end
 
@@ -4174,6 +4215,13 @@ local function BuildNetworkPanel()
             local key = (pl.guild or ""):lower()
             byGuild[key] = byGuild[key] or {}
             table.insert(byGuild[key], pl)
+        end
+        -- Their members without La Taverne, heard through their relay (Vouch.lua), apart.
+        local relayedByGuild = {}
+        for _, pl in ipairs(ns.Vouch:GetRelayed()) do
+            local key = (pl.guild or ""):lower()
+            relayedByGuild[key] = relayedByGuild[key] or {}
+            table.insert(relayedByGuild[key], pl)
         end
         -- Activity per guild: open groups and available players (mine: no tag).
         local byTag = {}
@@ -4241,11 +4289,12 @@ local function BuildNetworkPanel()
                 for _, line in ipairs((ns.Relay:OthersLines())) do tip[#tip + 1] = line end
                 rows[#rows + 1] = { kind = "relay", label = L["You"], state = ns.Relay:MyStateText(), tooltip = tip }
             end
+            local rel = not g.mine and relayedByGuild[key] or {}
             if g.open then
-                if #seen == 0 then
+                if #seen == 0 and #rel == 0 then
                     rows[#rows + 1] = { kind = "note", text = g.mine and L["Nobody else from your guild with La Taverne heard from yet."]
                         or L["Nobody from this guild heard from yet."] }
-                else
+                elseif #seen > 0 then
                     -- Online ones, and (the box at the top) offline ones mixed in, greyed.
                     local shown = {}
                     for _, pl in ipairs(ns.db.allianceOffline and seen or online) do shown[#shown + 1] = pl end
@@ -4253,6 +4302,26 @@ local function BuildNetworkPanel()
                         rows[#rows + 1] = { kind = "note", text = L["Nobody online right now."] }
                     end
                     for _, pl in ipairs(Sorted(shown, key)) do rows[#rows + 1] = { kind = "player", player = pl, mine = g.mine } end
+                end
+                -- Members without La Taverne heard through the relay: their own folded part.
+                if #rel > 0 then
+                    local relOnline = {}
+                    for _, pl in ipairs(rel) do
+                        if pl.online then relOnline[#relOnline + 1] = pl end
+                    end
+                    local relOpen = self.openRelayed[key] == true
+                    rows[#rows + 1] = { kind = "subhead", open = relOpen,
+                        text = format(L["Without La Taverne, passed on by the relay: %d online, %d known"], #relOnline, #rel),
+                        onClick = function() self.openRelayed[key] = not relOpen self:Refresh() end,
+                        tooltip = { L["Without La Taverne"],
+                            L["Members of this guild who don't run La Taverne, heard through its relay this session: their guild chat lines and their OpenMap position."],
+                            L["They're only as checked as the relay that passes them on: confirmed when you vouch for that relay, not checked yet otherwise. A map position alone checks nobody."] } }
+                    if relOpen then
+                        local shown = {}
+                        for _, pl in ipairs(ns.db.allianceOffline and rel or relOnline) do shown[#shown + 1] = pl end
+                        if #shown == 0 then rows[#rows + 1] = { kind = "note", text = L["Nobody online right now."] } end
+                        for _, pl in ipairs(Sorted(shown, key .. "#relayed")) do rows[#rows + 1] = { kind = "relayed", player = pl } end
+                    end
                 end
             end
         end
@@ -4478,7 +4547,8 @@ local function BuildOptionsPanel()
     p.advanced:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(p.advanced, { L["Advanced mode"],
         L["Adds the Guild relay tab beside Alliance: who passes on each guild's chat and OpenMap positions, and how it's going, in detail."],
-        L["The relay works the same either way: this only shows it."] })
+        L["The relay works the same either way: this only shows it."],
+        L["Also adds each allied player's vouching tier to their tooltip on the Alliance tab: 1, seen first-hand; 2, told by someone you vouch for; 3, their claim only."] })
     EndSection()
 
     -- Minimap ------------------------------------------------------------------
@@ -4536,6 +4606,23 @@ local function BuildOptionsPanel()
     requestSound:SetPoint("TOPLEFT", 12, rowY + 2)
     WithTooltip(requestSound, { L["A sound when someone asks to join my group"],
         L["Also when a player accepts your invitation. The chat line is always there."] })
+    -- A group invites me (InviteCard.lua): the card on screen, and its sound.
+    rowY = Row()
+    local inviteCard = NewCheckbox(c, L["A card on screen when a group invites me"], function(self)
+        ns.db.inviteCard = self:GetChecked() and true or false
+        if ns.InviteCard then ns.InviteCard:Update() end
+    end)
+    inviteCard:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(inviteCard, { L["A card on screen when a group invites me"],
+        L["With the chat line's text and a View button that opens the group, like the line's [View]. Drag it where you like. It waits for the end of a fight, and for the end of a dungeon or raid when Quiet is on."],
+        L["Without a mouse: the key binding Show what's waiting does View (Key Bindings, AddOns)."] })
+    rowY = Row()
+    local inviteSound = NewCheckbox(c, L["A sound when a group invites me"], function(self)
+        ns.db.inviteSound = self:GetChecked() and true or false
+    end)
+    inviteSound:SetPoint("TOPLEFT", 12, rowY + 2)
+    WithTooltip(inviteSound, { L["A sound when a group invites me"],
+        L["Heard even with sound effects turned down, and once more after 2 minutes if you haven't answered. With the game in the background, only if the game's Sound in Background is on."] })
     rowY = Row()
     local quiet = NewCheckbox(c, L["Quiet in dungeons, raids and combat"], function(self)
         ns.db.quiet = self:GetChecked() and true or nil
@@ -4711,6 +4798,8 @@ local function BuildOptionsPanel()
         lynxCheck:SetChecked(ns.db.lynx ~= false)
         alertSound:SetChecked(ns.db.alertSound == true)
         announces:SetChecked(ns.db.showAnnounces ~= false)
+        inviteCard:SetChecked(ns.db.inviteCard ~= false)
+        inviteSound:SetChecked(ns.db.inviteSound ~= false)
         requestSound:SetChecked(ns.db.requestSound ~= false)
         quiet:SetChecked(ns.db.quiet == true)
         mapShare:SetChecked(ns.db.allyMap.share)
