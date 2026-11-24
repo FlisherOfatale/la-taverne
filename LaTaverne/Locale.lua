@@ -844,6 +844,8 @@ if GetLocale() == "frFR" then
     L["Choose"] = "Choisir"
     L["Close"] = "Fermer"
     L["Sections"] = "Sections"
+    -- Alliance channel health check (Comm.lua)
+    L["The alliance channel doesn't seem to work properly: allied messages may be missing. A /reload, or restarting the game, usually fixes it."] = "Le canal de l'alliance ne semble pas fonctionner correctement : des messages des guildes alliées peuvent manquer. Un /reload, ou redémarrer le jeu, règle généralement le problème."
 
     -- Guild relay (Relay.lua)
     L["Guild relay"] = "Relais de guilde"
@@ -898,6 +900,7 @@ if GetLocale() == "frFR" then
     L["switched off"] = "désactivé"
     L["no alliance"] = "pas d'alliance"
     L["alliance channel not ready"] = "canal de l'alliance pas prêt"
+    L["alliance channel not working properly"] = "canal de l'alliance qui fonctionne mal"
     L["allied chat off"] = "chat allié désactivé"
     L["Guild Info not read yet"] = "informations de guilde pas encore lues"
     L["turned off by the officers"] = "désactivé par les officiers"

@@ -533,6 +533,7 @@ ns.commands.ally = function()
                 "in the server's list", ns.Comm:ChannelListed(ch), "rejoins", ch.rejoins or 0)
         end
     end
+    L("alliance channel health", ns.Comm:AllyHealthText())
     local s = ns.AllyChat.stats
     L("allied chat", ns.AllyChat.Enabled() and "on" or "off", "GuildUnion", ns.AllyChat:CanTurnOff() and "loaded" or "no", "tag", ns.db.allyChat.showTag and "on" or "off", "lynx", ns.db.allyChat.showLynx ~= false and "on" or "off",
         "lines shown: handler", s.handler, "chattynator", s.chattynator or 0, "tagged", s.tagged, "fallback", s.fallback,

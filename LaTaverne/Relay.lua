@@ -208,6 +208,9 @@ local function CantReason(job)
     if loggingOut then return "logout" end
     if not ns.Alliance:IsActive() then return "alliance" end
     if not ns.Comm:IsAllyReady() then return "channel" end
+    -- Ready, but the health check says messages don't get through (Comm.lua): the allies wouldn't
+    -- get what I relay. Someone else, until the channel is joined again.
+    if ns.Comm:AllyLooksBroken() then return "broken" end
     if job == "chat" and not ns.AllyChat.Enabled() then return "chat" end
     if not ns.Alliance:IsInfoKnown() then return "info" end
     if not ns.Alliance:RelayAllows(job) then return "officers" end
@@ -483,9 +486,19 @@ function Relay:GetJobs() return JOB_ORDER end
 -- Messages out ----------------------------------------------------------------------------------
 
 -- On the job's own prefix ("ask", for every job: the chat one).
+local rlySerial = 0
 local function SendRLY(op, job, fields)
     local payload = fields or {}
+    rlySerial = rlySerial + 1
     payload.op, payload.j, payload.rp = op, job, RP
+    -- u: the same in both copies, so my guildmates read it once.
+    payload.u = math.random(1, 1000000) * 1000 + rlySerial % 1000
+    -- A copy to my guild on the guild channel: the alliance channel can break halfway (looks
+    -- ready, some messages lost), and two relays of one guild that don't hear each other both
+    -- keep the job. The guild channel is the game's own: they hear each other there.
+    local copy = {}
+    for k, v in pairs(payload) do copy[k] = v end
+    ns.Comm:Send("RLY", copy, "ALERT", true)
     if not ns.Comm:SendAlly("RLY", payload, "ALERT", true, job and JOBS[job].prefix or PREFIX) then return false end
     Measure("RLY", job, ns.Comm.lastSend.parts, ns.Comm.lastSend.bytes)
     return true
@@ -819,8 +832,23 @@ local function OnAllyRLY(sender, p)
     end
 end
 
+-- My guild's RLY comes twice (guild channel, and the alliance channel): read once.
+local rlySeen = {} -- [sender#u] = GetTime()
+local function SeenRLY(sender, u)
+    if not u then return false end
+    local now = GetTime()
+    local id = tostring(sender) .. "#" .. tostring(u)
+    if rlySeen[id] and now - rlySeen[id] < 60 then return true end
+    rlySeen[id] = now
+    for k, t in pairs(rlySeen) do
+        if now - t >= 60 then rlySeen[k] = nil end
+    end
+    return false
+end
+
 ns.Comm:On("RLY", function(sender, p, isSelf)
     if isSelf or type(p.op) ~= "string" then return end
+    if SeenRLY(sender, p.u) then return end
     OnGuildRLY(sender, p)
 end)
 
@@ -1713,7 +1741,7 @@ end
 local WHY = {
     off = "switched off", alliance = "no alliance", channel = "alliance channel not ready",
     chat = "allied chat off", info = "Guild Info not read yet", officers = "turned off by the officers",
-    newer = "a newer relay is in use", instance = "in an instance", raid = "in a raid group",
+    broken = "alliance channel not working properly", newer = "a newer relay is in use", instance = "in an instance", raid = "in a raid group",
     away = "away", logout = "logged out", better = "a better relay took over", ["two holders"] = "another relay",
     busy = "too busy", old = "La Taverne without the relay",
 }

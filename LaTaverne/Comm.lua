@@ -395,6 +395,7 @@ local function Probe(ch)
             ch.probing = false
             if ch.lost then Comm:LogNote("back in " .. ch.name) end
             ch.ready, ch.lost = true, nil
+            ch.readyAt = GetTime()
             HideChannel(ch.name)
             FlushQueue()
             Comm:LeaveStrayChannels()
@@ -472,6 +473,8 @@ local function SameChannel(name)
     return out
 end
 
+local LeaveAndJoin -- (below)
+
 local function RejoinGhost(ch)
     local now = GetTime()
     if ch.rejoinAt and now - ch.rejoinAt < REJOIN_GAP then return end
@@ -487,6 +490,11 @@ local function RejoinGhost(ch)
     end
     ch.rejoins, ch.rejoinAt = (ch.rejoins or 0) + 1, now
     Comm:LogNote("ghost channel " .. ch.name .. ": not in the server's list, leaving and joining again (" .. ch.rejoins .. ")", "ghost channel")
+    LeaveAndJoin(ch)
+end
+
+-- Leave a channel and join it again (every role on it), then probe until it takes messages.
+LeaveAndJoin = function(ch)
     local same = SameChannel(ch.name)
     -- (leaving: the "you left" notice is mine, not the game's; probing: nothing else joins meanwhile)
     for _, c in ipairs(same) do c.ready, c.lost, c.probing, c.leaving = false, true, true, true end
@@ -544,6 +552,99 @@ function Comm:CheckGhosts()
             ch.ghost = 0
         end
     end
+end
+
+-- A half-broken alliance channel: in the server's list, "ready", but messages don't get through
+-- (seen after the game's chat server drops: the ghost check finds nothing wrong). Two signs:
+-- - my guildmates: their La Taverne sends a hello on the alliance channel every 4-4.5 minutes,
+--   and I hear them on the guild channel too. Two or more of them heard on the guild channel
+--   lately, who did send on the alliance channel earlier, and nothing from any guildmate on the
+--   alliance channel for SILENT_FOR: it's my channel, not theirs (works with every allied guild
+--   offline);
+-- - my own messages: the game hands my channel messages back to me. Once I've seen that happen,
+--   ECHO_MISSES sends in a row not back after ECHO_WAIT: I'm not really in the channel.
+-- Either one: leave and join again (note in the message log). Still wrong after that: one chat
+-- line, once a session, that a /reload or a game restart fixes it.
+local SILENT_FOR = 600      -- no guildmate on the alliance channel for this long (seconds)
+local SILENT_MIN = 2        -- guildmates heard on the guild channel meanwhile, at least
+local ECHO_WAIT, ECHO_MISSES = 20, 3
+local HEAL_GAP = 600        -- at most one rejoin this often
+local health = { guild = {}, ally = {}, sends = {}, echoSeen = false, lastEcho = 0, healAt = nil, heals = 0, warned = false,
+    broken = false }
+
+-- A guildmate's message on the guild channel / their copy on the alliance channel.
+local function NoteGuildHeard(sender)
+    if ns.IsMe(sender) then return end
+    local key = ns.NameKey(sender)
+    if key then health.guild[key] = GetTime() end
+end
+local function NoteAllyHeard(sender)
+    if ns.IsMe(sender) then return end
+    local key = ns.NameKey(sender)
+    if key then health.ally[key] = GetTime() end
+end
+
+-- Why the alliance channel looks broken right now, or nil.
+local function ChannelSickness(ch, now)
+    -- My own messages not coming back.
+    if health.echoSeen then
+        local missed = 0
+        for _, t in ipairs(health.sends) do
+            if t > health.lastEcho and now - t >= ECHO_WAIT then missed = missed + 1 end
+        end
+        if missed >= ECHO_MISSES then return format("%d of my messages never came back", missed) end
+    end
+    -- My guildmates heard on the guild side, none on the alliance side.
+    if ns.Guild:IsSandbox() or not ch.readyAt or now - ch.readyAt < SILENT_FOR then return nil end
+    local lastAlly, expected = 0, 0
+    for key, t in pairs(health.ally) do
+        if t > lastAlly then lastAlly = t end
+        local g = health.guild[key]
+        if g and now - g < SILENT_FOR then expected = expected + 1 end
+    end
+    if expected >= SILENT_MIN and now - lastAlly >= SILENT_FOR then
+        return format("%d guildmates heard on the guild channel, none of them on the alliance channel for %d min",
+            expected, math.floor((now - lastAlly) / 60))
+    end
+    return nil
+end
+
+function Comm:CheckAllyHealth()
+    local ch = channels.ally
+    if not (ch and ch.ready) or ch.probing or ch.failed then return end
+    local now = GetTime()
+    local why = ChannelSickness(ch, now)
+    health.broken = why ~= nil
+    if not why then
+        if health.healAt and now - health.healAt >= SILENT_FOR then health.heals = 0 end
+        return
+    end
+    if health.healAt and now - health.healAt < HEAL_GAP then return end
+    health.heals = health.heals + 1
+    health.healAt = now
+    wipe(health.sends)
+    -- (After the rejoin, the guildmates' silence counts from the new join only: readyAt.)
+    Comm:LogNote("alliance channel " .. ch.name .. " looks broken (" .. why .. "): leaving and joining again", "channel silent")
+    if health.heals >= 2 and not health.warned then
+        health.warned = true
+        ns.Print(ns.L["The alliance channel doesn't seem to work properly: allied messages may be missing. A /reload, or restarting the game, usually fixes it."])
+    end
+    LeaveAndJoin(ch)
+end
+
+-- The health check found the alliance channel broken (and it isn't joined again yet).
+function Comm:AllyLooksBroken()
+    return health.broken
+end
+
+-- For /taverne ally.
+function Comm:AllyHealthText()
+    local now, ally, guild = GetTime(), 0, 0
+    for _, t in pairs(health.ally) do if now - t < SILENT_FOR then ally = ally + 1 end end
+    for _, t in pairs(health.guild) do if now - t < SILENT_FOR then guild = guild + 1 end end
+    return format("guildmates heard (last %d min): guild channel %d, alliance channel %d; own messages back: %s; rejoins for silence: %d",
+        SILENT_FOR / 60, guild, ally, health.echoSeen and (format("%d s ago", math.floor(now - health.lastEcho))) or "not seen yet",
+        health.heals)
 end
 
 -- Join (or rejoin) a hidden channel for a role. Replaces what the role had before.
@@ -738,6 +839,7 @@ local function OnGuildReceive(prefix, text, distribution, sender)
     Comm.stats.received = Comm.stats.received + 1
     ns.Guild:NoteSeen(sender)
     if ns.Players then ns.Players:NoteAddon(sender) end -- they run La Taverne
+    NoteGuildHeard(sender) -- (the alliance channel's health check)
 
     Dispatch("guild", msgType, sender, payload, protocol, #text)
 end
@@ -840,6 +942,9 @@ local function SendAllyText(text, priority, prefix, opts)
     if not (ch and ch.ready) then return false end
     local prio = priority or "NORMAL"
     if not SendOnChannel(ch, text, prio, prefix, opts) then return false end
+    local sends = health.sends
+    sends[#sends + 1] = GetTime()
+    if #sends > 10 then table.remove(sends, 1) end
     local old = channels.allyOld
     if old and old.ready then SendOnChannel(old, text, prio, prefix, opts) end
     Comm.stats.sent = Comm.stats.sent + 1
@@ -1026,6 +1131,11 @@ local function OnAllyAddon(prefix, message, distribution, sender, target, zoneCh
         return
     end
     if type(message) ~= "string" or #message < 1 or type(sender) ~= "string" then return end
+    if ns.IsMe(sender) then
+        health.echoSeen, health.lastEcho = true, GetTime()
+    elseif ns.Guild:IsMember(sender) then
+        NoteAllyHeard(sender)
+    end
     local mark, body = message:sub(1, 1), message:sub(2)
     if mark == "0" then
         OnAllyMessage(body, sender)
@@ -1173,6 +1283,7 @@ function Comm:OnLogin()
     C_Timer.NewTicker(15, function()
         for _, ch in pairs(channels) do Comm:Reconnect(ch) end
         Comm:CheckGhosts()
+        Comm:CheckAllyHealth()
     end)
     -- The game's chat server drops and comes back ("You have been disconnected from..."): our
     -- channels can be left as ghosts then. Checked 15, 30 and 45 s after it's back. (Events that
