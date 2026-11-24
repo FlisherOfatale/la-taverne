@@ -4,10 +4,11 @@
 local ADDON, ns = ...
 local L = ns.L
 
--- One field: no tabs or line breaks inside (they'd split the columns or the rows).
+-- One field: no tabs or line breaks inside (they'd split the columns or the rows), and no spaces
+-- around it (a note typed " 04-11-2026" wouldn't match "04-11-2026" in a spreadsheet).
 local function Field(v)
     if v == nil then return "" end
-    return (tostring(v):gsub("[\t\r\n]+", " "))
+    return strtrim((tostring(v):gsub("[\t\r\n]+", " ")))
 end
 
 local function Row(...)
@@ -40,16 +41,14 @@ local function Ago(year, month, day, hour)
     return table.concat(parts, " ")
 end
 
--- "Show Offline Members" unticked in the Guild window: the game then lists only the online
--- members, and an export missing everyone offline would be easy to take for the whole guild.
+-- Offline members missing from the roster: an export without them would be easy to take for the
+-- whole guild. Some games list only the online members while "Show Offline Members" is unticked
+-- in the Guild window; Forever lists everyone either way. So the roster itself decides: with any
+-- offline member in it, it's complete, whatever the box says.
 local OFFLINE_HIDDEN = "Offline members are hidden, so the roster would be incomplete: tick Show Offline Members in the Guild window, then /taverne roster again."
 
 local function OfflineHidden()
     return GetGuildRosterShowOffline ~= nil and not GetGuildRosterShowOffline()
-end
-
-local function ShowError(text)
-    ns.Print("|cffff3333" .. text .. "|r")
 end
 
 local EVENTS = {
@@ -86,9 +85,9 @@ local function BuildText()
         if a.rankIndex ~= b.rankIndex then return a.rankIndex < b.rankIndex end
         return a.name < b.name
     end)
-    -- Offline members missing: an error instead of the list (also when the box is unticked while
-    -- this window is open, or, on a game without that setting, when the counts give it away).
-    if OfflineHidden() or (#members > 0 and not anyOffline and #members < total) then
+    -- No offline member listed while the box is unticked, or fewer listed than the game counts:
+    -- an error instead of the list.
+    if #members > 0 and not anyOffline and (OfflineHidden() or #members < total) then
         return "|cffff3333" .. L[OFFLINE_HIDDEN] .. "|r"
     end
     Add(format(L["Members: %d"], #members))
@@ -127,6 +126,8 @@ local function BuildText()
                 local label = EVENTS[kind] and L[EVENTS[kind]] or kind
                 local by, who = player1, player2
                 if kind == "join" or kind == "quit" then by, who = nil, player1 end
+                -- An invitation has no rank: the game gives the top rank's name there.
+                if kind == "invite" or kind == "join" then rank = nil end
                 Add(Row(Ago(year, month, day, hour), label, by, who, rank))
             end
         end
@@ -137,10 +138,6 @@ end
 ns.commands.roster = function()
     if not IsInGuild() then
         ns.Print(L["You're not in a guild."])
-        return
-    end
-    if OfflineHidden() then
-        ShowError(L[OFFLINE_HIDDEN])
         return
     end
     -- Ask the game for the roster and its history: the text fills in as they arrive.
