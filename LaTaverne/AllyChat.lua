@@ -91,9 +91,10 @@ end
 
 -- In front of an allied player's name: the Nation du Québec lynx (a line shared by La Taverne),
 -- then the guild's tag; each has its option, so allied lines can look like guild ones.
--- relayed: the line came through the guild relay (Relay.lua), so its author doesn't run La
--- Taverne and never sees allied answers. Marked (its own option, on by default): a grey lynx in
--- place of the gold one, or a grey dot when the lynx is off.
+-- relayed: the line came through the guild relay (Relay.lua) and its author doesn't run La
+-- Taverne (nothing heard from their La Taverne lately), so they never see allied answers. Marked
+-- (its own option, on by default): a grey lynx in place of the gold one, or a grey dot when the
+-- lynx is off.
 local LYNX_ICON = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon:0|t "
 local LYNX_GREY = "|TInterface\\AddOns\\LaTaverne\\media\\lynx_icon_grey:0|t "
 local GREY_DOT = "|TInterface\\FriendsFrame\\StatusIcon-Offline:0|t "
@@ -516,7 +517,10 @@ ns.Comm:OnAlly("RCHAT", function(sender, payload, isSelf)
     local guid = type(payload.id) == "string" and payload.id:match("^Player%-[%w%-]+$") or nil
     local class = type(payload.c) == "string" and payload.c:match("^%u+$") or nil
     AllyChat.stats.relayed = AllyChat.stats.relayed + 1
-    Receive(author, { m = payload.m, t = t, c = class, id = guid, g = payload.g }, ns.Alliance:GetTag(payload.g) or "?", true)
+    -- The mark says "without La Taverne": not for an author whose La Taverne I heard lately on the
+    -- alliance channel (the relay's copy only beat theirs, or theirs was lost on the way).
+    local without = not (ns.Vouch and ns.Vouch:HeardRecently(author, payload.g))
+    Receive(author, { m = payload.m, t = t, c = class, id = guid, g = payload.g }, ns.Alliance:GetTag(payload.g) or "?", without)
 end)
 
 -- Sandbox only: a fake guild mate typed in the fake guild chat. as: a test guild member without

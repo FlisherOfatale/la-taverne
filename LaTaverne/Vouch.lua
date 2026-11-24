@@ -535,6 +535,14 @@ function Vouch:IsDenied(name)
     return self:GetState(name) == "denied"
 end
 
+-- Heard from their La Taverne on the alliance channel lately (a hello, a line, a group...),
+-- as a member of that guild: they run it. For AllyChat.lua: their relayed lines aren't marked.
+function Vouch:HeardRecently(name, guild)
+    local entry = players[ns.NameKey(name) or ""]
+    return entry ~= nil and entry.seen ~= nil and SameGuild(entry.guild, guild)
+        and GetServerTime() - entry.seen < ONLINE
+end
+
 -- Confirmed (not "not checked yet", "disputed", or anything else): auto-invite may invite them
 -- without a click.
 function Vouch:IsConfirmed(name)
