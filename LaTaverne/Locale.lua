@@ -871,7 +871,7 @@ if GetLocale() == "frFR" then
     L["You're not in a guild."] = "Vous n'êtes pas dans une guilde."
     L["Members: %d"] = "Membres : %d"
     L["The roster isn't loaded yet: it shows here in a few seconds."] = "La liste n'est pas encore chargée : elle s'affiche ici dans quelques secondes."
-    L["Only online members are listed: tick Show Offline Members in the Guild window."] = "Seuls les membres en ligne sont listés : cochez Afficher les membres hors ligne dans la fenêtre de guilde."
+    L["Offline members are hidden, so the roster would be incomplete: tick Show Offline Members in the Guild window, then /taverne roster again."] = "Les membres hors ligne sont masqués, la liste serait donc incomplète : cochez Afficher les membres hors ligne dans la fenêtre de guilde, puis refaites /taverne roster."
     L["Officer notes: your rank can't see them."] = "Notes d'officier : votre rang ne peut pas les voir."
     L["Rank"] = "Rang"
     L["Level"] = "Niveau"
