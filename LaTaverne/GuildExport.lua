@@ -67,7 +67,8 @@ local function BuildText()
     Add(format(L["Guild roster of %s, %s"], tostring(guild or "?"), date("%Y-%m-%d %H:%M")))
 
     -- Members: by rank, then by name.
-    local total = GetNumGuildMembers() or 0
+    local total, onlineCount = GetNumGuildMembers()
+    total = total or 0
     local officer = CanSeeOfficerNotes()
     local members, anyOffline = {}, false
     for i = 1, total do
@@ -85,9 +86,11 @@ local function BuildText()
         if a.rankIndex ~= b.rankIndex then return a.rankIndex < b.rankIndex end
         return a.name < b.name
     end)
-    -- No offline member listed while the box is unticked, or fewer listed than the game counts:
-    -- an error instead of the list.
-    if #members > 0 and not anyOffline and (OfflineHidden() or #members < total) then
+    -- Fewer listed than the game counts, or no offline member listed while the box is unticked
+    -- and the game says someone is offline: an error instead of the list. (Everyone online:
+    -- the list is complete, box ticked or not.)
+    local someoneOffline = tonumber(onlineCount) == nil or tonumber(onlineCount) < total
+    if #members > 0 and not anyOffline and (#members < total or (OfflineHidden() and someoneOffline)) then
         return "|cffff3333" .. L[OFFLINE_HIDDEN] .. "|r"
     end
     Add(format(L["Members: %d"], #members))

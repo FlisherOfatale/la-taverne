@@ -1674,6 +1674,8 @@ function Groups:OnLogin()
                 local app = myApplications[id]
                 if tooOld or not (app and app.status == "pending") then myApplications[id] = nil end
                 myInviteReplies[id] = nil
+                -- Its invitation, if any, is announced again should it come back.
+                if ns.InviteCard then ns.InviteCard:Forget(id) end
                 removed = true
             end
         end
@@ -1767,12 +1769,16 @@ function Groups:HasFakeInvitation()
     return fake ~= nil
 end
 
+local function StopFake()
+    if not fake then return end
+    fake.ticker:Cancel()
+    handlerOf.DELIST(FAKE_LEADER, { id = fake.payload.id }, false, "guild")
+    fake = nil
+end
+
 function Groups:FakeInvitation(on)
-    if fake then
-        fake.ticker:Cancel()
-        handlerOf.DELIST(FAKE_LEADER, { id = fake.payload.id }, false, "guild")
-        fake = nil
-    end
+    StopFake()
+    if on and not ns.Guild:IsSandbox() then ns.Print(L["The fake invitation only works in test mode."]) end
     if not on or not ns.Guild:IsSandbox() then
         Changed()
         return
@@ -1785,7 +1791,15 @@ function Groups:FakeInvitation(on)
         members = { { name = FAKE_LEADER, class = "WARRIOR", level = level, role = "TANK" } },
         pending = { { name = ns.FullName("player"), class = class, level = level, status = "invited" } },
     }
-    local function Send() handlerOf.LIST(FAKE_LEADER, payload, false, "guild") end
+    -- Test mode turned off since: it goes away (my answers would reach the real guild).
+    local function Send()
+        if not ns.Guild:IsSandbox() then
+            StopFake()
+            Changed()
+            return
+        end
+        handlerOf.LIST(FAKE_LEADER, payload, false, "guild")
+    end
     fake = { payload = payload, ticker = C_Timer.NewTicker(HEARTBEAT, Send) }
     Send()
 end

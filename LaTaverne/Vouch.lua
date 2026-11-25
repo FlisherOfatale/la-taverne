@@ -270,10 +270,13 @@ end
 local function RelayedReason(r, state, rec)
     if rec then return Reason(rec, r) end
     if state == "map" then return L["On the map, passed on by %s (guild relay)."]:format(r.by or "?") end
+    -- (From their last line: the relay that passed it on, not the last one passing on their map
+    -- position.)
+    local by = r.saidBy or r.by or "?"
     if state == "confirmed" then
-        return L["Talks in [%s]'s guild chat, passed on by %s (guild relay), %s."]:format(TagOf(r.guild), r.by or "?", Ago(r.said))
+        return L["Talks in [%s]'s guild chat, passed on by %s (guild relay), %s."]:format(TagOf(r.guild), by, Ago(r.said))
     end
-    return L["Only %s says this player is in [%s], and nobody vouches for %s."]:format(r.by or "?", TagOf(r.guild), r.by or "?")
+    return L["Only %s says this player is in [%s], and nobody vouches for %s."]:format(by, TagOf(r.guild), by)
 end
 
 -- A length of time, rounded down: "5 min", "3 h", "2 d" (a minute at least).
@@ -614,13 +617,16 @@ function Vouch:Gate(sender, guild, fn, passive)
     return nil
 end
 
--- "confirmed", "unverified", "disputed", "denied", "checking", or nil (never heard of them).
--- A relayed player (not heard from themselves): their relayed state ("unverified" for map only).
+-- "confirmed", "unverified", "disputed", "denied", "checking", or nil (never heard of them, or
+-- only a hello so far). A relayed player (never heard from themselves): their relayed state
+-- ("unverified" for map only). Heard from themselves: their own state only (what a relay passes
+-- on about them says nothing more; the game's sightings already count in it).
 function Vouch:GetState(name)
     local key = ns.NameKey(name) or ""
     local entry = players[key]
-    local state = entry and StateOf(entry)
-    if state or not relayed[key] then return state end
+    if entry then return StateOf(entry) end
+    if not relayed[key] then return nil end
+    local state
     state = RelayedState(relayed[key])
     return state == "map" and "unverified" or state
 end
@@ -797,8 +803,8 @@ end
 -- The state line of one player, or nil if never heard of.
 function Vouch:Describe(name)
     local key = ns.NameKey(name) or ""
-    local item = players[key] and Item(players[key])
-    if not (item and item.state) then item = relayed[key] and RelayedItem(relayed[key]) end
+    -- Heard from themselves: their own state only (as GetState).
+    local item = players[key] and Item(players[key]) or (relayed[key] and RelayedItem(relayed[key]))
     if not (item and item.state) then return nil end
     return Vouch.StateText(item)
 end
@@ -829,7 +835,7 @@ function Vouch:Relayed(name, guild, relay, kind)
     end
     r.name, r.by, r.seen = name, relay, GetServerTime()
     if kind == "chat" then
-        r.said = r.seen
+        r.said, r.saidBy = r.seen, relay
         r.vouched = Vouched(relay, guild) or nil
         if r.vouched then Write(key, name, guild, "relay", relay, 2, RELAY_QUIET) end
         LookAt(name) -- in my group, targeted...: the game's word first

@@ -378,6 +378,7 @@ if GetLocale() == "frFR" then
     L["Two made-up players inviting, one on +1 and inv, one on +2 (auto-invite page)."] = "Deux joueurs inventés qui invitent, un sur +1 et inv, un sur +2 (page Invitation automatique)."
     L["Remove the fake inviters"] = "Retirer les faux inviteurs"
     L["Fake an invitation"] = "Simuler une invitation"
+    L["The fake invitation only works in test mode."] = "La fausse invitation ne fonctionne qu'en mode test."
     L["Remove the fake invitation"] = "Retirer la fausse invitation"
     L["A made-up leader's group invites you: the chat line, the sound and the invitation card, as for a real one. No party invite comes. Accepting still does what it does for a real one: your own group is removed if you're alone in it, and your availability ends."] = "Le groupe d'un chef inventé vous invite : la ligne dans le chat, le son et la carte d'invitation, comme pour une vraie. Aucune invitation de groupe n'arrive. Accepter fait quand même comme pour une vraie : votre propre groupe est retiré si vous y êtes seul, et votre disponibilité prend fin."
     L["Fake others inviting"] = "Simuler d'autres inviteurs"
