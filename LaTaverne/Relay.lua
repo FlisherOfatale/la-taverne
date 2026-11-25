@@ -855,19 +855,21 @@ local function SeenRLY(sender, u)
 end
 
 -- My guildmates' beacons, by the channel they came on (both copies, before SeenRLY drops one):
--- [job][key] = { guild = GetTime(), ally = GetTime() }. A holder heard on the guild channel but
--- not on the alliance channel reaches my guild and not the allied guilds (the relay report says so).
+-- [job][key] = { guild = GetTime(), ally = GetTime() }, for the relay report. Started again when
+-- they claim the job or give it up: a holding's times say nothing about the next one.
 local beaconVia = {}
 for _, job in ipairs(JOB_ORDER) do beaconVia[job] = {} end
 
 ns.Comm:On("RLY", function(sender, p, isSelf, _, via)
     if isSelf or type(p.op) ~= "string" then return end
-    if p.op == "hold" and beaconVia[p.j] then
-        local key = ns.NameKey(sender)
-        if key then
+    local key = beaconVia[p.j] and ns.NameKey(sender)
+    if key then
+        if p.op == "hold" then
             local t = beaconVia[p.j][key] or {}
             t[via == "ally" and "ally" or "guild"] = GetTime()
             beaconVia[p.j][key] = t
+        elseif p.op == "off" or (p.op == "claim" and not p.ch) then
+            beaconVia[p.j][key] = nil
         end
     end
     if SeenRLY(sender, p.u) then return end
@@ -881,18 +883,27 @@ end)
 
 -- For the relay report: when my guild's holder's beacon last came on each channel, and whether
 -- that looks wrong (warn): the guild copies arrive and the alliance ones don't (or lag well
--- behind), so the allied guilds don't see that holder.
+-- behind). The holder's client sends the guild copy once the game took the alliance one, so the
+-- alliance copies were lost on the way: the allied guilds may not see that holder either. Only
+-- when that can be told: my own alliance channel works (otherwise I'd hear no holder there, and
+-- that's mine to fix), and the roster knows the holder (Comm drops my guild's alliance copies
+-- from a sender it doesn't list yet: the roster loads after login, a member who just joined).
 local VIA_LAG = 90 -- one beacon missed on the alliance channel, and more
-function Relay:BeaconViaText(job, key)
+function Relay:BeaconViaText(job, key, name)
     local t = beaconVia[job] and beaconVia[job][key]
     local now = GetTime()
     local function Ago(at)
         return at and format(L["%d s ago"], math.floor(now - at)) or L["not since you logged in"]
     end
     local guildAt, allyAt = t and t.guild, t and t.ally
-    local warn = guildAt ~= nil and now - guildAt < LEASE and (not allyAt or guildAt - allyAt > VIA_LAG)
-    return format(L["beacons: guild channel %s, alliance channel %s"], Ago(guildAt), Ago(allyAt))
-        .. (warn and (" " .. L["(the allied guilds may not see this relay)"]) or ""), warn
+    local text = format(L["beacons: guild channel %s, alliance channel %s"], Ago(guildAt), Ago(allyAt))
+    local missing = guildAt ~= nil and now - guildAt < LEASE and (not allyAt or guildAt - allyAt > VIA_LAG)
+    if not missing then return text, false end
+    if not ns.Comm:IsAllyReady() or ns.Comm:AllyLooksBroken() then
+        return text .. " " .. L["(your own alliance channel isn't working)"], false
+    end
+    if not ns.Guild:IsMember(name) then return text, false end
+    return text .. " " .. L["(the allied guilds may not see this relay)"], true
 end
 
 -- My guildmates' hellos say their relay protocol.
@@ -1962,7 +1973,7 @@ local function ReportText()
         elseif h then
             line = format(L["%s: %s holds it (%s), heard %d s ago, %d waiting"], Relay.JobText(job), h.name,
                 Relay.TierText(h.tier), math.floor(now - h.heard), h.q or 0)
-                .. "; " .. Relay:BeaconViaText(job, h.key)
+                .. "; " .. Relay:BeaconViaText(job, h.key, h.name)
         else
             line = format(L["%s: nobody holds it"], Relay.JobText(job))
         end
@@ -2246,7 +2257,7 @@ function Relay:WindowData()
             value, level = format(L["you hold it since %s (%s)"], Since(st.since), Relay.TierText(st.heldTier)), "ok"
         elseif h then
             value = format(L["%s holds it (%s), heard %d s ago, %d waiting"], h.name, Relay.TierText(h.tier), math.floor(now - h.heard), h.q or 0)
-            local viaText, viaWarn = Relay:BeaconViaText(job, h.key)
+            local viaText, viaWarn = Relay:BeaconViaText(job, h.key, h.name)
             value = value .. "; " .. viaText
             if viaWarn then level = "warn" end
         else

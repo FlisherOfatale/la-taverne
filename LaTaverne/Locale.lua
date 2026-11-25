@@ -1000,6 +1000,7 @@ if GetLocale() == "frFR" then
     L["%d s ago"] = "il y a %d s"
     L["not since you logged in"] = "pas depuis votre connexion"
     L["(the allied guilds may not see this relay)"] = "(les guildes alliées ne voient peut-être pas ce relais)"
+    L["(your own alliance channel isn't working)"] = "(votre propre canal de l'alliance ne fonctionne pas)"
     L["election open: %d claims"] = "élection en cours : %d candidatures"
     L["(the holder went quiet)"] = "(le relais ne répond plus)"
     L["your claim in %.1f s"] = "votre candidature dans %.1f s"
