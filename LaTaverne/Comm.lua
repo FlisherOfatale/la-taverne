@@ -277,7 +277,9 @@ function Comm:OnScope(scope, msgType, fn)
     table.insert(handlers[scope][msgType], fn)
 end
 
-local function Dispatch(scope, msgType, sender, payload, protocol, size)
+-- via: "ally" for my guild's messages read from the alliance channel (OnAllyMessage), nil
+-- otherwise; handlers get it last (the relay report says which channel a holder is heard on).
+local function Dispatch(scope, msgType, sender, payload, protocol, size, via)
     local list = handlers[scope] and handlers[scope][msgType]
     local isSelf = ns.IsMe(sender)
     -- (Log off: Trace only counts the unusual ones.)
@@ -296,7 +298,7 @@ local function Dispatch(scope, msgType, sender, payload, protocol, size)
     for _, fn in ipairs(list) do
         -- One crashing handler: counted (logged when the log is on), still reported, and the
         -- next ones still run.
-        xpcall(function() fn(sender, payload, isSelf, protocol) end, function(err)
+        xpcall(function() fn(sender, payload, isSelf, protocol, via) end, function(err)
             Comm:LogNote(format("%s handler crashed: %s", msgType, tostring(err)), "handler error (" .. msgType .. ")")
             geterrorhandler()(err)
         end)
@@ -1254,7 +1256,7 @@ local function OnAllyMessage(text, sender)
             Comm.stats.received = Comm.stats.received + 1
             ns.Guild:NoteSeen(sender)
             if ns.Players then ns.Players:NoteAddon(sender) end -- they run La Taverne
-            Dispatch("guild", msgType, sender, payload, protocol, #text)
+            Dispatch("guild", msgType, sender, payload, protocol, #text, "ally")
             return
         end
         Comm.stats.rejected = Comm.stats.rejected + 1
