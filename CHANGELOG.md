@@ -1,47 +1,51 @@
-# La Taverne 1.2.0
+# La Taverne 1.3.0
 
-*2026-11-22*
+*2026-11-24*
 
 ## English
 
 ### New
-- **Available players where you make your group:** while creating a group, a line beside the dungeon says who's available for it ("Available: 1 Tank, 2 DPS"); click it to add one to the invitations. In **My group**, the available players who fit show under the requests, each with **Invite**.
-- **Groups in progress clean up after themselves:** a group in progress is removed on its own once everyone has left (after 5 minutes alone) or after 3 hours, with a warning in chat first. The next time you open La Taverne, the form is filled in to post it again in one click.
-- **Map switches at hand:** show or hide your guild's and the allies' dots with the lynx tab on the world map or the minimap button's right-click menu, without opening Options. Thanks to FlisherOfatale.
-- **Alliance tab:** sort the players by name, last heard from or version (to see who needs to update), and show the offline ones or not. Each member's version shows, with "(old version)" in orange when it's behind.
+- **Guild relay:** members of an allied guild who don't run La Taverne now show up too. One La Taverne player of each guild (the relay, picked on its own: players in a city first, never in a dungeon or raid) passes their guild chat lines on to the allied guilds, and their map positions when they share them through OpenMap. Nothing is written in the real guild chat. You can stop helping in **Options** (Help relay for my guild), and officers can turn it off for the whole guild in the Alliance setup. The Alliance tab and the minimap tooltip show who relays for each guild. Thanks to FlisherOfatale.
+- **Players passed on by a relay are checked too:** a line from a relay you can vouch for confirms its author (auto-invite without a click); from a relay nobody vouches for, they're "(not checked yet)", and someone the game shows in another guild has their lines and map dot hidden. The Alliance tab lists them, folded, in each guild's card. Thanks to FlisherOfatale.
+- **Controller:** with the game's controller interface on, La Taverne is used with the controller. The d-pad moves a gold frame between the window's elements (with their tooltips), A chooses, Y goes back or closes, LB / RB change section, and lists scroll to follow. A line under the window shows the buttons. B and X stay the game's; in combat the controller goes back to the game. Thanks to NuCl34R.
+- **Invitation card:** when a leader invites you, a card shows on screen with the invitation and a **View** button, with its own sound (heard even with sound effects turned down) and the taskbar flash. No answer after 2 minutes: a reminder in chat and the sound once more. A key binding, **Show what's waiting (invitation, join request)**, does View without the mouse (game Options, Keybindings, AddOns). Thanks to FlisherOfatale.
+- **Allied players in Availability:** the allied players online at the tavern now show in the list too, with their guild's tag, their class color and level, even when they aren't available.
+- **`/taverne roster`:** the guild roster (rank, level, class, online, days offline, notes, and officer notes for ranks that can see them) and the game's roster history, as text to copy into a spreadsheet, each field in its own column. Thanks to FlisherOfatale.
+- **`/taverne debug`:** everything La Taverne can tell about a problem (no chat text), in one text to copy and send to the author. **`/taverne clearcache`** forgets the remembered players (vouching, guild rosters, players seen) if they ever look wrong.
 
 ### Changes
-- **Announce in chat** now sends a La Taverne message to the players who run it, with a link to your group, instead of a line in guild chat. Not in the group's first 5 minutes, then once every 5 minutes. Each player can turn these messages off: **Options > Alerts > Show group announcements from leaders**.
-- In the group list, groups in progress or full are folded under their own heading. The filters fit on one line, and "Hide groups in progress" is gone (the folded heading does its job).
-- With OpenMap: its own "Guild members on the map" switch also hides La Taverne's guild and allied dots, and La Taverne's dot tooltips look like OpenMap's.
-- Players on your ignore list stay hidden in the shared guild chat too.
-- The error report starts empty with each new version.
+- **Availability:** "Other members online" is now **Players not looking for a group right now**, one short line per player; someone without La Taverne shows "Doesn't have La Taverne" where Invite would be. With your group open and "Only those who fit my group" ticked, the available players who don't fit get their own folded section, **Available, but not for your group**.
+- **Alliance tab:** allied players' names in their class color, and each player's level in their tooltip. Allied players running an older version show up without them until they update.
+- A player's level shows under their name in tooltips: a group's leader in the list, and each player on a group's role icons.
+- Allied chat: the grey mark now only shows next to players without La Taverne.
+- The minimap button's glow is round.
 - Updated developer tools.
 
 ### Fixes
-- The alliance channel no longer stays stuck on "connecting": La Taverne joins it again on its own when the game drops it, including when it looks connected but nothing goes through, and checks it after the game's chat server comes back.
-- Nothing sent by the other guilds in the first seconds after a login or `/reload` is lost any more.
-- The Guild Alliance no longer turns itself off for a moment during a loading screen, and shows right after login without opening the game's guild window.
-- Achievement links (Legacy objectives) in allied chat show as their name, not as code.
+- La Taverne now notices an alliance channel that looks connected but doesn't pass messages, and joins it again on its own.
+- In allied chat, an item link keeps its rarity color even when your game doesn't know the item yet.
+- The relay's speech bubble on the minimap button is no longer cut off by minimap skins.
 
 ## Français
 
 ### Nouveautés
-- **Les joueurs disponibles là où vous montez votre groupe :** pendant la création d'un groupe, une ligne à côté du donjon indique qui est disponible pour lui (« Disponibles : 1 Tank, 2 DPS ») ; un clic en ajoute un aux invitations. Dans **Mon groupe**, les joueurs disponibles qui conviennent s'affichent sous les demandes, chacun avec **Inviter**.
-- **Les groupes en cours se rangent d'eux-mêmes :** un groupe en cours est retiré tout seul quand tout le monde est parti (après 5 minutes seul) ou après 3 heures, avec un avertissement dans le chat avant. À la prochaine ouverture de La Taverne, le formulaire est déjà rempli pour le republier en un clic.
-- **Les options de la carte à portée de main :** affichez ou cachez les points de votre guilde et des alliés avec l'onglet lynx sur la carte du monde ou le menu du clic droit sur le bouton de la minicarte, sans ouvrir les Options. Merci à FlisherOfatale.
-- **Onglet Alliance :** triez les joueurs par nom, dernier signe ou version (pour voir qui doit mettre à jour), et affichez ou non ceux qui sont hors ligne. La version de chaque membre s'affiche, avec « (ancienne version) » en orange quand elle est en retard.
+- **Relais de guilde :** les membres d'une guilde alliée qui n'utilisent pas La Taverne apparaissent aussi. Un joueur de chaque guilde qui utilise La Taverne (le relais, choisi tout seul : les joueurs en ville d'abord, jamais en donjon ou en raid) transmet leurs lignes du chat de guilde aux guildes alliées, et leur position sur la carte quand ils la partagent avec OpenMap. Rien n'est écrit dans le vrai chat de guilde. Vous pouvez arrêter d'aider dans les **Options** (Aider à relayer pour ma guilde), et les officiers peuvent le désactiver pour toute la guilde dans la configuration de l'alliance. L'onglet Alliance et l'infobulle de la minicarte indiquent qui relaie pour chaque guilde. Merci à FlisherOfatale.
+- **Les joueurs transmis par un relais sont vérifiés aussi :** une ligne d'un relais dont vous pouvez vous porter garant confirme son auteur (invitation automatique sans clic) ; d'un relais dont personne ne se porte garant, ils sont « (non vérifié) », et quelqu'un que le jeu montre dans une autre guilde a ses lignes et son point sur la carte cachés. L'onglet Alliance les liste, repliés, dans la carte de chaque guilde. Merci à FlisherOfatale.
+- **Manette :** avec l'interface manette du jeu activée, La Taverne s'utilise à la manette. La croix déplace un cadre doré entre les éléments de la fenêtre (avec leurs infobulles), A choisit, Y revient en arrière ou ferme, LB / RB changent de section, et les listes défilent pour suivre. Une ligne sous la fenêtre montre les boutons. B et X restent au jeu ; en combat, la manette revient au jeu. Merci à NuCl34R.
+- **Carte d'invitation :** quand un chef vous invite, une carte s'affiche à l'écran avec l'invitation et un bouton **Voir**, avec son propre son (entendu même avec les effets sonores baissés) et le clignotement de la barre des tâches. Sans réponse après 2 minutes : un rappel dans le chat et le son une fois de plus. Un raccourci, **Afficher ce qui vous attend (invitation, demande)**, fait Voir sans la souris (Options du jeu, Raccourcis, AddOns). Merci à FlisherOfatale.
+- **Les joueurs alliés dans Disponibilités :** les joueurs alliés en ligne à la taverne apparaissent maintenant aussi dans la liste, avec le tag de leur guilde, la couleur de leur classe et leur niveau, même quand ils ne sont pas disponibles.
+- **`/taverne roster` :** la liste de guilde (rang, niveau, classe, en ligne, jours hors ligne, notes, et notes d'officier pour les rangs qui peuvent les voir) et l'historique de la liste du jeu, en texte à copier dans un tableur, chaque champ dans sa propre colonne. Merci à FlisherOfatale.
+- **`/taverne debug` :** tout ce que La Taverne peut dire sur un problème (sans le texte du chat), en un seul texte à copier et envoyer à l'auteur. **`/taverne clearcache`** oublie les joueurs mémorisés (vérifications, listes de guilde, joueurs vus) s'ils semblent erronés.
 
 ### Changements
-- **Annoncer dans le chat** envoie maintenant un message de La Taverne aux joueurs qui l'utilisent, avec un lien vers votre groupe, au lieu d'une ligne dans le chat de guilde. Pas dans les 5 premières minutes du groupe, puis une fois toutes les 5 minutes. Chaque joueur peut désactiver ces messages : **Options > Alertes > Afficher les annonces de groupe des chefs**.
-- Dans la liste des groupes, les groupes en cours ou complets sont repliés sous leur propre titre. Les filtres tiennent sur une ligne, et « Masquer les groupes en cours » disparaît (le titre replié fait le travail).
-- Avec OpenMap : sa propre option « Membres de guilde sur la carte » cache aussi les points de guilde et d'alliés de La Taverne, et les infobulles des points de La Taverne ressemblent à celles d'OpenMap.
-- Les joueurs de votre liste d'ignorés restent cachés dans le chat de guilde partagé aussi.
-- Le rapport d'erreurs repart vide à chaque nouvelle version.
+- **Disponibilités :** « Autres membres en ligne » devient **Joueurs ne cherchant pas de groupe pour le moment**, une courte ligne par joueur ; quelqu'un sans La Taverne affiche « N'a pas La Taverne » à la place d'Inviter. Avec votre groupe ouvert et « Seulement ceux qui conviennent à mon groupe » coché, les joueurs disponibles qui ne conviennent pas ont leur propre section repliée, **Disponibles, mais pas pour votre groupe**.
+- **Onglet Alliance :** le nom des joueurs alliés dans la couleur de leur classe, et le niveau de chaque joueur dans son infobulle. Les joueurs alliés qui ont une version plus ancienne s'affichent sans ces informations jusqu'à leur mise à jour.
+- Le niveau d'un joueur s'affiche sous son nom dans les infobulles : le chef d'un groupe dans la liste, et chaque joueur sur les icônes de rôle d'un groupe.
+- Chat allié : la marque grise ne s'affiche plus qu'à côté des joueurs sans La Taverne.
+- La lueur du bouton de la minicarte est ronde.
 - Outils de développement mis à jour.
 
 ### Corrections
-- Le canal de l'alliance ne reste plus bloqué sur « connexion » : La Taverne le rejoint d'elle-même quand le jeu le coupe, y compris quand il semble connecté mais que rien ne passe, et le vérifie quand le serveur de chat du jeu revient.
-- Plus rien de ce qu'envoient les autres guildes dans les premières secondes après une connexion ou un `/reload` n'est perdu.
-- L'alliance de guildes ne se désactive plus un instant pendant un écran de chargement, et s'affiche dès la connexion sans ouvrir la fenêtre de guilde du jeu.
-- Les liens de hauts faits (objectifs Legacy) dans le chat allié s'affichent avec leur nom, pas en code.
+- La Taverne repère maintenant un canal de l'alliance qui semble connecté mais ne transmet pas les messages, et le rejoint d'elle-même.
+- Dans le chat allié, un lien d'objet garde la couleur de sa rareté même quand votre jeu ne connaît pas encore l'objet.
+- La bulle du relais sur le bouton de la minicarte n'est plus coupée par les skins de minicarte.

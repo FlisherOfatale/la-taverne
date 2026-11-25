@@ -16,7 +16,7 @@
 
 - **Groups:** post a dungeon group or join one, from your guild and the allied guilds. La Taverne sends the party invites.
 - **Availability:** say you're free to play, for which roles and dungeons. Leaders see you and invite you in one click.
-- **Shared guild chat:** your guild chat and the allied guilds' are one, with real item and spell links.
+- **Shared guild chat:** your guild chat and the allied guilds' are one, with real item and spell links. Members without La Taverne are included too, through the guild relay.
 - **Alliance:** who is online with La Taverne in each guild, and what each guild has going on.
 - **World map:** your guildmates and allies as dots on the map, moving as they go.
 - **Auto-invite:** members who type `+1` (or your own keywords) in guild chat get a party invite.
@@ -48,6 +48,8 @@ Everything works inside your own guild right away. Linking allied guilds is done
 - **I'm available:** your roles, any dungeon at your level or the ones you choose, for how long, and a note.
 - Leaders see you right away and can invite you in one click.
 - Shortly before it ends, a window offers **+15 min**, **+1 h** or **Stop**.
+- The **Availability** tab lists who's free: **Available players** first, with their roles, dungeons and note. With your group open, **Only those who fit my group** keeps the others under **Available, but not for your group**.
+- Below, **Players not looking for a group right now**: your guildmates online and the allied players at the tavern (with their guild's tag), one line each with their level, to invite or whisper. Players without La Taverne are marked "Doesn't have La Taverne".
 
 ### Shared guild chat
 
@@ -57,9 +59,17 @@ Everything works inside your own guild right away. Linking allied guilds is done
 - Players on your ignore list stay hidden in the shared chat too.
 - Allied players are checked: their own guild confirms they belong to it. A player who isn't confirmed yet is marked, and an impostor's messages are dropped.
 
+### Guild relay (members without La Taverne)
+
+- Members who don't run La Taverne can't share their guild chat themselves. One La Taverne player of their guild passes their lines on to the allied guilds for them: the **relay**, picked on its own among those who help (players in a city first, never in a dungeon or raid). Nothing is written in the real guild chat.
+- It also passes on the map positions of members who share them through OpenMap.
+- Players passed on by a relay are checked too: a line passed on by a relay you can vouch for confirms its author; from a relay nobody vouches for, they're marked "(not checked yet)", and someone the game shows in another guild is hidden.
+- Everyone with La Taverne helps by default; to stop: **Options > Shared guild chat > Help relay for my guild**. Officers can turn the relay off for the whole guild in **Setup**.
+- The Alliance tab and the minimap button's tooltip show who relays for each guild.
+
 ### Alliance
 
-The **Alliance** tab has one card per guild: who is online with La Taverne (with their version, and a mark for an old one), the players seen in the last two weeks, and how many open groups and available players each guild has right now. Sort the players by name, last heard from or version (to see who needs to update), and show the offline ones or not.
+The **Alliance** tab has one card per guild: who is online with La Taverne (with their version, and a mark for an old one), the players seen in the last two weeks, and how many open groups and available players each guild has right now. Sort the players by name, last heard from or version (to see who needs to update), and show the offline ones or not. Names are in class colors, with each player's level in their tooltip. Each card also shows the guild's relay, and lists (folded) its members without La Taverne heard through it.
 
 The guilds talk over a hidden channel. If the game drops it (a chat server hiccup, a loading screen), La Taverne joins it again on its own, and nothing sent in the first seconds after a login or `/reload` is lost.
 
@@ -83,6 +93,7 @@ The **Setup** tab only shows for players who can edit the Guild Info. It holds t
 
 - **Auto-invite:** who may use it.
 - **Guild Alliance:** the member guilds with a short tag for each, and the shared key.
+- **Guild relay:** whether your members without La Taverne have their guild chat and OpenMap positions passed on to the allied guilds.
 
 Linking guilds is done once by an officer of each guild:
 
@@ -92,7 +103,7 @@ Linking guilds is done once by an officer of each guild:
 
 ### Options
 
-Window size, the chat window for La Taverne's lines, the minimap button and its glow, which new groups to be told about, leaders' group announcements, sounds, **Quiet in dungeons, raids and combat** (no alerts and no sounds there), dungeon names in the other language (English / French) in tooltips, the map, the lynx at the top of the window, and the lynx and tag on allied chat lines. **Error report** is at the bottom.
+Window size, the chat window for La Taverne's lines, the minimap button and its glow, which new groups to be told about, leaders' group announcements, sounds, **Quiet in dungeons, raids and combat** (no alerts and no sounds there), dungeon names in the other language (English / French) in tooltips, the map, the lynx at the top of the window, the lynx and tag on allied chat lines, and helping relay for your guild. **Error report** is at the bottom.
 
 ### Works with
 
@@ -106,6 +117,7 @@ Window size, the chat window for La Taverne's lines, the minimap button and its 
 
 - `/taverne`: open or close the window
 - `/taverne autoinvite`: turn auto-invite on or off
+- `/taverne roster`: the guild roster (rank, level, class, online, days offline, notes, and officer notes for ranks that can see them) and the game's roster history, as text to copy into a spreadsheet
 - `/taverne errors`: the error report, to send along with a bug report
 
 ### Bugs and suggestions
@@ -114,7 +126,7 @@ Please open an issue on GitHub, or leave a comment on CurseForge. If La Taverne 
 
 ### Credits
 
-- World map dots and OpenMap support: FlisherOfatale. Controller interface support: NuCl34R.
+- World map dots, OpenMap support, the guild relay, the invitation card and `/taverne roster`: FlisherOfatale. Controller interface support: NuCl34R.
 - Allied guild chat in the guild window follows GuildUnion's approach (MIT, by Sadance).
 - Uses Ace3 (AceComm, AceSerializer, CallbackHandler), ChatThrottleLib, LibStub, LibDataBroker and LibDBIcon.
 
@@ -132,7 +144,7 @@ The code is under the MIT license. The names "La Taverne" and "Nation du Québec
 
 - **Groupes :** publiez un groupe de donjon ou rejoignez-en un, dans votre guilde et les guildes alliées. La Taverne envoie les invitations de groupe.
 - **Disponibilités :** indiquez que vous êtes libre pour jouer, pour quels rôles et quels donjons. Les chefs vous voient et vous invitent en un clic.
-- **Chat de guilde partagé :** votre chat de guilde et celui des guildes alliées n'en font qu'un, avec de vrais liens d'objets et de sorts.
+- **Chat de guilde partagé :** votre chat de guilde et celui des guildes alliées n'en font qu'un, avec de vrais liens d'objets et de sorts. Les membres sans La Taverne en font partie aussi, grâce au relais de guilde.
 - **Alliance :** qui est en ligne avec La Taverne dans chaque guilde, et ce qui se passe dans chacune.
 - **Carte du monde :** les membres de votre guilde et les alliés en points sur la carte, qui bougent avec eux.
 - **Invitation automatique :** les membres qui tapent `+1` (ou vos propres mots-clés) dans le chat de guilde reçoivent une invitation de groupe.
@@ -164,6 +176,8 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 - **Je suis disponible :** vos rôles, n'importe quel donjon à votre niveau ou ceux que vous choisissez, pour combien de temps, et une note.
 - Les chefs vous voient tout de suite et peuvent vous inviter en un clic.
 - Peu avant la fin, une fenêtre propose **+15 min**, **+1 h** ou **Arrêter**.
+- L'onglet **Disponibilités** liste qui est libre : les **Joueurs disponibles** d'abord, avec leurs rôles, leurs donjons et leur note. Avec votre groupe ouvert, **Seulement ceux qui conviennent à mon groupe** range les autres sous **Disponibles, mais pas pour votre groupe**.
+- En dessous, **Joueurs ne cherchant pas de groupe pour le moment** : les membres de votre guilde en ligne et les joueurs alliés à la taverne (avec le tag de leur guilde), une ligne chacun avec leur niveau, pour les inviter ou leur chuchoter. Les joueurs sans La Taverne sont marqués « N'a pas La Taverne ».
 
 ### Chat de guilde partagé
 
@@ -173,9 +187,17 @@ Tout marche tout de suite dans votre guilde. Le lien avec les guildes alliées s
 - Les joueurs de votre liste d'ignorés restent cachés dans le chat partagé aussi.
 - Les joueurs alliés sont vérifiés : leur propre guilde confirme qu'ils en font partie. Un joueur pas encore confirmé est signalé, et les messages d'un imposteur sont ignorés.
 
+### Relais de guilde (membres sans La Taverne)
+
+- Les membres qui n'utilisent pas La Taverne ne peuvent pas partager leur chat de guilde eux-mêmes. Un joueur de leur guilde qui utilise La Taverne transmet leurs lignes aux guildes alliées pour eux : le **relais**, choisi tout seul parmi ceux qui aident (les joueurs en ville d'abord, jamais en donjon ou en raid). Rien n'est écrit dans le vrai chat de guilde.
+- Il transmet aussi la position sur la carte des membres qui la partagent avec OpenMap.
+- Les joueurs transmis par un relais sont vérifiés aussi : une ligne transmise par un relais dont vous pouvez vous porter garant confirme son auteur ; d'un relais dont personne ne se porte garant, ils sont marqués « (non vérifié) », et quelqu'un que le jeu montre dans une autre guilde est caché.
+- Chaque joueur avec La Taverne aide par défaut ; pour arrêter : **Options > Chat de guilde partagé > Aider à relayer pour ma guilde**. Les officiers peuvent désactiver le relais pour toute la guilde dans **Configuration**.
+- L'onglet Alliance et l'infobulle du bouton de la minicarte indiquent qui relaie pour chaque guilde.
+
 ### Alliance
 
-L'onglet **Alliance** a une carte par guilde : qui est en ligne avec La Taverne (avec sa version, et une marque pour une ancienne), les joueurs vus ces deux dernières semaines, et combien de groupes ouverts et de joueurs disponibles chaque guilde a en ce moment. Triez les joueurs par nom, dernier signe ou version (pour voir qui doit mettre à jour), et affichez ou non ceux qui sont hors ligne.
+L'onglet **Alliance** a une carte par guilde : qui est en ligne avec La Taverne (avec sa version, et une marque pour une ancienne), les joueurs vus ces deux dernières semaines, et combien de groupes ouverts et de joueurs disponibles chaque guilde a en ce moment. Triez les joueurs par nom, dernier signe ou version (pour voir qui doit mettre à jour), et affichez ou non ceux qui sont hors ligne. Les noms sont dans la couleur de leur classe, avec le niveau de chaque joueur dans son infobulle. Chaque carte indique aussi le relais de la guilde, et liste (repliés) ses membres sans La Taverne transmis par lui.
 
 Les guildes communiquent par un canal caché. Si le jeu le coupe (un hoquet du serveur de chat, un écran de chargement), La Taverne le rejoint d'elle-même, et rien de ce qui arrive dans les premières secondes après une connexion ou un `/reload` n'est perdu.
 
@@ -199,6 +221,7 @@ L'onglet **Configuration** n'apparaît que pour les joueurs qui peuvent modifier
 
 - **Invitation automatique :** qui peut l'utiliser.
 - **Alliance de guildes :** les guildes membres avec un tag court pour chacune, et la clé partagée.
+- **Relais de guilde :** si le chat de guilde et les positions OpenMap de vos membres sans La Taverne sont transmis aux guildes alliées.
 
 Le lien entre les guildes se fait une fois, par un officier de chaque guilde :
 
@@ -208,7 +231,7 @@ Le lien entre les guildes se fait une fois, par un officier de chaque guilde :
 
 ### Options
 
-Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de la minicarte et son halo, les nouveaux groupes à signaler, les annonces de groupe des chefs, les sons, **Silencieux en donjon, en raid et en combat** (ni alerte ni son), le nom des donjons dans l'autre langue (anglais / français) dans les infobulles, la carte, le lynx en haut de la fenêtre, et le lynx et le tag sur les lignes des alliés. Le **Rapport d'erreurs** est en bas.
+Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de la minicarte et son halo, les nouveaux groupes à signaler, les annonces de groupe des chefs, les sons, **Silencieux en donjon, en raid et en combat** (ni alerte ni son), le nom des donjons dans l'autre langue (anglais / français) dans les infobulles, la carte, le lynx en haut de la fenêtre, le lynx et le tag sur les lignes des alliés, et l'aide au relais de votre guilde. Le **Rapport d'erreurs** est en bas.
 
 ### Compatible avec
 
@@ -222,6 +245,7 @@ Taille de la fenêtre, fenêtre de chat pour les lignes de La Taverne, bouton de
 
 - `/taverne` : ouvrir ou fermer la fenêtre
 - `/taverne autoinvite` : activer ou désactiver l'invitation automatique
+- `/taverne roster` : la liste de guilde (rang, niveau, classe, en ligne, jours hors ligne, notes, et notes d'officier pour les rangs qui peuvent les voir) et l'historique de la liste du jeu, en texte à copier dans un tableur
 - `/taverne errors` : le rapport d'erreurs, à joindre à un signalement de bug
 
 ### Bugs et suggestions
@@ -230,7 +254,7 @@ Ouvrez une issue sur GitHub, ou laissez un commentaire sur CurseForge. Si La Tav
 
 ### Remerciements
 
-- Points sur la carte du monde et compatibilité OpenMap : FlisherOfatale. Compatibilité avec l'interface manette : NuCl34R.
+- Points sur la carte du monde, compatibilité OpenMap, relais de guilde, carte d'invitation et `/taverne roster` : FlisherOfatale. Compatibilité avec l'interface manette : NuCl34R.
 - Le chat allié dans la fenêtre de guilde reprend l'approche de GuildUnion (MIT, par Sadance).
 - Utilise Ace3 (AceComm, AceSerializer, CallbackHandler), ChatThrottleLib, LibStub, LibDataBroker et LibDBIcon.
 
