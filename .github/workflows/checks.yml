@@ -1,6 +1,7 @@
 name: Checks
 
-# Every push and pull request: luacheck on the addon (config in .luacheckrc).
+# Every push and pull request: luacheck on the addon (config in .luacheckrc), and the relay
+# simulator (tests/README.md).
 on:
   push:
     branches: ["**"]
@@ -17,3 +18,10 @@ jobs:
       - uses: lunarmodules/luacheck@v1.2.0
         with:
           args: LaTaverne
+
+  relay-simulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -q && sudo apt-get install -y -q luajit
+      - run: luajit tests/run.lua

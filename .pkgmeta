@@ -13,6 +13,8 @@ ignore:
   - CHANGELOG.md
   - GUILD-RELAY.md
   - TESTING.md
+  - CLAUDE.md
+  - tests
   - LICENSE
 
 # Release notes for CurseForge and GitHub: the notes of the version being tagged.

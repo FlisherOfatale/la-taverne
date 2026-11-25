@@ -1,7 +1,7 @@
 # Tests still to run in game
 
-Everything here is written but not yet tested in game (there's no Lua on the dev machine: code is
-only checked by reading it). Tests are in priority order: what one player can check alone first,
+Everything here is written but not yet tested in game (the code is checked with luacheck, and the
+guild relay's elections with the simulator in `tests/`, but only the game shows the rest). Tests are in priority order: what one player can check alone first,
 then what needs a second player running this version. Once a test passes, move it to "Done" in
 one line; write down what you saw when it doesn't.
 
