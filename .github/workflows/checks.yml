@@ -1,0 +1,19 @@
+name: Checks
+
+# Every push and pull request: luacheck on the addon (config in .luacheckrc).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  luacheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: lunarmodules/luacheck@v1.2.0
+        with:
+          args: LaTaverne
