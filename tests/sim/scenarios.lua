@@ -5,7 +5,8 @@ local World = require("world")
 
 local JOBS = { "chat", "map" }
 
--- Per second, for each guild and job: how many hold it (two at once: they missed each other),
+-- Per second, for each guild and job: how many hold it (two at once, neither in a fight: they
+-- missed each other),
 -- whether nobody holds it while someone could (a gap), whether the guild's players agree on
 -- who holds it, and whether the allied guilds see that holder.
 local function Recorder(w)
@@ -26,11 +27,15 @@ local function Recorder(w)
             for _, job in ipairs(JOBS) do
                 local r = Get(g.name, job)
                 local holders, eligible = {}, 0
+                local sending = 0 -- holders not in a fight: a holder in a fight sends nothing
                 for _, c in ipairs(online) do
-                    if c:Holding(job) then holders[#holders + 1] = c end
+                    if c:Holding(job) then
+                        holders[#holders + 1] = c
+                        if not c.inCombat then sending = sending + 1 end
+                    end
                     if c:CanRelay(job) then eligible = eligible + 1 end
                 end
-                r.dual = #holders >= 2 and r.dual + 1 or 0
+                r.dual = sending >= 2 and r.dual + 1 or 0
                 if r.dual > r.maxDual then r.maxDual, r.maxDualAt = r.dual, w.now end
                 if eligible > 0 then r.eligibleTotal = r.eligibleTotal + 1 end
                 if #holders == 0 and eligible > 0 then
@@ -189,9 +194,9 @@ S[#S + 1] = { name = "holder disconnects",
         return Check(rec, { dual = 5, gap = 45, split = 45, hidden = 45, changes = 2 }), rec
     end }
 
-S[#S + 1] = { name = "holder fighting when someone logs in", known = true,
-    about = "a guildmate logs in and asks who relays while the relay is in a fight: the relay's answer "
-        .. "waits for the fight's end, the newcomer hears nobody, takes the job, and the relay steps down",
+S[#S + 1] = { name = "holder fighting when someone logs in",
+    about = "a guildmate logs in and asks who relays while the relay is in a fight (it sends nothing): "
+        .. "the newcomer takes the job meanwhile, and one of them steps down once the fight is over",
     run = function(seed, opts)
         local w, rec = Settled(seed, opts)
         local h = Holder(w, "Alpha", "chat")
@@ -200,7 +205,30 @@ S[#S + 1] = { name = "holder fighting when someone logs in", known = true,
         h:Fight(40)
         w:After(2, function() late:Login(1) end)
         w:Run(600)
-        return Check(rec, { dual = 5, gap = 25, split = 15, hidden = 15, changes = 0 }), rec
+        -- Split: the guildmates follow the newcomer, then (maybe) the old relay again after the fight.
+        return Check(rec, { dual = 5, gap = 25, split = 60, hidden = 60, changes = 2 }), rec
+    end }
+
+S[#S + 1] = { name = "better holder fighting when someone logs in",
+    about = "as above, but the newcomer is in a raid group (the worse relay): once the fight is over, "
+        .. "the relay's owed beacon makes the newcomer step down at once",
+    run = function(seed, opts)
+        local w, rec = Settled(seed, opts)
+        local h = Holder(w, "Alpha", "chat")
+        if not h then return { "Alpha chat: no holder after 4 minutes" }, rec end
+        local late = w:AddPlayer("Alpha", "Late")
+        -- Right after its regular beacon: the next one is a minute away.
+        for _ = 1, 70 do
+            if w.now - h.jobs.chat.lastBeacon < 1 then break end
+            w:Run(1)
+        end
+        h:Fight(40)
+        w:After(2, function()
+            late:Login(1)
+            late.inRaid = true
+        end)
+        w:Run(600)
+        return Check(rec, { dual = 5, gap = 25, split = 60, hidden = 60, changes = 2 }), rec
     end }
 
 S[#S + 1] = { name = "the relay enters an instance",
@@ -266,10 +294,8 @@ S[#S + 1] = { name = "busy evening",
             end
         end
         w:Run(7200)
-        -- Two holders for up to a beacon interval or more (both fighting): a holder in a fight doesn't
-        -- answer, see "holder fighting when someone logs in". Back to dual = 15 once that's fixed.
         -- No holder: each election takes 10-20 s, and players come and go all evening.
-        return Check(rec, { dual = 90, gap = 165, gapShare = 0.05 }), rec
+        return Check(rec, { dual = 15, gap = 165, gapShare = 0.05 }), rec
     end }
 
 S[#S + 1] = { name = "self-check sees a holder unseen by the allies",

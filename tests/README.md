@@ -40,10 +40,6 @@ until it's understood.
 A `KNOWN` scenario shows something the relay doesn't handle yet. It's printed and never fails the
 run. Once the relay handles it, remove `known = true`, so it can't come back.
 
-- **Holder fighting when someone logs in**: in a fight, the holder sends nothing (the game would
-  hold it). So it doesn't answer a newcomer asking who relays, nor beacon back at a claim. The
-  newcomer takes the job, and the holder steps down: a needless handover, and two holders until
-  the holder's next beacon (up to a minute). The busy evening scenario allows for it.
 - **Holder's alliance messages lost**: the holder's alliance channel looks fine, but its messages
   don't arrive. Its own guild still hears it on the guild channel, so nobody takes over, and the
   allied guilds see no relay for that guild.

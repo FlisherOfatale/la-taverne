@@ -517,7 +517,13 @@ end
 -- counts in the next one.)
 local function Beacon(job)
     local st = jobs[job]
-    if SendingPaused() then return end -- the tick sends it once the fight is over
+    -- Owed: the tick sends it as soon as the fight is over. (An answer to a newcomer's ask, or to
+    -- a claim, can't wait for the next regular beacon: they'd hold the job meanwhile, both of us.)
+    if SendingPaused() then
+        st.beaconOwed = true
+        return
+    end
+    st.beaconOwed = nil
     st.lastBeacon = GetTime()
     local tier = Tier(job) or 3
     st.beaconTier = tier -- what the others know of me (two holders compare these)
@@ -1504,7 +1510,7 @@ local function TickJob(job)
             Release(job, why)
         else
             st.heldTier = tier
-            if now - st.lastBeacon >= BEACON_EVERY then Beacon(job) end
+            if now - st.lastBeacon >= BEACON_EVERY or (st.beaconOwed and not SendingPaused()) then Beacon(job) end
         end
         return
     end
