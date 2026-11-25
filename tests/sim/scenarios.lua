@@ -9,7 +9,7 @@ local JOBS = { "chat", "map" }
 -- whether nobody holds it while someone could (a gap), whether the guild's players agree on
 -- who holds it, and whether the allied guilds see that holder.
 local function Recorder(w)
-    local rec = { by = {} }
+    local rec = { by = {}, world = w }
     local function Get(g, job)
         local k = g .. "/" .. job
         local r = rec.by[k]
@@ -100,6 +100,14 @@ local function Check(rec, limits, only)
             if limits.gapShare and r.eligibleTotal > 0 and r.gapTotal / r.eligibleTotal > limits.gapShare then
                 fails[#fails + 1] = string.format("%s %s: no holder %.1f %% of the time (limit %.1f %%)", r.guild, r.job,
                     100 * r.gapTotal / r.eligibleTotal, 100 * limits.gapShare)
+            end
+        end
+    end
+    -- The relay's self-checks (Relay.lua) must stay quiet unless the scenario expects them.
+    if not limits.selfChecks then
+        for _, e in ipairs(rec.world.selfChecks) do
+            if not only or only[e.guild] then
+                fails[#fails + 1] = string.format("%s at %.0f: %s", e.name, e.at, e.text)
             end
         end
     end
@@ -218,7 +226,8 @@ S[#S + 1] = { name = "lossy channels",
         for i, c in ipairs(Players(w, "Alpha", 6, "Alpha")) do w:After(i * 5, function() c:Login() end) end
         for i, c in ipairs(Players(w, "Beta", 3, "Beta")) do w:After(i * 5, function() c:Login() end) end
         w:Run(1800)
-        return Check(rec, { dual = 20, gap = 40, gapShare = 0.03 }), rec
+        -- Two alliance copies in a row lost now and then: the self-check may say so, rightly.
+        return Check(rec, { dual = 20, gap = 40, gapShare = 0.03, selfChecks = true }), rec
     end }
 
 S[#S + 1] = { name = "busy evening",
@@ -263,6 +272,29 @@ S[#S + 1] = { name = "busy evening",
         return Check(rec, { dual = 90, gap = 165, gapShare = 0.05 }), rec
     end }
 
+S[#S + 1] = { name = "self-check sees a holder unseen by the allies",
+    about = "the relay's alliance messages never arrive: its guildmates' self-check says so",
+    run = function(seed, opts)
+        local w, rec = Settled(seed, opts)
+        local h = Holder(w, "Alpha", "chat")
+        if not h then return { "Alpha chat: no holder after 4 minutes" }, rec end
+        h.faults.allyOutLost = true
+        local lostAt = w.now
+        w:Run(360)
+        -- Every guildmate notices within 4 min 20 (three beacons without their alliance copy, a fourth says so).
+        local fails = {}
+        for _, c in ipairs(w:Online("Alpha")) do
+            if c ~= h then
+                local seen
+                for _, e in ipairs(w.selfChecks) do
+                    if e.name == c.name and e.text:find("guild channel only", 1, true) and e.at - lostAt <= 260 then seen = true end
+                end
+                if not seen then fails[#fails + 1] = c.name .. ": no self-check line within 260 s" end
+            end
+        end
+        return fails, rec
+    end }
+
 S[#S + 1] = { name = "holder's alliance messages lost", known = true,
     about = "the relay's alliance channel looks fine but its messages never arrive: its guild hears it "
         .. "(guild channel), the allied guilds don't, and nobody takes over",
@@ -272,7 +304,7 @@ S[#S + 1] = { name = "holder's alliance messages lost", known = true,
         if not h then return { "Alpha chat: no holder after 4 minutes" }, rec end
         h.faults.allyOutLost = true
         w:Run(600)
-        return Check(rec, { hidden = 160 }, { Alpha = true }), rec
+        return Check(rec, { hidden = 160, selfChecks = true }, { Alpha = true }), rec
     end }
 
 return S

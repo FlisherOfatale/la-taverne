@@ -63,6 +63,7 @@ function World.new(opts)
     w.guildOrder = {}
     w.clients = {}     -- [key] = client (online or not)
     w.watchers = {}
+    w.selfChecks = {}  -- the relay's self-check lines: { at, name, guild, text }
     w.trace = opts.trace
     math.randomseed(opts.seed or 1)
     w.relayChunk = assert(loadfile(w.addonDir .. "/Relay.lua"))
@@ -237,6 +238,9 @@ local function NewComm(c)
     function comm:LogNote(text, unusual)
         c.notes[#c.notes + 1] = string.format("%.1f %s%s", w.now, unusual and "!! " or "", text)
         if #c.notes > 400 then table.remove(c.notes, 1) end
+        if unusual == "relay self-check" then
+            w.selfChecks[#w.selfChecks + 1] = { at = w.now, name = c.name, guild = c.guild, text = text }
+        end
         if w.trace then w:Log("%s: %s", c.name, text) end
     end
 

@@ -592,7 +592,7 @@ local function Take(job)
     st.since = GetServerTime()
     st.heldTier = Tier(job)
     st.lastHeld = GetTime()
-    st.betterSince = nil
+    st.betterSince, st.dualHeard = nil, nil
     st.report = NewReport()
     stats.took = stats.took + 1
     Note("I hold %s (tier %s)", job, tostring(st.heldTier))
@@ -612,7 +612,7 @@ end
 local function Release(job, why, silent)
     local st = jobs[job]
     if not st.holding then return end
-    st.holding = false
+    st.holding, st.dualHeard = false, nil
     st.lastHeld = GetTime()
     if why == "busy" then st.restUntil = GetTime() + BUSY_REST end
     stats.released = stats.released + 1
@@ -779,6 +779,11 @@ local function OnGuildRLY(sender, p)
                 Release(job, "two holders", true)
                 st.holder = { name = sender, key = key, tier = tier, since = tonumber(p.since), rp = rp, heard = GetTime(), q = 0 }
             else
+                -- (The self-check: the other one should stop once it hears me.)
+                local d = st.dualHeard
+                if not d or d.key ~= key then d = { key = key, name = sender, first = GetTime() } end
+                d.at = GetTime()
+                st.dualHeard = d
                 BeaconSoon(job)
             end
             return
@@ -854,19 +859,43 @@ local function SeenRLY(sender, u)
     return false
 end
 
--- My guildmates' beacons, by the channel they came on (both copies, before SeenRLY drops one):
--- [job][key] = { guild = GetTime(), ally = GetTime() }, for the relay report. Started again when
--- they claim the job or give it up: a holding's times say nothing about the next one.
+-- My guildmates' beacons, by the channel they came on (both copies, before SeenRLY drops one),
+-- for the relay report: [job][key] = { guild = GetTime(), ally = GetTime(), missed, prevU,
+-- allyU }. missed: beacons in a row whose alliance copy never came (its two copies share u; the
+-- alliance one may come first). Started again when they claim the job or give it up: a holding's
+-- figures say nothing about the next one.
 local beaconVia = {}
+local allyReadyAt -- my alliance channel ready since (Comm:OnReady): nothing came on it before
 for _, job in ipairs(JOB_ORDER) do beaconVia[job] = {} end
+
+local function NoteBeaconVia(t, u, via)
+    local now = GetTime()
+    if via == "ally" then
+        t.ally = now
+        t.allyU[#t.allyU + 1] = u
+        if #t.allyU > 4 then table.remove(t.allyU, 1) end
+        return
+    end
+    -- A new guild copy: did the previous beacon's alliance copy come? Counted only when my
+    -- alliance channel was ready a little before that beacon (it can't have come otherwise).
+    local prev = t.prevU
+    if prev ~= nil and allyReadyAt and t.guild and t.guild - allyReadyAt > 2 then
+        local came = false
+        for _, v in ipairs(t.allyU) do
+            if v == prev then came = true end
+        end
+        t.missed = came and 0 or (t.missed or 0) + 1
+    end
+    t.prevU, t.guild = u, now
+end
 
 ns.Comm:On("RLY", function(sender, p, isSelf, _, via)
     if isSelf or type(p.op) ~= "string" then return end
     local key = beaconVia[p.j] and ns.NameKey(sender)
     if key then
         if p.op == "hold" then
-            local t = beaconVia[p.j][key] or {}
-            t[via == "ally" and "ally" or "guild"] = GetTime()
+            local t = beaconVia[p.j][key] or { allyU = {} }
+            NoteBeaconVia(t, p.u, via)
             beaconVia[p.j][key] = t
         elseif p.op == "off" or (p.op == "claim" and not p.ch) then
             beaconVia[p.j][key] = nil
@@ -882,13 +911,13 @@ ns.Comm:OnAlly("RLY", function(sender, p, isSelf)
 end)
 
 -- For the relay report: when my guild's holder's beacon last came on each channel, and whether
--- that looks wrong (warn): the guild copies arrive and the alliance ones don't (or lag well
--- behind). The holder's client sends the guild copy once the game took the alliance one, so the
+-- that looks wrong (warn): VIA_MISSED beacons in a row came on the guild channel and not on the
+-- alliance channel (a copy can be lost; the holder's fights also space its beacons out). The holder's client sends the guild copy once the game took the alliance one, so the
 -- alliance copies were lost on the way: the allied guilds may not see that holder either. Only
 -- when that can be told: my own alliance channel works (otherwise I'd hear no holder there, and
 -- that's mine to fix), and the roster knows the holder (Comm drops my guild's alliance copies
 -- from a sender it doesn't list yet: the roster loads after login, a member who just joined).
-local VIA_LAG = 90 -- one beacon missed on the alliance channel, and more
+local VIA_MISSED = 3 -- (two in a row get lost now and then)
 function Relay:BeaconViaText(job, key, name)
     local t = beaconVia[job] and beaconVia[job][key]
     local now = GetTime()
@@ -897,7 +926,7 @@ function Relay:BeaconViaText(job, key, name)
     end
     local guildAt, allyAt = t and t.guild, t and t.ally
     local text = format(L["beacons: guild channel %s, alliance channel %s"], Ago(guildAt), Ago(allyAt))
-    local missing = guildAt ~= nil and now - guildAt < LEASE and (not allyAt or guildAt - allyAt > VIA_LAG)
+    local missing = guildAt ~= nil and now - guildAt < LEASE and (t.missed or 0) >= VIA_MISSED
     if not missing then return text, false end
     if not ns.Comm:IsAllyReady() or ns.Comm:AllyLooksBroken() then
         return text .. " " .. L["(your own alliance channel isn't working)"], false
@@ -1634,9 +1663,66 @@ local function TrackUptime()
     end
 end
 
+-- Self-checks ---------------------------------------------------------------------------------
+-- States the relay should never stay in. Each check says so once when it starts failing (an
+-- unusual line in the message log, counted even with the log off, and an event on the relay
+-- page), and again only after it cleared. stats.checks counts them by kind (the report).
+local CHECK_ELECTION = 60              -- an election open this long while I could claim (one takes 10-20 s)
+local CHECK_BEACON = BEACON_EVERY + 15 -- my own beacon this late while I can send
+local CHECK_DUAL = 150                 -- another holder heard over this long while I stay holder (its last beacon fresh)
+local checkOn = {} -- [kind:job] = true while failing
+stats.checks = {}
+
+local function Check(kind, job, failing, fmt, ...)
+    local id = kind .. ":" .. job
+    if not failing then
+        checkOn[id] = nil
+        return
+    end
+    if checkOn[id] then return end
+    checkOn[id] = true
+    stats.checks[kind] = (stats.checks[kind] or 0) + 1
+    Record("relay self-check", fmt, ...)
+end
+
+local function SelfCheck(job)
+    local st = jobs[job]
+    local now = GetTime()
+    -- Holding it, and also an election open or another holder named: two views at once.
+    Check("state", job, st.holding and (st.free or st.holder ~= nil),
+        "self-check: %s: you hold it, and an election is open or another holder is named", job)
+    -- My beacon late, nothing holding it back (TickJob sends it every BEACON_EVERY).
+    Check("beacon", job, st.holding and not SendingPaused() and now - st.lastBeacon > CHECK_BEACON,
+        "self-check: %s: your beacon is %d s late", job, math.floor(now - st.lastBeacon))
+    -- An election that doesn't end while I could take part all along (not while I can't claim:
+    -- in a dungeon, in my fight...).
+    if st.free and ClaimTier(job) ~= nil and not SendingPaused() then
+        st.freeSince = st.freeSince or now
+    else
+        st.freeSince = nil
+    end
+    Check("election", job, st.freeSince ~= nil and now - st.freeSince > CHECK_ELECTION,
+        "self-check: %s: election open for %d s, nobody took the job", job, math.floor(now - (st.freeSince or now)))
+    -- Another holder that keeps beaconing while I hold it: it doesn't hear me.
+    local d = st.dualHeard
+    Check("dual", job, st.holding and d ~= nil and d.at - d.first >= CHECK_DUAL and now - d.at < BEACON_EVERY + 15,
+        "self-check: %s: %s has held it too for %d s (doesn't hear you)", job, d and d.name or "?",
+        d and math.floor(d.at - d.first) or 0)
+    -- My guild's holder heard on the guild channel only: the allied guilds may not see it.
+    local h, hidden = st.holder, false
+    if h and not st.free and not st.holding then
+        local _, warn = Relay:BeaconViaText(job, h.key, h.name)
+        hidden = warn
+    end
+    Check("hidden", job, hidden,
+        "self-check: %s: %s's beacons come on the guild channel only (the allied guilds may not see this relay)",
+        job, h and h.name or "?")
+end
+
 local function Tick()
     Prune()
     for _, job in ipairs(JOB_ORDER) do TickJob(job) end
+    for _, job in ipairs(JOB_ORDER) do SelfCheck(job) end
     Pump()
     PumpMap()
     WatchBudget()
@@ -1680,6 +1766,7 @@ function Relay:OnLogin()
     -- (each guild's holders answer).
     ns.Comm:OnReady(function(role)
         if role ~= "ally" then return end
+        allyReadyAt = GetTime()
         for _, job in ipairs(JOB_ORDER) do jobs[job].askedAt = nil end
     end)
     C_Timer.NewTicker(TICK, Tick)
@@ -1894,6 +1981,10 @@ local function TierCounts(job)
     return tiers, cant, unknown, probable
 end
 
+local CHECK_KINDS = { "state", "beacon", "election", "dual", "hidden" }
+local CHECK_NAMES = { state = "two views at once", beacon = "your beacon late", election = "long election",
+    dual = "two holders", hidden = "holder unseen by the allies" }
+
 local function ReportText()
     local out = {}
     local function Add(text) out[#out + 1] = text end
@@ -2058,6 +2149,13 @@ local function ReportText()
         s.sent, s.gapFills, s.sent > 0 and s.waitTotal / s.sent or 0, s.waitMax, s.maxQueue))
     Add("    " .. format(L["took it %d, gave it up %d, stalls %d, elections %d, your claims %d"],
         s.took, s.released, s.stalls, s.elections, s.claims))
+    local failed = {}
+    for _, kind in ipairs(CHECK_KINDS) do
+        local n = s.checks[kind]
+        if n then failed[#failed + 1] = L[CHECK_NAMES[kind]] .. " " .. n end
+    end
+    Add("    " .. (#failed > 0 and format(L["self-checks failed: %s (see the last events)"], table.concat(failed, ", "))
+        or L["self-checks: all passed"]))
     local a = ns.AllyChat.stats
     Add("    " .. format(L["received: relayed lines %d, copies dropped %d, refused %d"], a.relayed or 0, a.copies or 0, a.refused or 0))
     local heardFrom, skippedFrom = 0, 0
