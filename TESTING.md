@@ -1,8 +1,10 @@
 # Tests still to run in game
 
-Everything here is written but not yet tested in game (the code is checked with luacheck, and the
-guild relay's elections with the simulator in `tests/`, but only the game shows the rest). Tests are in priority order: what one player can check alone first,
-then what needs a second player running this version. Once a test passes, move it to "Done" in
+Everything here is written but not yet tested in game. What the code can check isn't listed: luacheck
+catches misspelled names, and the relay simulator (`tests/`) plays the guild relay's elections (one
+relay per guild and job; handovers on logout, disconnect, dungeon, raid and fights; lost messages).
+Tests are in priority order: what one player can check alone first, then what needs a second
+player running this version. Once a test passes, move it to "Done" in
 one line; write down what you saw when it doesn't.
 
 **Before testing:** `/console scriptErrors 1`. After: `/taverne errors`, and for relay tests
@@ -41,16 +43,15 @@ To start the vouching tests from a clean slate (keeps every setting):
 ## 3. With a second player: essential
 Needs two players **in the same guild**, both on this version (the tests across two guilds
 passed: see "Done").
-- [ ] Guild relay, two candidates: exactly one relays (`/taverne relay` on both).
 - [ ] Relay page, same guild: a handover shows as a planned holder change, a killed game as
       unplanned; the other candidate shows in "Who can relay" within 5 minutes.
 - [ ] Guild relay: `/taverne dev say Firstname Lastname: text` (test mode) shows once on the
       allied PC; the La Taverne players' own lines also show once (no double line).
-- [ ] Guild relay, handover: switch "Help relay for my guild" off (popup first), `/reload`, log
-      out, join a raid group, enter an instance: the other candidate takes over, and lines said
-      meanwhile are sent late (not lost).
-- [ ] Guild relay in a fight: lines wait, nobody else takes over if the fight is short. The
-      relay's game killed: the other takes over (~13 s after a line is owed).
+- [ ] Guild relay, handover (who takes over is the simulator's; the lines are the game's): switch
+      "Help relay for my guild" off (popup first), `/reload` or log out while guildmates without
+      La Taverne talk: the lines said meanwhile reach the allied PC late, not lost.
+- [ ] Guild relay in a fight: lines wait and go out after it. The relay's game killed while
+      someone talks: the other candidate sends the owed lines (~13 s after a line is owed).
 - [ ] Relayed line mark: a relayed line shows a grey lynx instead of the gold one (full game
       restart first: new file `media/lynx_icon_grey.tga`), and once the line "Allied lines
       marked ... can't see your answers".
