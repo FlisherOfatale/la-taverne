@@ -783,7 +783,7 @@ end
 -- An atlas on a texture, mirrored left for right.
 local function Mirrored(tex, name)
     tex:SetAtlas(name)
-    local ulx, uly, llx, lly, urx = tex:GetTexCoord()
+    local ulx, uly, _, lly, urx = tex:GetTexCoord()
     tex:SetTexCoord(urx, ulx, uly, lly)
 end
 

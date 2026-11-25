@@ -317,7 +317,7 @@ ns.commands.who = function(arg)
     local total = GetNumGuildMembers()
     local hits = 0
     for i = 1, total or 0 do
-        local name, rank, rankIndex, level, class, zone, _, _, online = GetGuildRosterInfo(i)
+        local name, rank, rankIndex, level, class, _, _, _, online = GetGuildRosterInfo(i)
         if name and name:lower():find(needle, 1, true) then
             hits = hits + 1
             L(q(name), "rank", q(rank), rankIndex, "level", level, "class", class, "online", online and "yes" or "no")

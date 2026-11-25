@@ -4256,9 +4256,9 @@ local function BuildNetworkPanel()
             if i > 1 then rows[#rows + 1] = { kind = "gap" } end
             local key = g.name:lower()
             local seen = g.mine and ns.Players:GetGuildAddonUsers() or byGuild[key] or {}
-            local online, offline = {}, {}
+            local online = {}
             for _, pl in ipairs(seen) do
-                if pl.online then online[#online + 1] = pl else offline[#offline + 1] = pl end
+                if pl.online then online[#online + 1] = pl end
             end
             -- Header: what's going on (groups, available), then who's there.
             local parts = {}

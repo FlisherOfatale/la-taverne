@@ -46,7 +46,6 @@ local ALONE_MAX = 5 * 60
 local RUNNING_MAX = 3 * 60 * 60
 local RUNNING_WARN = 10 * 60 -- the leader is told this long before RUNNING_MAX
 local REQUEST_TTL = 10 * 60  -- a join request nobody answered expires after 10 minutes
-local MAX_SIZE = 10
 local NOTE_MAX = 250
 local CHANNEL_MAX = 40
 
