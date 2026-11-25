@@ -5,10 +5,14 @@ local ADDON, ns = ...
 local L = ns.L
 
 -- One field: no tabs or line breaks inside (they'd split the columns or the rows), and no spaces
--- around it (a note typed " 04-11-2026" wouldn't match "04-11-2026" in a spreadsheet).
+-- around it (a note typed " 04-11-2026" wouldn't match "04-11-2026" in a spreadsheet). Starting
+-- with = + - @, a spreadsheet would read it as a formula ("-alt of Bob": an error): a ' in front
+-- keeps it text (the spreadsheet doesn't show the ').
 local function Field(v)
     if v == nil then return "" end
-    return strtrim((tostring(v):gsub("[\t\r\n]+", " ")))
+    local text = strtrim((tostring(v):gsub("[\t\r\n]+", " ")))
+    if text:match("^[=+%-@]") then text = "'" .. text end
+    return text
 end
 
 local function Row(...)
@@ -60,11 +64,13 @@ local EVENTS = {
     quit = "Left",
 }
 
-local function BuildText()
+-- stamp: the time in the title, set once when the window opens (a text changing every minute
+-- would be refilled, losing the selection Copy just made).
+local function BuildText(stamp)
     local out = {}
     local function Add(text) out[#out + 1] = text end
     local guild = GetGuildInfo("player")
-    Add(format(L["Guild roster of %s, %s"], tostring(guild or "?"), date("%Y-%m-%d %H:%M")))
+    Add(format(L["Guild roster of %s, %s"], tostring(guild or "?"), stamp or date("%Y-%m-%d %H:%M")))
 
     -- Members: by rank, then by name.
     local total, onlineCount = GetNumGuildMembers()
@@ -86,11 +92,11 @@ local function BuildText()
         if a.rankIndex ~= b.rankIndex then return a.rankIndex < b.rankIndex end
         return a.name < b.name
     end)
-    -- Fewer listed than the game counts, or no offline member listed while the box is unticked
-    -- and the game says someone is offline: an error instead of the list. (Everyone online:
-    -- the list is complete, box ticked or not.)
+    -- Fewer listed than the game counts (always), or no offline member listed while the box is
+    -- unticked and the game says someone is offline: an error instead of the list. (Everyone
+    -- online: the list is complete, box ticked or not.)
     local someoneOffline = tonumber(onlineCount) == nil or tonumber(onlineCount) < total
-    if #members > 0 and not anyOffline and (#members < total or (OfflineHidden() and someoneOffline)) then
+    if #members > 0 and (#members < total or (not anyOffline and OfflineHidden() and someoneOffline)) then
         return "|cffff3333" .. L[OFFLINE_HIDDEN] .. "|r"
     end
     Add(format(L["Members: %d"], #members))
@@ -146,13 +152,14 @@ ns.commands.roster = function()
     -- Ask the game for the roster and its history: the text fills in as they arrive.
     if ns.Guild.RequestRoster then ns.Guild.RequestRoster() end
     if QueryGuildEventLog then QueryGuildEventLog() end
+    local stamp = date("%Y-%m-%d %H:%M")
     ns.TextDialog({
         kind = "roster",
         title = L["Guild roster"],
         width = 760,
         hint = L["Tab-separated: pasted in a spreadsheet, each field gets its own column. Copy selects it all: then Ctrl+C."],
-        text = BuildText(),
-        autoFill = BuildText,
+        text = BuildText(stamp),
+        autoFill = function() return BuildText(stamp) end,
         autoEvery = 3,
         button = L["Copy"],
         onButton = function()

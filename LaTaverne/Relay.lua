@@ -468,7 +468,7 @@ function Relay:StatusText(guild, job, playersOnline)
         -- (Vouch.lua): "(not checked yet)" or "(disputed)" after it: what it passes on is only
         -- as checked as it is.
         local who = ns.IsMe(entry.name) and ("|cff40ff40" .. L["you"] .. "|r") or entry.name
-        local mark = (not ns.IsMe(entry.name) and not ns.Guild:IsMyGuild(guild) and ns.Vouch) and ns.Vouch:Mark(entry.name) or ""
+        local mark = (not ns.IsMe(entry.name) and not ns.Guild:IsMyGuild(guild) and ns.Vouch) and ns.Vouch:Mark(entry.name, guild) or ""
         return format("%s (%s)%s", who, Relay.TierText(entry.tier), mark), entry
     end
     if ns.Guild:IsMyGuild(guild) and ns.Alliance:IsInfoKnown() and not ns.Alliance:RelayAllows(job) then

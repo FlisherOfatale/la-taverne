@@ -518,6 +518,10 @@ ns.Comm:OnAlly("RCHAT", function(sender, payload, isSelf)
     end
     local guid = type(payload.id) == "string" and payload.id:match("^Player%-[%w%-]+$") or nil
     local class = type(payload.c) == "string" and payload.c:match("^%u+$") or nil
+    -- A line that wouldn't show (empty, hidden by the game, the author on my ignore list): it
+    -- counts for nothing, vouching included.
+    local text = payload.m
+    if type(text) ~= "string" or text == "" or IsSecret(text) or ns.IsIgnored(author) then return end
     -- Vouching: the author is only as checked as their relay (before Receive: auto-invite reads
     -- it). The game shows them in another guild: hidden.
     if ns.Vouch and not ns.Vouch:Relayed(author, payload.g, sender, "chat") then return end

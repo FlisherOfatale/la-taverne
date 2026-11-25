@@ -62,10 +62,10 @@ Vouch.EXEMPT = { VQ = true, VA = true }
 -- from each online ally). They're checked once they post or talk. Same for "who's inviting?".
 -- Map positions (every few seconds from each ally) too, and without refreshing the window for
 -- each one ("quiet": only when the player is new).
--- The relay's coordination (RLY: claims, beacons, Relay.lua) only says who relays: quiet too.
--- The positions a relay passes on (RMAP, every 30 s to 2 min) are never held either, but they
--- speak for other players: their relay gets asked about ("check"), as for its chat lines.
-Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "quiet", RMAP = "check" }
+-- The relay's coordination (RLY: claims, beacons, Relay.lua) and the positions a relay passes on
+-- (RMAP, every 30 s to 2 min) are never held, but a relay speaks for other players: it gets
+-- asked about ("check"), as for its chat lines, so its mark says what's known of it.
+Vouch.PASSIVE = { HI = true, INVITING_Q = true, POS = "quiet", RLY = "check", RMAP = "check" }
 
 -- [nameKey] = { name, guild, state, by, source, t (answer time), seen, waiting, timer, shown,
 -- hidden }. state, by, source, t: the answers (state: "checking", "confirmed", "unverified",
@@ -582,7 +582,8 @@ function Vouch:Gate(sender, guild, fn, passive)
     local state, rec = StateOf(entry)
     Remember(entry, state)
     if passive and state ~= "denied" then
-        -- "check" (a relay's map batches): not held, but asked about like a sender who talks.
+        -- "check" (a relay's claims, beacons and map batches): not held, but asked about like a
+        -- sender who talks.
         if passive == "check" and (not rec or Absence(rec)) and not Fresh(entry) and not entry.timer then Ask(entry) end
         if (passive ~= "quiet" and passive ~= "check") or isNew then Changed() end
         fn()
@@ -618,17 +619,20 @@ function Vouch:Gate(sender, guild, fn, passive)
 end
 
 -- "confirmed", "unverified", "disputed", "denied", "checking", or nil (never heard of them, or
--- only a hello so far). A relayed player (never heard from themselves): their relayed state
--- ("unverified" for map only). Heard from themselves: their own state only (what a relay passes
--- on about them says nothing more; the game's sightings already count in it).
+-- only a hello so far). Their own state first; none yet (only a hello, or never heard from
+-- themselves): their relayed state. Map only: "unverified" for a player never heard from
+-- themselves, nothing for one who said hello (a position vouches for nobody, and they run La
+-- Taverne: their own messages get them checked).
 function Vouch:GetState(name)
     local key = ns.NameKey(name) or ""
     local entry = players[key]
-    if entry then return StateOf(entry) end
-    if not relayed[key] then return nil end
-    local state
-    state = RelayedState(relayed[key])
-    return state == "map" and "unverified" or state
+    local state = entry and StateOf(entry)
+    if state then return state end
+    local r = relayed[key]
+    if not r then return nil end
+    state = RelayedState(r)
+    if state == "map" then return not entry and "unverified" or nil end
+    return state
 end
 
 function Vouch:IsDenied(name)
@@ -650,8 +654,14 @@ function Vouch:IsConfirmed(name)
 end
 
 -- The mark after an allied player's name in lists: "(not checked yet)", "(disputed)", or "".
-function Vouch:Mark(name)
+-- relayGuild: they're that guild's relay; no state yet (not asked yet, or asking): "(not
+-- checked yet)" too unless I vouch for them there (what they pass on is only as checked as they
+-- are).
+function Vouch:Mark(name, relayGuild)
     local state = self:GetState(name)
+    if relayGuild and (state == nil or state == "checking") and not Vouched(name, relayGuild) then
+        state = "unverified"
+    end
     if state == "unverified" then return " |cffff9900(" .. L["not checked yet"] .. ")|r" end
     if state == "disputed" then return " |cffff9900(" .. L["disputed"] .. ")|r" end
     return ""
@@ -803,8 +813,13 @@ end
 -- The state line of one player, or nil if never heard of.
 function Vouch:Describe(name)
     local key = ns.NameKey(name) or ""
-    -- Heard from themselves: their own state only (as GetState).
-    local item = players[key] and Item(players[key]) or (relayed[key] and RelayedItem(relayed[key]))
+    -- Their own state first, then the relayed one (not "map only" for one who said hello: as
+    -- GetState).
+    local item = players[key] and Item(players[key])
+    if not (item and item.state) and relayed[key] then
+        local r = RelayedItem(relayed[key])
+        if not (players[key] and r.state == "map") then item = r end
+    end
     if not (item and item.state) then return nil end
     return Vouch.StateText(item)
 end
@@ -851,7 +866,8 @@ function Vouch:Relayed(name, guild, relay, kind)
             ns.Comm:LogNote(format("relayed line from %s hidden: not in [%s] (%s)", name, tostring(guild),
                 tostring(rec and rec.src)), "denied sender")
         end
-        Changed()
+        -- (A position: only when it changes something on the page, as below.)
+        if kind == "chat" or isNew or changed then Changed() end
         return false
     end
     -- (A position: only when it changes something on the page. A line: "last heard" moves too.)
