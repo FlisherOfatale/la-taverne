@@ -176,8 +176,10 @@ local function ShowInFrame(frame, author, class, guid, text, tagText, viaEvent)
         local handler = viaEvent and frame.OnEvent or frame.MessageEventHandler
         -- The 18th value (game 12.1.0 and later): about a line from the guild's linked Discord.
         -- The game's handler reads it for every guild line; an in-game line says it's not one.
+        -- userID must be the number 0: anything else (even "") makes the game take the line for a
+        -- Discord one, with a Discord link in place of the player link (so no tag, no whisper).
         local discordInfo = {
-            userID = "", globalName = author, type = 0, lastOnlineGUID = guid or "", lastOnlineName = author,
+            userID = 0, globalName = author, type = 0, lastOnlineGUID = guid or "", lastOnlineName = author,
             hasAttachment = false, hasPoll = false, hasEmbed = false, hasSticker = false, hasEmoji = false,
             hasError = false, hasForwardedMessage = false, forwardedMessage = "", fromDiscord = false,
         }
