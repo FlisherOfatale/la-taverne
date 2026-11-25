@@ -280,28 +280,26 @@ end
 local function Dispatch(scope, msgType, sender, payload, protocol, size)
     local list = handlers[scope] and handlers[scope][msgType]
     local isSelf = ns.IsMe(sender)
-    if msgLog.on and not isSelf then
+    -- (Log off: Trace only counts the unusual ones.)
+    if not isSelf then
         local bad = type(payload.ver) ~= "string"
             or (scope == "ally" and (type(payload.g) ~= "string" or type(payload.n) ~= "number"))
         if not list then
             local v = type(payload.ver) == "string" and payload.ver or "?"
             Trace("in", scope, msgType, sender, size, "no handler (sender has " .. v .. ")", payload, "unknown type")
-        else
+        elseif msgLog.on or bad then
             Trace("in", scope, msgType, sender, size, "delivered", payload, bad and "bad field" or nil)
         end
     end
     if not list then return end
     if not isSelf and type(payload) == "table" then NoteVersion(sender, payload.ver) end
     for _, fn in ipairs(list) do
-        if msgLog.on then
-            -- One crashing handler: logged, still reported, and the next ones still run.
-            xpcall(function() fn(sender, payload, isSelf, protocol) end, function(err)
-                Comm:LogNote(format("%s handler crashed: %s", msgType, tostring(err)), "handler error (" .. msgType .. ")")
-                geterrorhandler()(err)
-            end)
-        else
-            fn(sender, payload, isSelf, protocol)
-        end
+        -- One crashing handler: counted (logged when the log is on), still reported, and the
+        -- next ones still run.
+        xpcall(function() fn(sender, payload, isSelf, protocol) end, function(err)
+            Comm:LogNote(format("%s handler crashed: %s", msgType, tostring(err)), "handler error (" .. msgType .. ")")
+            geterrorhandler()(err)
+        end)
     end
 end
 
@@ -823,14 +821,17 @@ local function NoteOut(scope, msgType, size)
     return e
 end
 
--- The game took it all (ok), or refused a part (code: Enum.SendAddonMessageResult).
+-- The game took it all (ok true), refused a part (ok false, code: Enum.SendAddonMessageResult),
+-- or it's being sent again after a refusal (ok "resent").
 local function NoteDone(e, ok, code)
     if not e then return end
-    if ok then
-        e.state = e.state == "refused" and "taken after a resend" or "taken"
+    if ok == "resent" then
+        e.resent, e.state = true, "resent, not taken yet"
+    elseif ok then
+        e.state = e.resent and "taken after a resend" or "taken"
         e.took = GetTime()
     else
-        e.state, e.code = "refused", code
+        e.state, e.code = e.resent and "refused again after a resend" or "refused", code
     end
 end
 
@@ -843,8 +844,9 @@ function Comm:SentText()
             what = format("%s after %.1f s", e.state, (e.took or now) - e.at)
         elseif e.state == "handed" then
             what = format("handed to ChatThrottleLib, not taken yet (%d s)", now - e.at)
-        elseif e.state == "refused" then
-            what = e.code and format("refused by the game (code %s)", tostring(e.code)) or "refused by the game"
+        elseif e.state == "refused" or e.state == "refused again after a resend" then
+            what = (e.state == "refused" and "refused by the game" or "refused by the game again after a resend")
+                .. (e.code and format(" (code %s)", tostring(e.code)) or "")
         else
             what = e.state
         end
@@ -893,7 +895,7 @@ function Comm:Send(msgType, payload, priority, noQueue, onSent)
     local e = NoteOut("guild", msgType, #text)
     local function onDone(ok, code)
         NoteDone(e, ok, code)
-        if ok and onSent then onSent() end
+        if ok == true and onSent then onSent() end
     end
     if SendGuildText(text, priority, onDone) then
         Trace("out", "guild", msgType, nil, #text, "sent", payload)
@@ -1054,6 +1056,8 @@ local function PartDone(arg, didSend, result)
             end
             local before = Comm.lastSend
             Comm.lastSend = { parts = 0, bytes = 0 }
+            -- (Said before: ChatThrottleLib may send it, and call back, right away.)
+            if msg.onDone then msg.onDone("resent") end
             if SendOnChannel(msg.ch, msg.text, msg.prio, msg.prefix, { kind = msg.kind, resent = true, onDone = msg.onDone }) then
                 Trace("out", "ally", tostring(msg.kind), nil, #msg.text, "resent (the game's channel throttle refused it)")
                 Comm.stats.resent = Comm.stats.resent + 1

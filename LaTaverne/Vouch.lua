@@ -541,7 +541,8 @@ local function Ask(entry, now)
         entry.asking = false
         if not entry.heardAsk then
             Vouch.stats.asked = Vouch.stats.asked + 1
-            ns.Comm:SendAlly("VQ", { p = entry.name, pg = entry.guild }, "ALERT")
+            -- (Sent again if the game's channel throttle refuses it: otherwise nobody answers.)
+            ns.Comm:SendAlly("VQ", { p = entry.name, pg = entry.guild }, "ALERT", nil, nil, true)
         else
             ns.Comm:LogNote(format("someone else asked about %s: waiting for their answer", entry.name))
         end
@@ -969,8 +970,11 @@ end)
 -- A guildmate answered a question about one of us (heard on the alliance channel, read as my
 -- guild's: Comm.lua): I don't answer it too. Nothing else to learn from it (I have the roster).
 ns.Comm:On("VA", function(sender, payload, isSelf)
-    if isSelf or type(payload.p) ~= "string" or not ns.Guild:IsMyGuild(payload.pg) then return end
+    if isSelf or type(payload.p) ~= "string" or payload.p == "" or type(payload.pg) ~= "string" then return end
+    if not ns.Guild:IsMyGuild(payload.pg) then return end
     local key = ns.NameKey(payload.p)
+    -- Never about themselves (as on the allied side), except in test mode.
+    if ns.NameKey(sender) == key and not ns.Guild:IsSandbox() then return end
     if answering[key] then
         answering[key]:Cancel()
         answering[key] = nil

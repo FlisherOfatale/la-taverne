@@ -641,6 +641,7 @@ local function Sanitize(p, sender, scope)
         members = members,
         pending = pending,
         seen = GetServerTime(),
+        seq = tonumber(p.seq),                  -- (from 1.3.1: which listing is newer)
     }
 end
 
@@ -872,22 +873,32 @@ end
 -- ones still go. Not sent for STUCK_AFTER: noted in the message log, said once in chat, and
 -- sent as "ALERT" from then on (this session).
 local STUCK_AFTER = 180
-local listSentAt          -- GetTime() the game last took my guild listing
+local listSent            -- { id, at }: the game last took my guild listing of that group (GetTime())
 local listWatch           -- { id, since }: my group watched since (GetTime())
 local listAlert = false   -- stuck once: always "ALERT" now
-local listSerial = 0      -- my listings sent: an allied one is resent only while it's the latest
+local listSeq = 0         -- my listings sent this session
+local allySerial = 0      -- my allied listings sent: one is resent only while it's the latest
 
--- Send my group's listing: to the guild, and to the allied guilds (toAllies). The allied one is
--- sent again if the game's channel throttle refuses it, unless a newer listing went since (the
--- old one arriving late would undo it). Receivers drop the copy if the first one came through.
+-- Send my group's listing: to the guild, and to the allied guilds (toAllies). Each carries a
+-- number that only goes up (server time, then a count), so receivers can tell an older one
+-- arriving late from the current one. The allied one is sent again if the game's channel
+-- throttle refuses it, unless a newer allied one went since. Receivers drop the copy if the
+-- first one came through.
 local function SendListing(l, toAllies)
-    listSerial = listSerial + 1
-    local serial = listSerial
+    listSeq = listSeq + 1
+    local seq = GetServerTime() * 1000 + listSeq % 1000
     local prio = listAlert and "ALERT" or nil
-    ns.Comm:Send("LIST", Public(l), prio, nil, function() listSentAt = GetTime() end)
+    local id = l.id
+    local guildCopy = Public(l)
+    guildCopy.seq = seq
+    ns.Comm:Send("LIST", guildCopy, prio, nil, function() listSent = { id = id, at = GetTime() } end)
     if toAllies then
         l.allySent = true
-        ns.Comm:SendAlly("LIST", Public(l), prio, nil, nil, function() return serial == listSerial end)
+        allySerial = allySerial + 1
+        local serial = allySerial
+        local allyCopy = Public(l)
+        allyCopy.seq = seq
+        ns.Comm:SendAlly("LIST", allyCopy, prio, nil, nil, function() return serial == allySerial end)
     end
 end
 
@@ -951,7 +962,7 @@ function Groups:ListingText()
     return format("My group: %s, %s, %d members; listing last really sent %s; watched since %s; %s",
         tostring(l.dungeon), l.started and "in progress" or (self:IsOpen(l) and "open" or "closed"),
         (function() local n = 0 for _ in pairs(l.members or {}) do n = n + 1 end return n end)(),
-        listSentAt and format("%d s ago", now - listSentAt) or "never",
+        (listSent and listSent.id == l.id) and format("%d s ago", now - listSent.at) or "never",
         listWatch and format("%d s", now - listWatch.since) or "-",
         listAlert and "sent as ALERT (was stuck)" or "normal priority")
 end
@@ -971,7 +982,8 @@ local function WatchListing()
         listWatch.since = now
         return
     end
-    if now - math.max(listSentAt or 0, listWatch.since) < STUCK_AFTER then return end
+    local sentAt = listSent and listSent.id == l.id and listSent.at or 0
+    if now - math.max(sentAt, listWatch.since) < STUCK_AFTER then return end
     listWatch.since = now -- (next look in STUCK_AFTER)
     ns.Comm:LogNote(format("my group's listing not sent for %d s: sent again as ALERT", STUCK_AFTER),
         "group listing stuck")
@@ -1464,6 +1476,10 @@ OnBoth("LIST", function(sender, p, isSelf, scope)
     if isSelf then return end
     local l = Sanitize(p, sender, scope)
     if not l then return end
+    -- Older than the one I have (a listing held up on the way, or sent again late): ignored.
+    -- (Without a number, from an older version: taken as it comes, as before.)
+    local known = listings[l.id]
+    if known and l.seq and known.seq and l.seq < known.seq then return end
     -- An allied group that isn't shared: only for the allied players who are part of it.
     if scope == "ally" and not l.shared and not Groups:IsInvolved(l) and not myApplications[l.id] then
         if listings[l.id] then
