@@ -867,6 +867,30 @@ function Groups:CanPostInGuild()
     return true
 end
 
+-- My group's listing, watched until the game really sends it: ChatThrottleLib can hold
+-- "NORMAL" messages for good when its queue gets stuck (a reload clears it), while "ALERT"
+-- ones still go. Not sent for STUCK_AFTER: noted in the message log, said once in chat, and
+-- sent as "ALERT" from then on (this session).
+local STUCK_AFTER = 180
+local listSentAt          -- GetTime() the game last took my guild listing
+local listWatch           -- { id, since }: my group watched since (GetTime())
+local listAlert = false   -- stuck once: always "ALERT" now
+local listSerial = 0      -- my listings sent: an allied one is resent only while it's the latest
+
+-- Send my group's listing: to the guild, and to the allied guilds (toAllies). The allied one is
+-- sent again if the game's channel throttle refuses it, unless a newer listing went since (the
+-- old one arriving late would undo it). Receivers drop the copy if the first one came through.
+local function SendListing(l, toAllies)
+    listSerial = listSerial + 1
+    local serial = listSerial
+    local prio = listAlert and "ALERT" or nil
+    ns.Comm:Send("LIST", Public(l), prio, nil, function() listSentAt = GetTime() end)
+    if toAllies then
+        l.allySent = true
+        ns.Comm:SendAlly("LIST", Public(l), prio, nil, nil, function() return serial == listSerial end)
+    end
+end
+
 function Groups:PostInGuild()
     if not self:CanPostInGuild() then return end
     local l = self:GetMine()
@@ -874,12 +898,10 @@ function Groups:PostInGuild()
     lastGuildPost = GetTime()
     C_Timer.After(self.GUILD_POST_COOLDOWN + 0.1, function() if ns.UI then ns.UI:Refresh() end end)
     -- The others need the group's latest state with it: the listing goes first.
-    ns.Comm:Send("LIST", Public(l))
+    local toAllies = self:IsShared(l) and ns.Alliance:IsActive()
+    SendListing(l, toAllies)
     ns.Comm:Send("ANNOUNCE", { id = l.id })
-    if self:IsShared(l) and ns.Alliance:IsActive() then
-        ns.Comm:SendAlly("LIST", Public(l))
-        ns.Comm:SendAlly("ANNOUNCE", { id = l.id })
-    end
+    if toAllies then ns.Comm:SendAlly("ANNOUNCE", { id = l.id }) end
     ns.Print(L["Announced to the players who run La Taverne:"] .. " " .. text)
     if ns.UI then ns.UI:Refresh() end
 end
@@ -908,6 +930,7 @@ end
 -- Send my listing. Changes often come in bursts (a party forming fires several roster updates),
 -- so they're gathered: one message at most every second.
 local broadcastPending = false
+
 function Groups:Broadcast()
     if broadcastPending then return end
     broadcastPending = true
@@ -915,13 +938,48 @@ function Groups:Broadcast()
         broadcastPending = false
         local l = Groups:GetMine()
         if not l then return end
-        ns.Comm:Send("LIST", Public(l))
         -- Allied guilds: always, with a Guild Alliance.
-        if ns.Alliance:IsActive() then
-            l.allySent = true
-            ns.Comm:SendAlly("LIST", Public(l))
-        end
+        SendListing(l, ns.Alliance:IsActive())
     end)
+end
+
+-- For /taverne debug: my group and whether it goes out.
+function Groups:ListingText()
+    local l = self:GetMine()
+    if not l then return "My group: none" end
+    local now = GetTime()
+    return format("My group: %s, %s, %d members; listing last really sent %s; watched since %s; %s",
+        tostring(l.dungeon), l.started and "in progress" or (self:IsOpen(l) and "open" or "closed"),
+        (function() local n = 0 for _ in pairs(l.members or {}) do n = n + 1 end return n end)(),
+        listSentAt and format("%d s ago", now - listSentAt) or "never",
+        listWatch and format("%d s", now - listWatch.since) or "-",
+        listAlert and "sent as ALERT (was stuck)" or "normal priority")
+end
+
+-- Every 15 s (the expiry ticker): my group's listing hasn't really gone out for STUCK_AFTER.
+local function WatchListing()
+    local l = Groups:GetMine()
+    if not l or not ns.Guild:InGuild() then
+        listWatch = nil
+        return
+    end
+    local now = GetTime()
+    if not listWatch or listWatch.id ~= l.id then listWatch = { id = l.id, since = now } end
+    -- Not stuck in ChatThrottleLib: a reload coming (nothing goes out), or La Taverne's own
+    -- queue waiting for the guild channel. Watched again from when it can go.
+    if ns.reloadPending or ns.Comm:Queued("guild") > 0 then
+        listWatch.since = now
+        return
+    end
+    if now - math.max(listSentAt or 0, listWatch.since) < STUCK_AFTER then return end
+    listWatch.since = now -- (next look in STUCK_AFTER)
+    ns.Comm:LogNote(format("my group's listing not sent for %d s: sent again as ALERT", STUCK_AFTER),
+        "group listing stuck")
+    if not listAlert then
+        listAlert = true
+        ns.Print(L["Your group hadn't gone out to the others for a few minutes: La Taverne sent it again."])
+    end
+    Groups:Broadcast()
 end
 
 -- Leader side: start the group when it becomes complete, close "looking again" when it's
@@ -1664,6 +1722,7 @@ function Groups:OnLogin()
     C_Timer.NewTicker(HEARTBEAT, function() Groups:Broadcast() end)
 
     C_Timer.NewTicker(15, function()
+        WatchListing()
         local now = GetServerTime()
         local removed = false
         for id, l in pairs(listings) do

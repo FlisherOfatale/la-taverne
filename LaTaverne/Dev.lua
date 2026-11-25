@@ -330,16 +330,24 @@ ns.commands.debug = function()
             Add(table.concat(parts, " "))
         end)
     end)
+    Section("My group and sending")
+    Try(function()
+        Add(ns.Groups:ListingText())
+        Add(ns.Comm:QueueText())
+    end)
     if ns.Relay and ns.Relay.ReportText then
         Section("Guild relay")
         Try(function() Add(ns.Relay:ReportText()) end)
     end
+    Section("Sent")
+    Try(function() Add(ns.Comm:SentText()) end)
     Section("Message log")
     Try(function()
         if ns.Comm:IsLogging() then
             Add(ns.Comm:LogText({}, {}))
         else
-            Add("Off. To include it: /taverne msglog, tick Recording, let it run a few minutes, then /taverne debug again.")
+            Add(ns.Comm:UnusualText())
+            Add("The full log is off. To include it: /taverne msglog, tick Recording, let it run a few minutes, then /taverne debug again.")
         end
     end)
 

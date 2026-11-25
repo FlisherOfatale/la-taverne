@@ -50,7 +50,7 @@ local LOG_MAX = 300
 local RATE_MAX = 30 -- messages in a minute from one sender: unusual
 local msgLog = { on = false, lines = {}, unusual = {}, order = {}, rate = {}, realIgnored = 0,
     quiet = { positions = { ["in"] = 0, out = 0 }, relayed = { ["in"] = 0, out = 0 } },
-    guildQuiet = { hellos = 0, lines = 0 } }
+    guildQuiet = { hellos = 0, lines = 0, answers = 0 } }
 -- Positions on the map (AllyMap.lua) go every few seconds from everyone, and relayed guild lines
 -- (Relay.lua) one per line: only counted, never listed, or they'd push everything else out of
 -- the log. [type] = its counter.
@@ -58,7 +58,7 @@ local QUIET_TYPES = { POS = "positions", RCHAT = "relayed", RMAP = "positions", 
 -- My guildmates' hellos (Vouch.lua), heard on the alliance channel: one every 4-4.5 minutes from
 -- each of them, a lot in a big guild. And their own copies of their guild lines (AllyChat.lua),
 -- read only by the relay: one per line. Only counted too. [type] = its counter.
-local QUIET_GUILD_TYPES = { HI = "hellos", CHAT = "lines" }
+local QUIET_GUILD_TYPES = { HI = "hellos", CHAT = "lines", VA = "answers" }
 
 function Comm:IsLogging() return msgLog.on end
 
@@ -77,31 +77,46 @@ end
 local LOG_NOTES, LOG_ME = "--", "@me"
 Comm.LOG_NOTES, Comm.LOG_ME = LOG_NOTES, LOG_ME
 
+-- The unusual ones are counted from login, log on or off (only a count and the last line per
+-- kind: nothing per message), so a report made after a problem still shows them.
+local function CountUnusual(unusual, line)
+    local u = msgLog.unusual[unusual]
+    if not u then
+        u = { count = 0 }
+        msgLog.unusual[unusual] = u
+        msgLog.order[#msgLog.order + 1] = unusual
+    end
+    u.count = u.count + 1
+    u.last = line
+end
+
 local function AddLine(text, unusual, kind, who)
     local line = date("%H:%M:%S") .. (unusual and " !! " or "    ") .. text
     local lines = msgLog.lines
     lines[#lines + 1] = { text = line, kind = kind or LOG_NOTES, who = who }
     if #lines > LOG_MAX then table.remove(lines, 1) end
-    if unusual then
-        local u = msgLog.unusual[unusual]
-        if not u then
-            u = { count = 0 }
-            msgLog.unusual[unusual] = u
-            msgLog.order[#msgLog.order + 1] = unusual
-        end
-        u.count = u.count + 1
-        u.last = line
-    end
+    if unusual then CountUnusual(unusual, line) end
 end
 
 -- A free line (a question nobody answered...). unusual: a short kind, counted at the top.
 function Comm:LogNote(text, unusual)
-    if msgLog.on then AddLine("-- " .. text, unusual) end
+    if msgLog.on then
+        AddLine("-- " .. text, unusual)
+    elseif unusual then
+        CountUnusual(unusual, date("%H:%M:%S") .. " !! -- " .. text)
+    end
 end
 
 -- One message. dir: "in" or "out"; scope: "guild" or "ally"; what: what happened to it.
 local function Trace(dir, scope, msgType, sender, size, what, payload, unusual)
-    if not msgLog.on then return end
+    if not msgLog.on then
+        -- Off: only an unusual one, counted.
+        if unusual then
+            CountUnusual(unusual .. " (" .. tostring(msgType) .. ")", format("%s !! %s %s %s%s  %s",
+                date("%H:%M:%S"), dir, scope, tostring(msgType), dir == "in" and ("  " .. tostring(sender)) or "", what))
+        end
+        return
+    end
     -- Counted once each: in when delivered (not when held for vouching, then again when
     -- delivered, nor a copy from the old channel), out when sent.
     local quiet = QUIET_TYPES[msgType]
@@ -145,8 +160,6 @@ Comm.Trace = Trace
 function Comm:SetLogging(on)
     if on and not msgLog.on then
         wipe(msgLog.lines)
-        wipe(msgLog.unusual)
-        wipe(msgLog.order)
         wipe(msgLog.rate)
         msgLog.realIgnored = 0
         for _, counter in pairs(msgLog.quiet) do counter["in"], counter.out = 0, 0 end
@@ -159,7 +172,20 @@ end
 function Comm:ClearLog()
     local on = msgLog.on
     msgLog.on = false
+    wipe(msgLog.unusual)
+    wipe(msgLog.order)
     self:SetLogging(on)
+end
+
+-- The unusual ones, counted since login (or the last Clear), log on or off.
+function Comm:UnusualText()
+    if #msgLog.order == 0 then return "Unusual (since login or the last Clear): none" end
+    local out = { "Unusual (since login or the last Clear):" }
+    for _, kind in ipairs(msgLog.order) do
+        local u = msgLog.unusual[kind]
+        out[#out + 1] = format("  %d x %s   last: %s", u.count, kind, u.last)
+    end
+    return table.concat(out, "\n")
 end
 
 -- The log as text: what's unusual first, then the lines, oldest first.
@@ -178,15 +204,8 @@ function Comm:LogText(hiddenKinds, hiddenWho)
     out[#out + 1] = format("Relayed guild lines (not listed): %d in, %d out", quiet.relayed["in"], quiet.relayed.out)
     out[#out + 1] = format("Hellos from my guild (not listed): %d", msgLog.guildQuiet.hellos)
     out[#out + 1] = format("My guild's lines, their authors' copies to the allies (not listed): %d", msgLog.guildQuiet.lines)
-    if #msgLog.order == 0 then
-        out[#out + 1] = "Unusual: none"
-    else
-        out[#out + 1] = "Unusual:"
-        for _, kind in ipairs(msgLog.order) do
-            local u = msgLog.unusual[kind]
-            out[#out + 1] = format("  %d x %s   last: %s", u.count, kind, u.last)
-        end
-    end
+    out[#out + 1] = format("My guild's vouching answers (not listed): %d", msgLog.guildQuiet.answers)
+    out[#out + 1] = Comm:UnusualText()
     local shown, left = {}, 0
     for _, line in ipairs(msgLog.lines) do
         if (hiddenKinds and hiddenKinds[line.kind]) or (line.who and hiddenWho and hiddenWho[line.who]) then
@@ -348,6 +367,48 @@ end
 -- Switching test mode, right before the reload: leave the side I'm leaving.
 function Comm:LeaveAllChannels()
     for role in pairs(channels) do self:LeaveChannel(role) end
+end
+
+-- ChatThrottleLib's queues, for /taverne debug: one line per priority (messages waiting, how
+-- many queues the game's throttle parked, bandwidth left), plus La Taverne's own queues.
+function Comm:QueueText()
+    local ctl = _G.ChatThrottleLib
+    local lines = { format("La Taverne queues: guild %d, alliance %d", #queues.guild, #queues.ally) }
+    if not (ctl and ctl.Prio) then
+        lines[#lines + 1] = "ChatThrottleLib: not found"
+        return table.concat(lines, "\n")
+    end
+    -- A ring of pipes (one per prefix and destination), each pipe a list of messages.
+    local function Count(ring)
+        local pipes, msgs = 0, 0
+        local start = ring and ring.pos
+        local pipe = start
+        while pipe do
+            pipes = pipes + 1
+            msgs = msgs + #pipe
+            pipe = pipe.next
+            if pipe == start or pipes > 100 then break end
+        end
+        return pipes, msgs
+    end
+    lines[#lines + 1] = format("ChatThrottleLib v%s: queueing %s, bandwidth left %d",
+        tostring(ctl.version), ctl.bQueueing and "yes" or "no", math.floor(ctl.avail or 0))
+    for _, name in ipairs({ "ALERT", "NORMAL", "BULK" }) do
+        local prio = ctl.Prio[name]
+        if prio then
+            local pipes, msgs = Count(prio.Ring)
+            local bpipes, bmsgs = Count(prio.Blocked)
+            lines[#lines + 1] = format("  %s: %d waiting in %d queues, %d parked by the game's throttle in %d queues, bandwidth %d, sent %d bytes",
+                name, msgs, pipes, bmsgs, bpipes, math.floor(prio.avail or 0), prio.nTotalSent or 0)
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+-- Messages waiting in La Taverne's own queue for a scope ("guild" or "ally"): its channel isn't
+-- ready yet.
+function Comm:Queued(scope)
+    return queues[scope] and #queues[scope] or 0
 end
 
 -- Messages not gone out yet: waiting for a channel here, or held by the game's throttle.
@@ -744,10 +805,78 @@ local function Route()
     return "GUILD"
 end
 
-local function SendGuildText(text, priority)
+-- My last messages out, always kept (few go out: cheap), for /taverne debug: did the game
+-- really take them? ChatThrottleLib may hold one a while, refuse it, or never send it when its
+-- queue is stuck. { at, time, scope, type, size, state, took, code }. Positions and relayed
+-- lines: only counted (too many).
+local SENT_MAX = 50
+local sentLog, sentQuiet = {}, {}
+
+local function NoteOut(scope, msgType, size)
+    if QUIET_TYPES[msgType] then
+        sentQuiet[msgType] = (sentQuiet[msgType] or 0) + 1
+        return nil
+    end
+    local e = { at = GetTime(), time = date("%H:%M:%S"), scope = scope, type = msgType, size = size, state = "handed" }
+    sentLog[#sentLog + 1] = e
+    if #sentLog > SENT_MAX then table.remove(sentLog, 1) end
+    return e
+end
+
+-- The game took it all (ok), or refused a part (code: Enum.SendAddonMessageResult).
+local function NoteDone(e, ok, code)
+    if not e then return end
+    if ok then
+        e.state = e.state == "refused" and "taken after a resend" or "taken"
+        e.took = GetTime()
+    else
+        e.state, e.code = "refused", code
+    end
+end
+
+function Comm:SentText()
+    local now = GetTime()
+    local out = { format("Last %d messages I sent (newest at the bottom):", SENT_MAX) }
+    for _, e in ipairs(sentLog) do
+        local what
+        if e.state == "taken" or e.state == "taken after a resend" then
+            what = format("%s after %.1f s", e.state, (e.took or now) - e.at)
+        elseif e.state == "handed" then
+            what = format("handed to ChatThrottleLib, not taken yet (%d s)", now - e.at)
+        elseif e.state == "refused" then
+            what = e.code and format("refused by the game (code %s)", tostring(e.code)) or "refused by the game"
+        else
+            what = e.state
+        end
+        out[#out + 1] = format("  %s %-5s %-12s %db  %s", e.time, e.scope, e.type, e.size or 0, what)
+    end
+    if #sentLog == 0 then out[#out + 1] = "  none" end
+    local quiet = {}
+    for msgType, n in pairs(sentQuiet) do quiet[#quiet + 1] = msgType .. " " .. n end
+    table.sort(quiet)
+    if #quiet > 0 then out[#out + 1] = "Also sent (counted only): " .. table.concat(quiet, ", ") end
+    return table.concat(out, "\n")
+end
+
+-- onDone(ok, code): once the game really took the whole message, or refused a part of it.
+local function SendGuildText(text, priority, onDone)
     local distribution, target = Route()
     if not distribution then return false end
-    Comm:SendCommMessage(PREFIX, text, distribution, target, priority or "NORMAL")
+    local callback
+    if onDone then
+        -- AceComm passes ChatThrottleLib's didSend (true or false), not the game's result code.
+        local refused = false -- (a refused part breaks the message: nothing sends it again here)
+        callback = function(_, sent, total, didSend)
+            if refused then return end
+            if didSend == false then
+                refused = true
+                onDone(false)
+            elseif sent >= total then
+                onDone(true)
+            end
+        end
+    end
+    Comm:SendCommMessage(PREFIX, text, distribution, target, priority or "NORMAL", callback)
     Comm.stats.sent = Comm.stats.sent + 1
     return true
 end
@@ -755,24 +884,33 @@ end
 -- Broadcast a message to the guild (or the sandbox channel).
 -- priority: "BULK", "NORMAL" (default) or "ALERT" (chat).
 -- noQueue: dropped instead of queued when it can't go now (a position: an old one is worth nothing).
-function Comm:Send(msgType, payload, priority, noQueue)
+-- onSent: called once the game really sent it (SendGuildText).
+function Comm:Send(msgType, payload, priority, noQueue, onSent)
     if ns.reloadPending then return false end -- test mode switched, the reload comes next
     payload = payload or {}
     payload.ver = ns.version
     local text = AceSerializer:Serialize(PROTOCOL, msgType, payload)
-    if SendGuildText(text, priority) then
+    local e = NoteOut("guild", msgType, #text)
+    local function onDone(ok, code)
+        NoteDone(e, ok, code)
+        if ok and onSent then onSent() end
+    end
+    if SendGuildText(text, priority, onDone) then
         Trace("out", "guild", msgType, nil, #text, "sent", payload)
         return true
     end
     if noQueue then
+        if e then e.state = "not sent: not ready" end
         Trace("out", "guild", msgType, nil, #text, "not sent: not ready (not queued)", payload)
         return false
     end
+    if e then e.state = "queued in La Taverne" end
     if #queues.guild < MAX_QUEUE then
-        queues.guild[#queues.guild + 1] = { text = text, priority = priority, msgType = msgType }
+        queues.guild[#queues.guild + 1] = { text = text, priority = priority, msgType = msgType, onDone = onDone, e = e }
         Trace("out", "guild", msgType, nil, #text, "queued (" .. #queues.guild .. " waiting)", payload,
             #queues.guild == 10 and "queue growing" or nil)
     else
+        if e then e.state = "dropped: queue full" end
         Trace("out", "guild", msgType, nil, #text, "dropped: queue full", payload, "queue full")
     end
     return false
@@ -894,13 +1032,30 @@ local function PartDone(arg, didSend, result)
     local fn = partWatch[arg.prefix]
     if fn then fn(didSend and true or false, GetTime() - arg.at, result, arg.msg) end
     local msg = arg.msg
-    if not didSend and result == CHANNEL_THROTTLE and msg.retry and not msg.resent then
+    -- The sent log: refused at the first refused part (that sending's later parts say nothing
+    -- more: a resend has its own), taken once every part was.
+    if msg.onDone and not msg.failed then
+        if not didSend then
+            msg.failed = true
+            msg.onDone(false, result)
+        else
+            msg.left = msg.left - 1
+            if msg.left == 0 then msg.onDone(true) end
+        end
+    end
+    -- retry: true, or a function saying whether it's still wanted (a newer one may have gone).
+    local wanted = msg.retry == true or (type(msg.retry) == "function" and msg.retry())
+    if not didSend and result == CHANNEL_THROTTLE and wanted and not msg.resent then
         msg.resent = true -- once per message, even when several of its parts are refused
         C_Timer.After(RESEND_DELAY, function()
-            if ns.reloadPending or not msg.ch.ready then return end
+            if ns.reloadPending or not msg.ch.ready then
+                Comm:LogNote(format("%s not resent: the channel isn't ready", tostring(msg.kind)))
+                return
+            end
             local before = Comm.lastSend
             Comm.lastSend = { parts = 0, bytes = 0 }
-            if SendOnChannel(msg.ch, msg.text, msg.prio, msg.prefix, { kind = msg.kind, resent = true }) then
+            if SendOnChannel(msg.ch, msg.text, msg.prio, msg.prefix, { kind = msg.kind, resent = true, onDone = msg.onDone }) then
+                Trace("out", "ally", tostring(msg.kind), nil, #msg.text, "resent (the game's channel throttle refused it)")
                 Comm.stats.resent = Comm.stats.resent + 1
                 local onResend = resendWatch[msg.prefix]
                 if onResend then onResend(msg.kind, Comm.lastSend.parts, Comm.lastSend.bytes) end
@@ -916,7 +1071,8 @@ local function SendPart(prio, prefix, msg, id, info)
     sent.parts, sent.bytes = sent.parts + 1, sent.bytes + #msg + #prefix
 end
 
--- opts: { kind = message type, retry = send it again if the channel throttle refuses it }.
+-- opts: { kind = message type, retry = send it again if the channel throttle refuses it,
+-- onDone(ok, code) = the sent log's (PartDone) }.
 SendOnChannel = function(ch, text, prio, prefix, opts)
     local id = ChannelId(ch)
     if not id then
@@ -925,9 +1081,11 @@ SendOnChannel = function(ch, text, prio, prefix, opts)
     end
     prefix = prefix or ALLY_PREFIX
     opts = opts or {}
-    -- What PartDone needs to send it again, shared by its parts.
+    -- What PartDone needs to send it again, shared by its parts. left: parts not taken yet (set
+    -- before the first one goes: ChatThrottleLib may send it, and call back, right away).
     local info = { ch = ch, text = text, prio = prio, prefix = prefix, kind = opts.kind,
-        retry = opts.retry and true or false, resent = opts.resent and true or false }
+        retry = opts.retry or false, resent = opts.resent and true or false,
+        onDone = opts.onDone, left = #text <= PART_SIZE and 1 or math.ceil(#text / PART_SIZE) }
     if #text <= PART_SIZE then
         SendPart(prio, prefix, "0" .. text, id, info)
     else
@@ -954,7 +1112,8 @@ local function SendAllyText(text, priority, prefix, opts)
     local prio = priority or "NORMAL"
     if not SendOnChannel(ch, text, prio, prefix, opts) then return false end
     local old = channels.allyOld
-    if old and old.ready then SendOnChannel(old, text, prio, prefix, opts) end
+    -- (The copy on the old channel: not in the sent log, the current channel's is.)
+    if old and old.ready then SendOnChannel(old, text, prio, prefix, { kind = opts and opts.kind, retry = opts and opts.retry }) end
     Comm.stats.sent = Comm.stats.sent + 1
     return true
 end
@@ -975,20 +1134,24 @@ function Comm:SendAlly(msgType, payload, priority, noQueue, prefix, retry)
     Comm.lastSend.parts, Comm.lastSend.bytes = 0, 0
     -- kind: what the part watchers are told, with the payload's op when it has one ("RLY hold").
     local kind = type(payload.op) == "string" and (msgType .. " " .. payload.op) or msgType
-    local opts = { kind = kind, retry = retry }
+    local e = NoteOut("ally", msgType, #text)
+    local opts = { kind = kind, retry = retry, onDone = e and function(ok, code) NoteDone(e, ok, code) end or nil }
     if SendAllyText(text, priority, prefix, opts) then
         Trace("out", "ally", msgType, nil, #text, "sent", payload)
         return true
     end
     if noQueue then
+        if e then e.state = "not sent: channel not ready" end
         Trace("out", "ally", msgType, nil, #text, "not sent: channel not ready (not queued)", payload)
         return false
     end
+    if e then e.state = "queued in La Taverne" end
     if #queues.ally < MAX_QUEUE then
-        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType, prefix = prefix, opts = opts }
+        queues.ally[#queues.ally + 1] = { text = text, priority = priority, msgType = msgType, prefix = prefix, opts = opts, e = e }
         Trace("out", "ally", msgType, nil, #text, "queued (" .. #queues.ally .. " waiting)", payload,
             #queues.ally == 10 and "queue growing" or nil)
     else
+        if e then e.state = "dropped: queue full" end
         Trace("out", "ally", msgType, nil, #text, "dropped: queue full", payload, "queue full")
     end
     return false
@@ -997,13 +1160,24 @@ end
 FlushQueue = function()
     while #queues.guild > 0 do
         local item = queues.guild[1]
-        if not SendGuildText(item.text, item.priority) then break end
+        -- ("handed" before: ChatThrottleLib may send it, and call back, right away.)
+        local before = item.e and item.e.state
+        if item.e then item.e.state = "handed" end
+        if not SendGuildText(item.text, item.priority, item.onDone) then
+            if item.e then item.e.state = before end
+            break
+        end
         table.remove(queues.guild, 1)
         Trace("out", "guild", item.msgType, nil, #item.text, "sent from the queue")
     end
     while #queues.ally > 0 do
         local item = queues.ally[1]
-        if not SendAllyText(item.text, item.priority, item.prefix, item.opts) then break end
+        local before = item.e and item.e.state
+        if item.e then item.e.state = "handed" end
+        if not SendAllyText(item.text, item.priority, item.prefix, item.opts) then
+            if item.e then item.e.state = before end
+            break
+        end
         table.remove(queues.ally, 1)
         Trace("out", "ally", item.msgType, nil, #item.text, "sent from the queue")
     end
@@ -1037,7 +1211,10 @@ local partial = {} -- [sender#channel] = { text, time }
 -- answered, nothing of my guild goes through vouching, and my guild's lines are never shown
 -- twice). "relay": only while something reads it (Relay.lua loaded); otherwise my guild's copy,
 -- ignored as before, and not an unknown message in the message log.
-local OWN_GUILD_ON_ALLY = { POS = true, HI = true, CHAT = "relay", RCHAT = "relay", RLY = "relay", RMAP = "relay" }
+-- And my guildmates' vouching answers about our guild (VA): only so that I stay quiet when one
+-- of them answered first (Vouch.lua), instead of every member online answering every question.
+local OWN_GUILD_ON_ALLY = { POS = true, HI = true, CHAT = "relay", RCHAT = "relay", RLY = "relay", RMAP = "relay",
+    VA = true }
 local seen = {}    -- [sender .. "#" .. n] = time, to drop copies sent on two channels
 
 local function AlreadySeen(sender, n)

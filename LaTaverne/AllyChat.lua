@@ -174,8 +174,15 @@ local function ShowInFrame(frame, author, class, guid, text, tagText, viaEvent)
             return orig(self, line, ...)
         end
         local handler = viaEvent and frame.OnEvent or frame.MessageEventHandler
+        -- The 18th value (game 12.1.0 and later): about a line from the guild's linked Discord.
+        -- The game's handler reads it for every guild line; an in-game line says it's not one.
+        local discordInfo = {
+            userID = "", globalName = author, type = 0, lastOnlineGUID = guid or "", lastOnlineName = author,
+            hasAttachment = false, hasPoll = false, hasEmbed = false, hasSticker = false, hasEmoji = false,
+            hasError = false, hasForwardedMessage = false, forwardedMessage = "", fromDiscord = false,
+        }
         local ok, err = pcall(handler, frame, "CHAT_MSG_GUILD",
-            text, author, "", "", author, "", 0, 0, "", 0, 0, guid or "", 0, false, false, false, false)
+            text, author, "", "", author, "", 0, 0, "", 0, 0, guid or "", 0, false, false, false, false, discordInfo)
         rawset(frame, "AddMessage", had)
         if not ok then AllyChat.stats.lastError = tostring(err) end
         -- Once the line is written, an error after that must not write it a second time.

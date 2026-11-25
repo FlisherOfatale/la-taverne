@@ -966,6 +966,17 @@ ns.Comm:OnAlly("VQ", function(sender, payload, isSelf)
 end)
 
 -- An answer: kept by everyone who hears it (the fallback: any evidence overrides it).
+-- A guildmate answered a question about one of us (heard on the alliance channel, read as my
+-- guild's: Comm.lua): I don't answer it too. Nothing else to learn from it (I have the roster).
+ns.Comm:On("VA", function(sender, payload, isSelf)
+    if isSelf or type(payload.p) ~= "string" or not ns.Guild:IsMyGuild(payload.pg) then return end
+    local key = ns.NameKey(payload.p)
+    if answering[key] then
+        answering[key]:Cancel()
+        answering[key] = nil
+    end
+end)
+
 ns.Comm:OnAlly("VA", function(sender, payload, isSelf)
     if isSelf then return end
     local name, guild = payload.p, payload.pg
