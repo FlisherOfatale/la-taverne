@@ -101,10 +101,10 @@ local launcher = LibStub("LibDataBroker-1.1"):NewDataObject(ADDON, {
         local joined = not mine and G:GetJoined()
         if mine then
             local requests = G:CountRequests()
-            tooltip:AddLine(format(L["Your group: %s"], ns.DungeonName(mine.dungeon))
+            tooltip:AddLine(format(L["Your group: %s"], ns.Groups:Title(mine))
                 .. (requests > 0 and (", " .. format(L["%d requests"], requests)) or ""), 1, 0.82, 0)
         elseif joined then
-            tooltip:AddLine(format(L["In a group: %s"], ns.DungeonName(joined.dungeon)), 1, 0.82, 0)
+            tooltip:AddLine(format(L["In a group: %s"], ns.Groups:Title(joined)), 1, 0.82, 0)
         end
         local P = ns.Players
         if P:IsActive() then

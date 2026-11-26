@@ -249,9 +249,10 @@ end
 -- A made-up open group of any size (2 to 40) in Groups: how this version shows sizes only a later
 -- version can post ("Other" with a size). Again with the same size, or 0, removes it.
 subcommands.group = function(arg)
-    local ok, shown = ns.Groups:FakeGroup(tonumber(arg))
+    local size, title = arg:match("^(%d+)%s*(.-)$")
+    local ok, shown = ns.Groups:FakeGroup(tonumber(size), title ~= "" and title or nil)
     if not ok then
-        ns.Print("usage, test mode only: /taverne dev group <size, 2 to 40> (again, or 0, to remove it)")
+        ns.Print("usage, test mode only: /taverne dev group <size, 2 to 40> [title] (again, or 0, to remove it)")
     else
         ns.Print(shown and ("a fake group of " .. arg .. " is in Groups") or "fake group removed")
     end
@@ -273,7 +274,7 @@ ns.commands.dev = function(arg)
         ns.Print("/taverne dev say <Firstname Lastname>: <text> - a test guild member without La Taverne says a line (the guild relay passes it on)")
         ns.Print("/taverne dev walk <Firstname Lastname> - a test guild member without La Taverne shares their place through OpenMap (the guild relay passes it on); again to stop")
         ns.Print("/taverne dev expiry - show the availability expiry popup now (be available first)")
-        ns.Print("/taverne dev group <size> - a fake open group of that size (2 to 40) in Groups; again, or 0, to remove it")
+        ns.Print("/taverne dev group <size> [title] - a fake open group of that size (2 to 40), with that title if given, in Groups; again, or 0, to remove it")
     end
 end
 

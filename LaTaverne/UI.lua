@@ -129,7 +129,7 @@ local function DungeonTitle(l)
     local sizeText = size ~= 5 and (" |cffffd100(" .. size .. ")|r") or ""
     local range = ns.DungeonRange(ns.DungeonByKey(l.dungeon))
     local state = StateTag(l)
-    return ns.DungeonName(l.dungeon) .. sizeText .. (range ~= "" and (" " .. range) or "")
+    return ns.Groups:Title(l) .. sizeText .. (range ~= "" and (" " .. range) or "")
         .. "  |cff808080" .. Ago(l.created) .. "|r"
         .. (state ~= "" and ("  " .. state) or "")
 end
@@ -797,7 +797,7 @@ end
 -- none is on (or the name is the same). head: the first line instead of the dungeon's name
 -- (a group's whole title, which can be cut on screen); then the tooltip always shows.
 local function DungeonTip(owner, d, head)
-    if type(d) == "string" then d = ns.DungeonByKey(d) end
+    if type(d) == "string" then d = ns.DungeonByKey(ns.DungeonKey(d)) end
     local others = d and ns.DungeonOtherNames(d) or {}
     if not head and #others == 0 then return end
     local lines = { head or ns.DungeonLabel(d) }
@@ -1631,12 +1631,12 @@ end
 local function InPartyText(onList)
     local mine = ns.Groups:GetMine()
     if mine then
-        return onList and format(L["Your group is posted (%s): the available players who fit it are below."], ns.DungeonName(mine.dungeon))
-            or format(L["Your group is posted (%s): no need to be available."], ns.DungeonName(mine.dungeon))
+        return onList and format(L["Your group is posted (%s): the available players who fit it are below."], ns.Groups:Title(mine))
+            or format(L["Your group is posted (%s): no need to be available."], ns.Groups:Title(mine))
     end
     local joined = ns.Groups:GetJoined()
     if joined then
-        return format(L["You're in %s's group (%s)."], joined.leader, ns.DungeonName(joined.dungeon))
+        return format(L["You're in %s's group (%s)."], joined.leader, ns.Groups:Title(joined))
     end
     return L["You're in a party: post a group for your party instead."]
 end
@@ -5000,11 +5000,11 @@ local function SectionStatus(section)
     if section.key == "groups" then
         local mine, joined = G:GetMine(), G:GetJoined()
         if mine then
-            lines[#lines + 1] = { format(L["Your group: %s"], ns.DungeonName(mine.dungeon)), 1, 1, 1 }
+            lines[#lines + 1] = { format(L["Your group: %s"], ns.Groups:Title(mine)), 1, 1, 1 }
             local requests = G:CountRequests()
             if requests > 0 then lines[#lines + 1] = { format(L["%d requests"], requests), 0.1, 1, 0.1 } end
         elseif joined then
-            lines[#lines + 1] = { format(L["In a group: %s"], ns.DungeonName(joined.dungeon)), 1, 1, 1 }
+            lines[#lines + 1] = { format(L["In a group: %s"], ns.Groups:Title(joined)), 1, 1, 1 }
         end
         local invitations = G:CountNewInvitations()
         if invitations > 0 then lines[#lines + 1] = { format(L["Invitations: %d"], invitations), 0.1, 1, 0.1 } end

@@ -506,7 +506,7 @@ OnBoth("AVAIL", function(sender, p, isSelf, scope)
     local mine = ns.Groups:GetMine()
     if not previous and not a.afk and mine and Players:FitsGroup(a, mine) then
         ns.Print(format(L["%s is available and fits your group (%s). Invite them from the Availability page."],
-            sender .. (a.tag and (" [" .. a.tag .. "]") or ""), ns.DungeonName(mine.dungeon)))
+            sender .. (a.tag and (" [" .. a.tag .. "]") or ""), ns.Groups:Title(mine)))
     end
     Changed()
 end)

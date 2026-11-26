@@ -53,6 +53,20 @@ local CHANNEL_MAX = 40
 
 Groups.ROLES = { "TANK", "HEALER", "DAMAGER" }
 Groups.NOTE_MAX = NOTE_MAX
+-- A group's own title (activities, planned): read from this version, shown instead of "Other (see
+-- note)". About 40 letters; bytes, since accented letters take two.
+local TITLE_BYTES = 80
+
+-- A received title: one line, no "|" codes, at most TITLE_BYTES without cutting a letter in two.
+local function CleanTitle(title)
+    if type(title) ~= "string" then return nil end
+    title = title:gsub("|", ""):gsub("[%c]", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if #title > TITLE_BYTES then
+        -- A letter cut in two at the end is dropped.
+        title = title:sub(1, TITLE_BYTES):gsub("[\192-\255][\128-\191]*$", "")
+    end
+    return title ~= "" and title or nil
+end
 Groups.DEFAULT_COMPOSITION = {
     [2] = { TANK = 0, HEALER = 1, DAMAGER = 1 }, -- debug mode test dungeon
     [5] = { TANK = 1, HEALER = 1, DAMAGER = 3 },
@@ -296,7 +310,7 @@ end
 -- Does a group pass my filters? ("In progress" is handled by the list itself.)
 function Groups:PassesFilters(l)
     local f = self:GetFilters()
-    if next(f.dungeons) and not f.dungeons[l.dungeon] then return false end
+    if next(f.dungeons) and not f.dungeons[ns.DungeonKey(l.dungeon)] then return false end
     if f.role and not self:NeedsMyRole(l) then return false end
     if f.level and not self:AtMyLevel(l) then return false end
 
@@ -638,6 +652,7 @@ local function Sanitize(p, sender, scope)
         shared = scope == "ally" and p.vis == "ally" or nil,
         dungeon = p.dungeon:sub(1, 20),
         note = type(p.note) == "string" and p.note:sub(1, NOTE_MAX) or "",
+        title = CleanTitle(p.title),
         created = tonumber(p.created) or GetServerTime(),
         size = size,
         composition = Groups:ValidComposition(size, p.composition),
@@ -767,15 +782,22 @@ local function GroupLink(l)
     return "|Haddon:LaTaverne:group:" .. l.id .. "|h|cff71d5ff[" .. L["View"] .. "]|r|h"
 end
 
+-- What a group is for: its dungeon's name, or its own title for an "Other" group that has one
+-- (from a later version: activities).
+function Groups:Title(l)
+    if l.title and (l.dungeon == "OTHER" or not ns.DungeonByKey(l.dungeon)) then return l.title end
+    return ns.DungeonName(l.dungeon)
+end
+
 -- "The Hall of Thanes 13-20", the range colored for my level.
-local function DungeonWithRange(key)
-    local range = ns.DungeonRange(ns.DungeonByKey(key))
-    return ns.DungeonName(key) .. (range ~= "" and (" " .. range) or "")
+local function DungeonWithRange(l)
+    local range = ns.DungeonRange(ns.DungeonByKey(l.dungeon))
+    return Groups:Title(l) .. (range ~= "" and (" " .. range) or "")
 end
 
 -- "Oylex invites you to The Hall of Thanes 13-20.": the chat line and the invitation card.
 function Groups:InvitationText(l)
-    return format(L["%s invites you to %s."], l.leader, DungeonWithRange(l.dungeon))
+    return format(L["%s invites you to %s."], l.leader, DungeonWithRange(l))
 end
 Groups.GroupLink = GroupLink
 
@@ -784,6 +806,10 @@ Groups.GroupLink = GroupLink
 -- have their own on/off (Options). All: not from my ignore list, not when quiet.
 local function AlertNewGroup(l, replacement, announce)
     if ns.IsIgnored(l.leader) then return end
+    -- A dungeon key I don't know (a later version's activity): listed, never announced here. That
+    -- version decides who hears about it (only the players in its zone, for example), I can't.
+    -- A true "Other (see note)" group is announced as any.
+    if not ns.DungeonByKey(l.dungeon) then return end
     if announce then
         if ns.db.showAnnounces == false then return end
     else
@@ -791,7 +817,7 @@ local function AlertNewGroup(l, replacement, announce)
         -- Available players want a group: they hear about the ones that fit them, whatever the setting.
         local P = ns.Players
         if mode == "none" and P and P:IsActive() then mode = "fit" end
-        if mode == "none" or (mode == "fit" and not (Groups:FitsMe(l) and (not P or P:WantsDungeon(l.dungeon)))) then return end
+        if mode == "none" or (mode == "fit" and not (Groups:FitsMe(l) and (not P or P:WantsDungeon(ns.DungeonKey(l.dungeon))))) then return end
     end
     if ns.Quiet() then return end -- in a dungeon, a raid or combat (Options)
     local leader = l.leader .. (l.tag and (" [" .. l.tag .. "]") or "")
@@ -799,13 +825,13 @@ local function AlertNewGroup(l, replacement, announce)
     if announce then
         local missing = Groups:MissingText(l)
         text = format(L["%s is looking for %s: %s"], leader, missing ~= "" and missing or L["a player"],
-            DungeonWithRange(l.dungeon))
+            DungeonWithRange(l))
     elseif replacement then
         local missing = Groups:MissingText(l)
         text = format(L["Replacement wanted: %s in %s by %s"], missing ~= "" and missing or L["a player"],
-            DungeonWithRange(l.dungeon), leader)
+            DungeonWithRange(l), leader)
     else
-        text = format(L["New group: %s by %s"], DungeonWithRange(l.dungeon), leader)
+        text = format(L["New group: %s by %s"], DungeonWithRange(l), leader)
     end
     ns.Print(text .. " " .. GroupLink(l))
     ns.Sound("group")
@@ -841,7 +867,7 @@ end
 function Groups:GuildPostText(l)
     local missing = self:MissingText(l)
     if missing == "" then return nil end
-    return format(L["%s is looking for %s: %s"], l.leader, missing, DungeonWithRange(l.dungeon))
+    return format(L["%s is looking for %s: %s"], l.leader, missing, DungeonWithRange(l))
 end
 
 -- Seconds left in the first minutes of my group (posted, or looking for players again).
@@ -1149,7 +1175,7 @@ function Groups:Create(dungeon, roles, invites, note, composition, options)
     if not options.handover then ns.Sound("posted") end
     -- Same notice as the other guild members get, so the leader sees the group went out.
     if self:AlertMode() ~= "none" then
-        ns.Print(format(L["New group: %s by %s"], DungeonWithRange(listing.dungeon), listing.leader))
+        ns.Print(format(L["New group: %s by %s"], DungeonWithRange(listing), listing.leader))
     end
     Changed()
     return true
@@ -1553,7 +1579,7 @@ OnBoth("DELIST", function(sender, p)
     listings[p.id] = nil
     local app = myApplications[p.id]
     if app and app.status == "pending" then
-        ns.Print(format(L["The group %s was closed."], ns.DungeonName(l.dungeon)))
+        ns.Print(format(L["The group %s was closed."], Groups:Title(l)))
     end
     myApplications[p.id] = nil
     myInviteReplies[p.id] = nil
@@ -1873,8 +1899,8 @@ local function StopFakeBig()
 end
 
 -- Returns false (not in test mode, or a size out of range), or true and whether it's shown now.
-function Groups:FakeGroup(size)
-    local same = fakeBig and fakeBig.payload.size == size
+function Groups:FakeGroup(size, title)
+    local same = fakeBig and fakeBig.payload.size == size and not title
     StopFakeBig()
     if size == 0 or same then
         Changed()
@@ -1898,8 +1924,10 @@ function Groups:FakeGroup(size)
         end
     end
     local payload = {
-        id = "fakebig:" .. GetServerTime(), leader = FAKE_BIG_LEADER, dungeon = "OTHER", size = size,
+        -- With a title: a dungeon key this version doesn't know, as a later version's activity.
+        id = "fakebig:" .. GetServerTime(), leader = FAKE_BIG_LEADER, dungeon = title and "FUTURE" or "OTHER", size = size,
         composition = composition, created = GetServerTime(), note = "Test : un groupe de " .. size,
+        title = title,
         members = members, pending = {},
     }
     local function Send()

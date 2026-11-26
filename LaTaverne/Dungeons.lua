@@ -96,10 +96,14 @@ function ns.DungeonByKey(key)
     return byKey[key]
 end
 
+-- The key a group's dungeon counts as here: a dungeon this version doesn't know (added later, or
+-- a group that isn't a dungeon) counts as "Other (see note)": its name, filters, wanted dungeons.
+function ns.DungeonKey(key)
+    return byKey[key] and key or "OTHER"
+end
+
 function ns.DungeonName(key)
-    local d = byKey[key]
-    if not d then return tostring(key) end
-    return Name(d)
+    return Name(byKey[ns.DungeonKey(key)])
 end
 
 -- Can I pick this dungeon? The test dungeon only exists in debug mode, and faction dungeons
