@@ -1088,17 +1088,51 @@ local function BuildListingRow(row, rightMargin)
     row.leaderHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-local function FillListingRow(row, l)
-    local count, taken = RenderSlots(row.slots, l)
-    -- Spots right-aligned before the button, "1/5" after them.
-    for i, slot in ipairs(row.slots) do
-        slot:ClearAllPoints()
-        slot:SetPoint("RIGHT", row, "RIGHT", -(row.rightMargin + FILL_WIDTH + (count - i) * SLOT_STEP), 0)
+-- A group with more spots than a row can draw (MAX_SLOTS): one count per role instead, e.g.
+-- "[tank] 2/2  [healer] 1/4  [dps] 5/14   8/20". Taken counts the spots filled, as the spots do.
+local function CompactSpots(slots)
+    local want, have, taken = {}, {}, 0
+    for _, s in ipairs(slots) do
+        local role = s.role or "DAMAGER"
+        want[role] = (want[role] or 0) + 1
+        if s.person then
+            have[role] = (have[role] or 0) + 1
+            taken = taken + 1
+        end
     end
-    local first = row.slots[1]
+    local parts = {}
+    for _, role in ipairs(ns.Groups.ROLES) do
+        local w = want[role] or 0
+        if w > 0 then
+            local h = have[role] or 0
+            parts[#parts + 1] = ns.RoleIcon(role, 20) .. " " .. (h >= w and "|cff808080" or "|cffffffff") .. h .. "/" .. w .. "|r"
+        end
+    end
+    return table.concat(parts, "  ") .. "   " .. (taken >= #slots and "|cff808080" or "|cffffffff") .. "(" .. taken .. "/" .. #slots .. ")|r"
+end
+
+local function FillListingRow(row, l)
+    local slots = BuildSlots(l)
+    local first
     row.fill:ClearAllPoints()
-    row.fill:SetPoint("LEFT", row.slots[math.max(1, count)], "RIGHT", 6, 0)
-    row.fill:SetText(count > 0 and ((taken >= count and "|cff808080" or "|cffffffff") .. taken .. "/" .. count .. "|r") or "")
+    if #slots > MAX_SLOTS then
+        for _, slot in ipairs(row.slots) do slot:Hide() end
+        row.fill:SetPoint("RIGHT", row, "RIGHT", -(row.rightMargin + 4), 0)
+        row.fill:SetFontObject("GameFontHighlight")
+        row.fill:SetText(CompactSpots(slots))
+        first = row.fill
+    else
+        local count, taken = RenderSlots(row.slots, l)
+        -- Spots right-aligned before the button, "1/5" after them.
+        for i, slot in ipairs(row.slots) do
+            slot:ClearAllPoints()
+            slot:SetPoint("RIGHT", row, "RIGHT", -(row.rightMargin + FILL_WIDTH + (count - i) * SLOT_STEP), 0)
+        end
+        first = row.slots[1]
+        row.fill:SetPoint("LEFT", row.slots[math.max(1, count)], "RIGHT", 6, 0)
+        row.fill:SetFontObject("GameFontHighlightSmall")
+        row.fill:SetText(count > 0 and ((taken >= count and "|cff808080" or "|cffffffff") .. taken .. "/" .. count .. "|r") or "")
+    end
     row.title:SetPoint("RIGHT", first, "LEFT", -12, 0)
     row.leader:SetPoint("RIGHT", first, "LEFT", -12, 0)
 

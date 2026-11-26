@@ -46,6 +46,8 @@ local ALONE_MAX = 5 * 60
 local RUNNING_MAX = 3 * 60 * 60
 local RUNNING_WARN = 10 * 60 -- the leader is told this long before RUNNING_MAX
 local REQUEST_TTL = 10 * 60  -- a join request nobody answered expires after 10 minutes
+local MAX_SIZE = 40          -- the biggest group read (dungeons only post 2, 5 or 10 so far: a later
+                             -- version lets "Other" pick its size, and this one shows those right)
 local NOTE_MAX = 250
 local CHANNEL_MAX = 40
 
@@ -56,6 +58,13 @@ Groups.DEFAULT_COMPOSITION = {
     [5] = { TANK = 1, HEALER = 1, DAMAGER = 3 },
     [10] = { TANK = 2, HEALER = 2, DAMAGER = 6 },
 }
+-- Any other size (up to MAX_SIZE): one tank and one healer below 10, two of each from 10 up,
+-- the rest DPS.
+setmetatable(Groups.DEFAULT_COMPOSITION, { __index = function(_, size)
+    if type(size) ~= "number" then return nil end
+    local each = size >= 10 and 2 or 1
+    return { TANK = each, HEALER = each, DAMAGER = size - 2 * each }
+end })
 local ROLE_SET = { TANK = true, HEALER = true, DAMAGER = true }
 local PENDING_STATUS = { request = true, invited = true, accepted = true }
 
@@ -116,7 +125,7 @@ local function CleanTag(tag)
 end
 
 local function ValidSize(size)
-    if size == 10 or size == 2 then return size end
+    if type(size) == "number" and size == math.floor(size) and size >= 2 and size <= MAX_SIZE then return size end
     return 5
 end
 
@@ -1848,6 +1857,62 @@ local function StopFake()
     fake.ticker:Cancel()
     handlerOf.DELIST(FAKE_LEADER, { id = fake.payload.id }, false, "guild")
     fake = nil
+end
+
+-- Test mode: a made-up open group of any size (2 to 40) in Groups, as a later version will post
+-- for "Other (see note)": how this version shows a size it can't post yet. A few members in
+-- it, nobody invited; again with the same size, or 0, removes it.
+local FAKE_BIG_LEADER = "Rosalie Fortin"
+local fakeBig -- { payload, ticker }
+
+local function StopFakeBig()
+    if not fakeBig then return end
+    fakeBig.ticker:Cancel()
+    handlerOf.DELIST(FAKE_BIG_LEADER, { id = fakeBig.payload.id }, false, "guild")
+    fakeBig = nil
+end
+
+-- Returns false (not in test mode, or a size out of range), or true and whether it's shown now.
+function Groups:FakeGroup(size)
+    local same = fakeBig and fakeBig.payload.size == size
+    StopFakeBig()
+    if size == 0 or same then
+        Changed()
+        return true, false
+    end
+    if not ns.Guild:IsSandbox() or not size or ValidSize(size) ~= size then return false end
+    local level = UnitLevel("player")
+    local composition = self.DEFAULT_COMPOSITION[size]
+    -- About a third of the spots taken, every role represented when it has spots.
+    local members, n = {}, 0
+    local names = { "Rosalie Fortin", "Albert Gagnon", "Mireille Roy", "Hector Pelletier", "Lucie Bergeron",
+        "Ovide Tremblay", "Jeanne Côté", "Marius Lavoie", "Irène Gauthier", "Firmin Morin", "Odile Ouellet",
+        "Léon Boucher", "Berthe Caron", "Eudore Cloutier" }
+    local classes = { TANK = "WARRIOR", HEALER = "PRIEST", DAMAGER = "MAGE" }
+    for _, role in ipairs(self.ROLES) do
+        local want = math.ceil((composition[role] or 0) / 3)
+        for _ = 1, want do
+            n = n + 1
+            if n > #names then break end
+            members[#members + 1] = { name = names[n], class = classes[role], level = level, role = role }
+        end
+    end
+    local payload = {
+        id = "fakebig:" .. GetServerTime(), leader = FAKE_BIG_LEADER, dungeon = "OTHER", size = size,
+        composition = composition, created = GetServerTime(), note = "Test : un groupe de " .. size,
+        members = members, pending = {},
+    }
+    local function Send()
+        if not ns.Guild:IsSandbox() then
+            StopFakeBig()
+            Changed()
+            return
+        end
+        handlerOf.LIST(FAKE_BIG_LEADER, payload, false, "guild")
+    end
+    fakeBig = { payload = payload, ticker = C_Timer.NewTicker(HEARTBEAT, Send) }
+    Send()
+    return true, true
 end
 
 function Groups:FakeInvitation(on)

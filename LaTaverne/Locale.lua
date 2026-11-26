@@ -1212,8 +1212,10 @@ function ns.RoleLabel(role)
     return L[ROLE_LABELS[role] or tostring(role)]
 end
 
-function ns.RoleIcon(role)
-    return ROLE_ICONS[role] or ""
+function ns.RoleIcon(role, size)
+    local icon = ROLE_ICONS[role] or ""
+    if size then icon = icon:gsub(":14:14:", ":" .. size .. ":" .. size .. ":", 1) end
+    return icon
 end
 
 -- Roles each class can take (by class only, no spec check).
