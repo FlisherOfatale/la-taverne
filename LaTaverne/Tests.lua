@@ -435,8 +435,13 @@ local function MyState()
 end
 
 -- Where probe messages go: the alliance channel (what the relay will use), else the test guild's
--- channel (test mode), else the guild. Two PCs comparing must be on the same one.
-local function ProbeRoute()
+-- channel (test mode), else the guild. Two PCs comparing must be on the same one. guild: the
+-- guild only (beacon guild), even in test mode.
+local function ProbeRoute(guild)
+    if guild then
+        if IsInGuild() then return "GUILD", nil, "guild" end
+        return nil, nil, "nowhere (not in a guild)"
+    end
     for _, role in ipairs({ "ally", "sandbox" }) do
         local ch = ns.Comm:GetChannel(role)
         if ch and ch.ready then
@@ -448,8 +453,8 @@ local function ProbeRoute()
     return nil, nil, "nowhere (no channel ready)"
 end
 
-local function SendProbe(prefix, text)
-    local distribution, target, label = ProbeRoute()
+local function SendProbe(prefix, text, guild)
+    local distribution, target, label = ProbeRoute(guild)
     if not distribution then return nil, label end
     return C_ChatInfo.SendAddonMessage(prefix, text, distribution, target), label
 end
@@ -467,17 +472,18 @@ end
 local BEACON_EVERY = 2
 local BEACON_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START", "ENCOUNTER_END",
     "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED", "PLAYER_ENTERING_WORLD" }
-local beacon = { seq = 0, heard = {} }
+local beacon = { seq = 0, heard = {}, sentAt = {}, echo = {} }
 
 -- kind: B (beacon), E (an event, named in extra), C (logout countdown, logout probe).
 local function BeaconSend(kind, extra)
     local state = MyState()
-    local r, label = SendProbe(PROBE_PREFIX, table.concat({ kind, beacon.seq, GetServerTime(), state, extra or "" }, ";"))
+    local r, label = SendProbe(PROBE_PREFIX, table.concat({ kind, beacon.seq, GetServerTime(), state, extra or "" }, ";"), beacon.guild)
     return r, label, state
 end
 
 local function BeaconTick()
     beacon.seq = beacon.seq + 1
+    beacon.sentAt[beacon.seq] = GetTime()
     local r, label, state = BeaconSend("B")
     local now = GetTime()
     if not Sent(r) or state ~= beacon.lastState or now - (beacon.lastLogged or 0) >= 30 then
@@ -491,12 +497,37 @@ local function BeaconEvent(event)
     Note("out", event, "via", label, Sent(r) and "sent" or ResultName(r), "- me:", state)
 end
 
+-- My own beacon back from the server (one PC is enough): how long after I sent it, to a tenth of
+-- a second. Only changes are written: a missed one, a slow one (1 s or more), my state changing,
+-- and a line every 30 s.
+local function BeaconEcho(seq, state)
+    local at = beacon.sentAt[seq]
+    if not at then return end
+    beacon.sentAt[seq] = nil
+    local e = beacon.echo
+    local back = GetTime() - at
+    e.count = (e.count or 0) + 1
+    e.slowest = math.max(e.slowest or 0, back)
+    local gap = e.seq and (seq - e.seq - 1) or 0
+    local now = GetTime()
+    if not e.seq or gap ~= 0 or back >= 1 or state ~= e.state or now - (e.logged or 0) >= 30 then
+        Note("echo #" .. seq, format("back after %.1f s", back), gap > 0 and ("MISSED " .. gap) or "",
+            "- me:", tostring(state))
+        e.logged = now
+    end
+    e.seq, e.state = seq, state
+end
+
 local function BeaconHeard(prefix, text, _, sender)
     if prefix ~= PROBE_PREFIX or IsSecret(text) or IsSecret(sender) or type(text) ~= "string"
-        or type(sender) ~= "string" or ns.IsMe(sender) then return end
+        or type(sender) ~= "string" then return end
     local kind, seq, sent, state, extra = strsplit(";", text)
     seq, sent = tonumber(seq), tonumber(sent)
     if not seq or not sent then return end
+    if ns.IsMe(sender) then
+        if kind == "B" then BeaconEcho(seq, state) end
+        return
+    end
     local late = GetServerTime() - sent
     if kind ~= "B" then
         Note("in", sender, (extra and extra ~= "") and extra or kind, late .. " s late", "- them:", tostring(state))
@@ -517,7 +548,7 @@ local function BeaconHeard(prefix, text, _, sender)
     h.seq, h.state = seq, state
 end
 
-local function BeaconStart()
+local function BeaconStart(arg)
     C_ChatInfo.RegisterAddonMessagePrefix(PROBE_PREFIX)
     beacon.frame = beacon.frame or CreateFrame("Frame")
     beacon.frame:RegisterEvent("CHAT_MSG_ADDON")
@@ -533,8 +564,11 @@ local function BeaconStart()
         end
     end))
     beacon.seq, beacon.lastState, beacon.lastLogged = 0, nil, 0
+    beacon.guild = (arg or ""):lower() == "guild"
     wipe(beacon.heard)
-    local _, _, label = ProbeRoute()
+    wipe(beacon.sentAt)
+    wipe(beacon.echo)
+    local _, _, label = ProbeRoute(beacon.guild)
     Note("beacon on: a message every", BEACON_EVERY, "s via", label, "- me:", MyState())
     beacon.ticker = C_Timer.NewTicker(BEACON_EVERY, Safe(BeaconTick))
 end
@@ -543,6 +577,15 @@ local function BeaconStop()
     if beacon.ticker then beacon.ticker:Cancel() beacon.ticker = nil end
     if beacon.frame then beacon.frame:UnregisterAllEvents() end
     Note("beacon off after #" .. beacon.seq)
+    -- The last two may still be on their way: not counted as missing.
+    local e = beacon.echo
+    local expected = math.max(0, beacon.seq - 2)
+    if (e.count or 0) == 0 then
+        Note("echo: none of my beacons came back (this channel doesn't send them back to me: use two PCs)")
+    else
+        Note(format("echo: %d of my beacons came back (of %d), the slowest after %.1f s", e.count, expected,
+            e.slowest or 0))
+    end
 end
 
 -- lines: each guild line, with what could recognize the same line on another PC: the game's line
@@ -1067,7 +1110,7 @@ local PROBES = {
     { name = "lines", start = LinesStart, stop = LinesStop,
       about = "guild lines: line and message numbers, fingerprints (two PCs in one guild)" },
     { name = "beacon", start = BeaconStart, stop = BeaconStop,
-      about = "a message every 2 s: late, lost or held in fights, loading screens, dungeons (two PCs)" },
+      about = "[guild]: a message every 2 s: late, lost or held in fights, loading screens, dungeons (two PCs; one PC: its own come back)" },
     { name = "throttle", run = ThrottleRun,
       about = "how many messages go out at once, per prefix (runs once, 10 s)" },
     { name = "logout", start = LogoutStart, stop = LogoutStop,
@@ -1139,7 +1182,7 @@ ns.commands.probe = function(arg)
     else
         probes[probe.name] = true
         Note("La Taverne", ns.version, probe.name, date("%Y-%m-%d"))
-        probe.start()
+        probe.start(rest)
         ns.Print(probe.name .. " probe on: /taverne probe " .. probe.name .. " again to stop, /taverne probe show to see it")
     end
 end
