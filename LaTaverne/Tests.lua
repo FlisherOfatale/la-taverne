@@ -577,15 +577,15 @@ local function BeaconStop()
     if beacon.ticker then beacon.ticker:Cancel() beacon.ticker = nil end
     if beacon.frame then beacon.frame:UnregisterAllEvents() end
     Note("beacon off after #" .. beacon.seq)
-    -- The last two may still be on their way: not counted as missing.
     local e = beacon.echo
-    local expected = math.max(0, beacon.seq - 2)
     if (e.count or 0) == 0 then
         Note("echo: none of my beacons came back (this channel doesn't send them back to me: use two PCs)")
     else
-        Note(format("echo: %d of my beacons came back (of %d), the slowest after %.1f s", e.count, expected,
-            e.slowest or 0))
+        -- The last ones may still have been on their way.
+        Note(format("echo: %d of my %d beacons came back (the last may still have been on their way), the slowest after %.1f s",
+            e.count, beacon.seq, e.slowest or 0))
     end
+    wipe(beacon.sentAt)
 end
 
 -- lines: each guild line, with what could recognize the same line on another PC: the game's line
