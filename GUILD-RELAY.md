@@ -18,6 +18,9 @@ and (map job) the map positions of members without La Taverne who share them thr
 - On by default. Each player can opt out (Options), each guild's officers can turn it off for
   the whole guild (Guild Info line, Setup page).
 - Players with La Taverne still send their own lines as before; the relay only covers the others.
+- Lines from the guild's linked Discord are never relayed: the game gives their text as a
+  `|K...|k` code that only that guild's players can see as words (Lua never gets the words). A
+  relay passing it on showed the code itself to the allied guilds.
 - Old versions never see any of it (new prefix, never registered by them).
 
 ## How it works (short)

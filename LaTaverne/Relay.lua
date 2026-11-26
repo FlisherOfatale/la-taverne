@@ -1160,6 +1160,9 @@ end
 function Relay:GuildLine(author, text, class, guid)
     if IsSecret(author) or IsSecret(text) or type(author) ~= "string" or type(text) ~= "string" then return end
     if text == "" or ns.IsMe(author) or not ns.Alliance:IsActive() then return end
+    -- A |K...|k code (a Discord line the check below missed): only my client can draw it as words.
+    -- (A "|" typed by a player comes as "||": not a code.)
+    if text:gsub("||", ""):find("|K", 1, true) then return end
     if IsSecret(guid) or type(guid) ~= "string" then guid = nil end
     local key = ns.AllyChat.TextKey(text)
     if not key then return end
@@ -1251,8 +1254,16 @@ ns.Comm:On("GCHAT", function(sender, p, isSelf)
     end
 end)
 
-ns.On("CHAT_MSG_GUILD", function(text, author, _, _, _, _, _, _, _, _, _, guid)
+-- A line from the guild's linked Discord (discordInfo, the event's 18th value: a userID other than
+-- 0, the game's own test): its text is a |K...|k code that only my guild's players see as words
+-- (the game draws them, Lua only gets the code). The allied guilds would see the code itself: not
+-- passed on.
+ns.On("CHAT_MSG_GUILD", function(text, author, _, _, _, _, _, _, _, _, _, guid, _, _, _, _, _, discordInfo)
     if ns.Guild:IsSandbox() then return end
+    if type(discordInfo) == "table" and not IsSecret(discordInfo.userID)
+        and discordInfo.userID ~= nil and discordInfo.userID ~= 0 then
+        return
+    end
     Relay:GuildLine(author, text, nil, guid)
 end)
 
