@@ -26,7 +26,7 @@ globals = {
 read_globals = {
     -- Lua helpers the game adds
     "format", "date", "time", "strsplit", "strtrim", "tinsert", "tremove", "wipe",
-    "debugstack", "geterrorhandler", "seterrorhandler", "hooksecurefunc", "issecretvalue",
+    "debugstack", "geterrorhandler", "seterrorhandler", "hooksecurefunc", "issecretvalue", "issecrettable",
     "CopyTable", "Mixin", "CreateFromMixins", "RunNextFrame",
 
     -- Namespaces

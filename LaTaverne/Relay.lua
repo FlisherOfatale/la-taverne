@@ -1260,6 +1260,10 @@ end)
 -- passed on.
 ns.On("CHAT_MSG_GUILD", function(text, author, _, _, _, _, _, _, _, _, _, guid, _, _, _, _, _, discordInfo)
     if ns.Guild:IsSandbox() then return end
+    -- In a chat lockdown the event's values are hidden: GuildLine would drop the line anyway, and
+    -- reading a hidden discordInfo's field could error (stopping the other guild chat handlers).
+    if IsSecret(text) or IsSecret(discordInfo) then return end
+    if type(discordInfo) == "table" and issecrettable and issecrettable(discordInfo) then return end
     if type(discordInfo) == "table" and not IsSecret(discordInfo.userID)
         and discordInfo.userID ~= nil and discordInfo.userID ~= 0 then
         return
