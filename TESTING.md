@@ -50,8 +50,8 @@ passed: see "Done").
 - [ ] Guild relay, handover (who takes over is the simulator's; the lines are the game's): switch
       "Help relay for my guild" off (popup first), `/reload` or log out while guildmates without
       La Taverne talk: the lines said meanwhile reach the allied PC late, not lost.
-- [ ] Guild relay in a fight: lines wait and go out after it. The relay's game killed while
-      someone talks: the other candidate sends the owed lines (~13 s after a line is owed).
+- [ ] Guild relay in a fight outdoors: lines still go out at once (the relay page says sending
+      "ok"). The relay's game killed while someone talks: the other candidate sends the owed lines (~13 s after a line is owed).
 - [ ] Relayed line mark: a relayed line shows a grey lynx instead of the gold one (full game
       restart first: new file `media/lynx_icon_grey.tga`), and once the line "Allied lines
       marked ... can't see your answers".

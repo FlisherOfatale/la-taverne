@@ -13,8 +13,9 @@
 --   2 fought a fight in the last 5 min
 --   3        in a raid group, or away (AFK) for 20 min: last resort
 --   can't    in an instance, switched off, officers' line off, alliance channel not ready...
--- A fight never makes a relay give up: it only holds what it sends until the fight is over
--- (the game would hold it anyway).
+-- A fight never makes a relay give up, nor stops it: the game takes and delivers addon messages
+-- during fights. Only its chat lockdown (a boss encounter, sometimes until combat ends) refuses
+-- them (code 11) and hides chat: what the relay sends waits until the lockdown is over.
 --
 -- RLY messages (own prefix, alliance channel; every guild hears them, that's the relay state
 -- shown for each guild):
@@ -66,6 +67,8 @@ local CLAIM_STALE = 20        -- claims older than this belong to a past electio
 local FRESH_CLAIM = 5         -- a new election keeps only the claims this recent
 local ELECTION_TIMEOUT = 15   -- an election nobody won (no beacon): start again
 local BEACON_AGAIN = 5        -- a holder hearing claims beacons at once, at most this often
+local AFTER_LOCKDOWN = 4      -- a holder after a lockdown: asks, then no beacon this long (answers first)
+local DUAL_CONFIRM = 2        -- two holders: the one that stays beacons again this long after
 local FOUGHT = 300            -- "fought recently"
 local LONG_AWAY = 1200        -- away this long: tier 3, before the game's idle logout
 local PREV = 120              -- "held it lately": wins ties
@@ -190,16 +193,15 @@ local function InInstance()
     return inside and true or false
 end
 
--- The game holds or drops messages during my own fights and game restrictions: nothing is
--- handed to it then (the queue waits).
+-- The game's chat lockdown (a boss encounter, sometimes until combat ends): it refuses every
+-- addon message (AddOnMessageLockdown, dropped, not held) and hides chat, both ways. Nothing is
+-- handed to it then (the queue waits). Fights and add-on restrictions don't stop messages
+-- (measured in game: a restriction is on through a whole dungeon), so they don't pause.
 local function SendingPaused()
-    if Fighting() or ns.Guild:Restricted() then return true end
     local lockdown = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
-    if lockdown then
-        local ok, on = pcall(lockdown)
-        if ok and on then return true end
-    end
-    return false
+    if not lockdown then return false end
+    local ok, on = pcall(lockdown)
+    return (ok and on) and true or false
 end
 
 -- Why I can't do this job right now (a short code, Relay.WhyText), or nil.
@@ -517,7 +519,7 @@ end
 -- counts in the next one.)
 local function Beacon(job)
     local st = jobs[job]
-    -- Owed: the tick sends it as soon as the fight is over. (An answer to a newcomer's ask, or to
+    -- Owed: the tick sends it as soon as the lockdown is over. (An answer to a newcomer's ask, or to
     -- a claim, can't wait for the next regular beacon: they'd hold the job meanwhile, both of us.)
     if SendingPaused() then
         st.beaconOwed = true
@@ -558,7 +560,7 @@ local function ScheduleClaim(job)
     local st = jobs[job]
     if not st.free or st.holding or st.settleAt or st.quiet then return end
     local tier = ClaimTier(job)
-    -- Not while I can't send (my fight, a game restriction): once it's over (the tick tries again).
+    -- Not while I can't send (the chat lockdown): once it's over (the tick tries again).
     if not tier or SendingPaused() then
         st.claimAt = nil
         return
@@ -655,7 +657,7 @@ end
 local function TryClaim(job)
     local st = jobs[job]
     if SendingPaused() then
-        st.claimAt = nil -- once my fight (or the restriction) is over
+        st.claimAt = nil -- once the lockdown is over
         return
     end
     local tier = ClaimTier(job)
@@ -680,8 +682,8 @@ local function Settle(job)
     st.settleAt = nil
     if not st.free or st.holding then return end
     local key = MyKey()
-    -- I can't any more, or can't send now (a fight started: no beacon until it ends, the others
-    -- would take it meanwhile): someone else, or me again in the next round.
+    -- I can't any more, or can't send now (a lockdown started: no beacon until it ends, the
+    -- others would take it meanwhile): someone else, or me again in the next round.
     if not ClaimTier(job) or SendingPaused() then st.claims[key] = nil end
     local now, best = GetTime(), nil
     for _, c in pairs(st.claims) do
@@ -719,6 +721,15 @@ local function Ask()
     SendRLY("ask", nil)
 end
 
+-- A holder after a chat lockdown: one ask for all my jobs (the holders answer with a beacon).
+local lockdownAskAt = 0
+local function AskAfterLockdown()
+    local now = GetTime()
+    if now - lockdownAskAt < AFTER_LOCKDOWN then return end
+    lockdownAskAt = now
+    SendRLY("ask", nil)
+end
+
 -- A higher relay protocol than mine: in my guild I step aside (the newer ones relay); anywhere,
 -- one chat line to update.
 function Relay:NoteProtocol(rp, myGuild)
@@ -744,7 +755,7 @@ local function HeardFrom(job, key, q, isLine)
     h.heard = GetTime()
     if q ~= nil then h.q = tonumber(q) or 0 end
     if isLine then h.lastLine = GetTime() end
-    -- A stall election is void once the holder is heard again: it was only busy (a fight).
+    -- A stall election is void once the holder is heard again: it was only held back (a lockdown).
     if st.free and st.stall then
         Note("%s: %s is back, no new relay", job, h.name)
         CloseElection(job)
@@ -791,6 +802,15 @@ local function OnGuildRLY(sender, p)
                 d.at = GetTime()
                 st.dualHeard = d
                 BeaconSoon(job)
+                -- The other one stops silently, and its beacon may reach some players after mine:
+                -- one more a moment later, so mine is the last they hear.
+                if not st.confirmPending then
+                    st.confirmPending = true
+                    C_Timer.After(DUAL_CONFIRM, function()
+                        st.confirmPending = false
+                        if st.holding then Beacon(job) end
+                    end)
+                end
             end
             return
         end
@@ -918,7 +938,7 @@ end)
 
 -- For the relay report: when my guild's holder's beacon last came on each channel, and whether
 -- that looks wrong (warn): VIA_MISSED beacons in a row came on the guild channel and not on the
--- alliance channel (a copy can be lost; the holder's fights also space its beacons out). The holder's client sends the guild copy once the game took the alliance one, so the
+-- alliance channel (a copy can be lost; the holder's lockdowns also space its beacons out). The holder's client sends the guild copy once the game took the alliance one, so the
 -- alliance copies were lost on the way: the allied guilds may not see that holder either. Only
 -- when that can be told: my own alliance channel works (otherwise I'd hear no holder there, and
 -- that's mine to fix), and the roster knows the holder (Comm drops my guild's alliance copies
@@ -1128,7 +1148,7 @@ local function SendLine(e, waiting, gapFill)
     return true
 end
 
--- Send what's owed, as the holder, within my budget. Nothing during my fight: the lines wait.
+-- Send what's owed, as the holder, within my budget. Nothing during the lockdown: the lines wait.
 local function Pump()
     if not jobs.chat.holding then
         for _, e in ipairs(queue) do e.queued = nil end
@@ -1525,7 +1545,21 @@ local function TickJob(job)
             Release(job, why)
         else
             st.heldTier = tier
-            if now - st.lastBeacon >= BEACON_EVERY or (st.beaconOwed and not SendingPaused()) then Beacon(job) end
+            -- In a lockdown I hear nothing either: a newcomer may have taken the job meanwhile.
+            -- Once it's over, I ask who relays and hold my beacon a moment: a holder's answer
+            -- comes first, and if it's the better one I stop without a beacon the allied guilds
+            -- would take for the last word (if I'm the better one, I beacon at once on hearing it).
+            if SendingPaused() then
+                st.lockedHolding = true
+            elseif st.lockedHolding then
+                st.lockedHolding = nil
+                st.quietUntil = now + AFTER_LOCKDOWN
+                AskAfterLockdown()
+            end
+            if not (st.quietUntil and now < st.quietUntil)
+                and (now - st.lastBeacon >= BEACON_EVERY or (st.beaconOwed and not SendingPaused())) then
+                Beacon(job)
+            end
         end
         return
     end
@@ -1573,8 +1607,8 @@ local function TickJob(job)
         end
         return
     end
-    -- A holder is there. Not during my own fight: I'd see stalls that aren't.
-    if Fighting() then return end
+    -- A holder is there. Not during my lockdown: I hear nothing, I'd see stalls that aren't.
+    if SendingPaused() then return end
     local hooks = JobHooks[job]
     if hooks and hooks.watch then
         hooks.watch(job, st, tier)
@@ -1713,10 +1747,11 @@ local function SelfCheck(job)
     Check("state", job, st.holding and (st.free or st.holder ~= nil),
         "self-check: %s: you hold it, and an election is open or another holder is named", job)
     -- My beacon late, nothing holding it back (TickJob sends it every BEACON_EVERY).
-    Check("beacon", job, st.holding and not SendingPaused() and now - st.lastBeacon > CHECK_BEACON,
+    Check("beacon", job, st.holding and not SendingPaused() and not (st.quietUntil and now < st.quietUntil)
+        and now - st.lastBeacon > CHECK_BEACON,
         "self-check: %s: your beacon is %d s late", job, math.floor(now - st.lastBeacon))
     -- An election that doesn't end while I could take part all along (not while I can't claim:
-    -- in a dungeon, in my fight...).
+    -- in a dungeon, in a lockdown...).
     if st.free and ClaimTier(job) ~= nil and not SendingPaused() then
         st.freeSince = st.freeSince or now
     else
@@ -2150,7 +2185,7 @@ local function ReportText()
         if not e.covered then owed = owed + 1 end
     end
     Add("    " .. format(L["lines kept %d (%d not passed on yet), queue %d, burst left %.1f of %d, sending %s"],
-        #buffer, owed, #queue, tokens, BURST, SendingPaused() and L["paused (a fight)"] or L["ok"]))
+        #buffer, owed, #queue, tokens, BURST, SendingPaused() and L["paused (boss fight)"] or L["ok"]))
     local kept, recent, stops = 0, 0, 0
     for _, e in pairs(places) do
         kept = kept + 1
@@ -2211,7 +2246,7 @@ local UP_WARN = 90       -- uptime this hour under this %: shown as worth a look
 
 -- The game's result codes for a refused message (Enum.SendAddonMessageResult).
 local CODE_NAMES = { ["3"] = "add-on message limit", ["7"] = "channel not ready", ["8"] = "channel throttle",
-    ["9"] = "general error" }
+    ["9"] = "general error", ["11"] = "chat lockdown" }
 local KIND_TEXT = { RCHAT = "chat line", RMAP = "map batch", ["RLY claim"] = "claim",
     ["RLY hold"] = "holder's signal", ["RLY off"] = "giving it up", ["RLY ask"] = "asking who relays" }
 
@@ -2443,7 +2478,7 @@ function Relay:WindowData()
     for _, e in ipairs(buffer) do if not e.covered then owed = owed + 1 end end
     Row(send, L["Lines kept"], format(L["%d (%d not passed on yet) · queue %d · burst left %.1f of %d"], #buffer, owed, #queue, tokens, BURST),
         owed > 0 and "warn" or nil)
-    Row(send, L["Sending"], SendingPaused() and L["paused (a fight)"] or L["ok"], SendingPaused() and "warn" or "ok")
+    Row(send, L["Sending"], SendingPaused() and L["paused (boss fight)"] or L["ok"], SendingPaused() and "warn" or "ok")
     local kept, recent, stops = 0, 0, 0
     for _, e in pairs(places) do
         kept = kept + 1

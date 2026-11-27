@@ -5,8 +5,8 @@ local World = require("world")
 
 local JOBS = { "chat", "map" }
 
--- Per second, for each guild and job: how many hold it (two at once, neither in a fight: they
--- missed each other),
+-- Per second, for each guild and job: how many hold it (two at once, neither in a chat lockdown:
+-- they missed each other),
 -- whether nobody holds it while someone could (a gap), whether the guild's players agree on
 -- who holds it, and whether the allied guilds see that holder.
 local function Recorder(w)
@@ -27,11 +27,11 @@ local function Recorder(w)
             for _, job in ipairs(JOBS) do
                 local r = Get(g.name, job)
                 local holders, eligible = {}, 0
-                local sending = 0 -- holders not in a fight: a holder in a fight sends nothing
+                local sending = 0 -- holders not in a lockdown: a locked holder sends nothing
                 for _, c in ipairs(online) do
                     if c:Holding(job) then
                         holders[#holders + 1] = c
-                        if not c.inCombat then sending = sending + 1 end
+                        if not c.locked then sending = sending + 1 end
                     end
                     if c:CanRelay(job) then eligible = eligible + 1 end
                 end
@@ -195,8 +195,8 @@ S[#S + 1] = { name = "holder disconnects",
     end }
 
 S[#S + 1] = { name = "holder fighting when someone logs in",
-    about = "a guildmate logs in and asks who relays while the relay is in a fight (it sends nothing): "
-        .. "the newcomer takes the job meanwhile, and one of them steps down once the fight is over",
+    about = "a guildmate logs in and asks who relays while the relay fights outdoors (no lockdown): "
+        .. "the relay answers at once, nobody else takes the job",
     run = function(seed, opts)
         local w, rec = Settled(seed, opts)
         local h = Holder(w, "Alpha", "chat")
@@ -205,12 +205,28 @@ S[#S + 1] = { name = "holder fighting when someone logs in",
         h:Fight(40)
         w:After(2, function() late:Login(1) end)
         w:Run(600)
-        -- Split: the guildmates follow the newcomer, then (maybe) the old relay again after the fight.
+        -- (No holder: the first election, at the start.)
+        return Check(rec, { dual = 0, gap = 25, split = 15, hidden = 15, changes = 0 }), rec
+    end }
+
+S[#S + 1] = { name = "holder in a boss fight when someone logs in",
+    about = "a guildmate logs in and asks who relays while the relay is in a chat lockdown (a boss "
+        .. "fight: it sends and hears nothing): the newcomer takes the job meanwhile, and one of them "
+        .. "steps down once the lockdown is over",
+    run = function(seed, opts)
+        local w, rec = Settled(seed, opts)
+        local h = Holder(w, "Alpha", "chat")
+        if not h then return { "Alpha chat: no holder after 4 minutes" }, rec end
+        local late = w:AddPlayer("Alpha", "Late")
+        h:Lockdown(40)
+        w:After(2, function() late:Login(1) end)
+        w:Run(600)
+        -- Split: the guildmates follow the newcomer, then (maybe) the old relay again after the lockdown.
         return Check(rec, { dual = 5, gap = 25, split = 60, hidden = 60, changes = 2 }), rec
     end }
 
-S[#S + 1] = { name = "better holder fighting when someone logs in",
-    about = "as above, but the newcomer is in a raid group (the worse relay): once the fight is over, "
+S[#S + 1] = { name = "better holder in a boss fight when someone logs in",
+    about = "as above, but the newcomer is in a raid group (the worse relay): once the lockdown is over, "
         .. "the relay's owed beacon makes the newcomer step down at once",
     run = function(seed, opts)
         local w, rec = Settled(seed, opts)
@@ -222,7 +238,7 @@ S[#S + 1] = { name = "better holder fighting when someone logs in",
             if w.now - h.jobs.chat.lastBeacon < 1 then break end
             w:Run(1)
         end
-        h:Fight(40)
+        h:Lockdown(40)
         w:After(2, function()
             late:Login(1)
             late.inRaid = true
@@ -259,7 +275,7 @@ S[#S + 1] = { name = "lossy channels",
     end }
 
 S[#S + 1] = { name = "busy evening",
-    about = "three guilds, two hours: players come and go (some disconnect), fight, enter dungeons; 1 % loss",
+    about = "three guilds, two hours: players come and go (some disconnect), fight, enter dungeons and fight bosses there (chat lockdown); 1 % loss",
     run = function(seed, opts)
         opts = opts or {}
         opts.loss = 0.01
@@ -274,7 +290,9 @@ S[#S + 1] = { name = "busy evening",
                     local function Activity()
                         if not c.online then return end
                         local roll = math.random()
-                        if roll < 0.6 then
+                        if roll < 0.6 and c.inInstance then
+                            c:Lockdown(30 + math.random(150)) -- a boss: the chat lockdown
+                        elseif roll < 0.6 then
                             c:Fight(10 + math.random(50))
                         elseif roll < 0.7 then
                             c.inInstance = true

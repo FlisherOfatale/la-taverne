@@ -140,10 +140,16 @@ end
 
 -- Network --------------------------------------------------------------------------------------
 
+-- The chat lockdown (a boss fight, Client:Lockdown) blocks both ways: the game refuses what a
+-- locked player sends, and a locked player gets nothing (measured in game).
 function World:Deliver(from, to, fn)
+    if from.locked then return end
     if to ~= from and self.loss > 0 and math.random() < self.loss then return end
     local lat = self.latency[1] + math.random() * (self.latency[2] - self.latency[1])
-    self:After(lat, fn, to)
+    self:After(lat, function()
+        if to.locked then return end
+        fn()
+    end, to)
 end
 
 function World:SendGuild(from, msgType, payload)
@@ -387,7 +393,8 @@ local function NewEnv(c)
         IsInRaid = function() return c.inRaid or false end,
         IsResting = function() return c.resting or false end,
         UnitAffectingCombat = function() return c.inCombat or false end,
-        C_ChatInfo = { RegisterAddonMessagePrefix = function() return true end },
+        C_ChatInfo = { RegisterAddonMessagePrefix = function() return true end,
+            InChatMessagingLockdown = function() return c.locked or false end },
         C_Map = { GetMapInfo = function() return nil end },
         C_Timer = {
             After = function(delay, fn) w:After(delay, fn, c) end,
@@ -417,7 +424,7 @@ function Client:Login(allyDelay)
     assert(not self.online, self.name .. " is already online")
     self.online, self.gen = true, self.gen + 1
     self.allyReady, self.roster, self.rosterCount = false, nil, 0
-    self.inCombat, self.inInstance, self.inRaid, self.away = false, false, false, false
+    self.inCombat, self.inInstance, self.inRaid, self.away, self.locked = false, false, false, false, false
     self.ns = NewNs(self)
     local chunk = w.relayChunk
     setfenv(chunk, NewEnv(self))
@@ -468,6 +475,18 @@ function Client:Fight(seconds)
         if self.gen ~= gen then return end
         self.inCombat = false
         self:Fire("PLAYER_REGEN_ENABLED")
+    end, self)
+end
+
+-- A boss fight: a fight with the game's chat lockdown on for all of it (Deliver).
+function Client:Lockdown(seconds)
+    self.locked = true
+    self.world:Log("%s: chat lockdown for %d s", self.name, seconds)
+    self:Fight(seconds)
+    local gen = self.gen
+    self.world:After(seconds, function()
+        if self.gen ~= gen then return end
+        self.locked = false
     end, self)
 end
 

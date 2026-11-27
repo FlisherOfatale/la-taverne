@@ -203,6 +203,7 @@ end
 local SEND_RESULTS = {
     [0] = "Success", "InvalidPrefix", "InvalidMessage", "AddonMessageThrottle", "InvalidChatType",
     "NotInGroup", "TargetRequired", "InvalidChannel", "ChannelThrottle", "GeneralError",
+    "NotInGuild", "AddOnMessageLockdown", "TargetOffline",
 }
 
 -- Sends on the test channel. A freshly joined channel can reject messages for a moment

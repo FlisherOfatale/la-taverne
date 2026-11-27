@@ -33,14 +33,18 @@ and (map job) the map positions of members without La Taverne who share them thr
   the last 5 min, 3 last resort (raid group, or away 20 min). **Can't**: switch off, officers'
   line off, Guild Info not read yet, alliance or channel not ready, allied chat off, a newer
   relay protocol in the guild (heard in the last 10 min), in an instance, logging out.
-  A fight never makes a relay give up: sending waits until it's over.
+  A fight never makes a relay give up, nor stops it: the game takes addon messages during fights.
+  Only its chat lockdown (a boss encounter, sometimes until combat ends) refuses them and hides
+  chat both ways: sending waits until it's over. Then the holder asks who relays and holds its
+  beacon 4 s, in case someone took the job meanwhile.
 - **`RLY` messages**: `ask` (I just joined: holders answer with a beacon, at most every 3 s),
   `claim` (after a delay by tier: offset + tier × 3 s + 0.5 s unless held lately + 0-1.5 s by a
   name hash), `hold` (beacon every 60 s, lease 150 s), `off` (planned handoff, with a reason).
   After claiming, 2 s to settle, then everyone applies the same order (newest protocol, tier,
   held lately, hash, name): the best takes the job and beacons. No beacon within 15 s: the round
   starts again. Challenge (`ch = 1`): a candidate 2 tiers better than the holder for 2 min asks
-  for it. Two holders: the worse one (by their last beacons) stops silently.
+  for it. Two holders: the worse one (by their last beacons) stops silently; the other beacons at
+  once and again 2 s later, so its beacon is the last everyone hears.
 - **Chat job**: every candidate keeps the guild lines of the last 60 s (40 lines; 180 s / 100
   in or after a fight). A line is covered by the author's own `CHAT` or any `RCHAT` (same author,
   same text key, within 10 s; or, if no text matches, the author's oldest owed line within 10 s:
@@ -159,7 +163,7 @@ What's done and what's left: `TESTING.md`. The setup and the checks:
 3. `/taverne dev say ...` shows once on the allied PC; the authors' own lines also show once.
 4. Handoffs: switch off (popup), `/reload`, logout, raid group, instance: the other takes over,
    lines said meanwhile are replayed.
-5. Holder in a fight: lines wait, no takeover if it's back quickly; holder's game killed: the
+5. Holder in a fight outdoors: lines still go out at once, no takeover; holder's game killed: the
    other takes over after a line is owed ~13 s.
 6. Officers: Setup page, untick "Guild chat", paste the Guild Info: nobody relays, allies see
    "turned off by the officers".

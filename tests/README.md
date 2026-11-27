@@ -48,6 +48,7 @@ run. Once the relay handles it, remove `known = true`, so it can't come back.
 
 Copy one in `sim/scenarios.lua`. `Settled()` gives two guilds with everyone logged in and the jobs
 taken. Players: `c:Login()`, `c:Logout()` (the normal way, with the countdown), `c:Drop()` (game
-closed), `c:Fight(seconds)`, and the fields `inInstance`, `inRaid`, `resting`, `away`,
+closed), `c:Fight(seconds)`, `c:Lockdown(seconds)` (a boss fight: the game's chat lockdown, nothing
+sent or received), and the fields `inInstance`, `inRaid`, `resting`, `away`,
 `faults.allyOutLost` (its alliance messages never arrive), `faults.allyInLost` (it never gets
 any). `w:After(seconds, fn)` plans something, `w:Run(seconds)` plays it. End with `Check(rec, limits)`.
