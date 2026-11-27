@@ -235,6 +235,9 @@ function Recipes:Search(text, limit)
     return found
 end
 
+-- Every recipe of the catalog, sorted by name (don't change the list).
+function Recipes:All() return entries end
+
 -- How many recipes the catalog has: in all, and [profession] = count.
 function Recipes:Counts()
     local per, total = {}, 0
@@ -303,6 +306,7 @@ end
 local VERSION = 1
 local ANSWER_WAIT = { 0.5, 3 } -- seconds before answering, at random: answers don't all come at once
 local ASK_EVERY = 5            -- one question every 5 s at most, mine or anyone's (more are ignored)
+Recipes.ASK_EVERY = ASK_EVERY
 local MAX_CHARS = 20           -- characters in one answer, at most
 local NAME_MAX = 60
 
@@ -453,6 +457,14 @@ ns.Comm:OnAlly("RA", function(sender, p, isSelf) OnAnswer("ally", sender, p, isS
 function Recipes:OnLogin()
     if not (C_TradeSkillUI and C_TradeSkillUI.GetProfessionInfoByRecipeID and C_Spell and C_Spell.GetSpellName) then
         return
+    end
+    -- Once: recipes are shared now, and where to turn it off.
+    if not Store().told then
+        C_Timer.After(SWEEP_AFTER + 10, function()
+            if Store().told then return end
+            Store().told = true
+            ns.Print(ns.L["Profession recipes are now shared: when someone in your guild or an allied guild asks who can make a recipe, La Taverne answers for your characters that know it, your alts in the guild or an allied guild too. To stop: the Professions tab, Share my recipes."])
+        end)
     end
     local catalog = Store().catalog
     if CatalogCurrent(catalog) then

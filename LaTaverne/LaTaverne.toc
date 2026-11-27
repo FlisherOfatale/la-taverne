@@ -37,6 +37,7 @@ Lynx.lua
 
 UI.lua
 RelayPage.lua
+ProfessionsPage.lua
 Gamepad.lua
 Minimap.lua
 InviteCard.lua
