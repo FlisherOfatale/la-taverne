@@ -65,18 +65,9 @@ local function QuickMenu(owner)
             end
             Divider(root)
         end
-        -- Professions: its page, and its two settings, switched here without opening the window.
+        -- Professions: its page (its settings are there).
         if ns.Recipes then
             root:CreateButton(L["Professions"], function() OpenPage("professions") end)
-            root:CreateCheckbox(L["Share my recipes"], function() return ns.Recipes:IsSharing() end,
-                function() ns.Recipes:SetSharing(not ns.Recipes:IsSharing()) end)
-            local help = root:CreateCheckbox(L["Available to help"], function() return ns.Recipes:IsHelping() end,
-                function()
-                    -- (Only while sharing: greyed when the menu opened, and sharing may have been
-                    -- turned off since, the menu still open.)
-                    if ns.Recipes:IsSharing() then ns.Recipes:SetHelping(not ns.Recipes:IsHelping()) end
-                end)
-            if help.SetEnabled then help:SetEnabled(ns.Recipes:IsSharing()) end
             Divider(root)
         end
         -- Auto-invite: start it, or (running) its page, where the Stop button is. Not at all
