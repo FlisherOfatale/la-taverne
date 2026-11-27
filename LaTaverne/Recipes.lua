@@ -290,6 +290,164 @@ function Recipes:WhoKnows(id)
     return who
 end
 
+-- Asking and answering --------------------------------------------------------------
+-- "Who can make this?" goes as a hidden question to my guild (the guild prefix) and to the allied
+-- guilds (Comm.RECIPE_PREFIX). Every La Taverne whose characters know the recipe answers by
+-- itself, after a short random wait, on the side the question came from; the others stay quiet.
+-- Nothing is kept: the answers are for the question on screen.
+--   RQ { v, q = the question's number, r = recipe ID, b = my game build }
+--   RA { v, to = the asker, q, r, k = { { c = character, a = true for an alt, cd = seconds of
+--        cooldown left }, ... }, h = true when they're available to help }
+-- Named fields: a later version can add some, older ones ignore them.
+-- Allied senders go through vouching (Comm.lua), guild ones must be in the guild roster.
+local VERSION = 1
+local ANSWER_WAIT = { 0.5, 3 } -- seconds before answering, at random: answers don't all come at once
+local ASK_EVERY = 5            -- one question every 5 s at most, mine or anyone's (more are ignored)
+local MAX_CHARS = 20           -- characters in one answer, at most
+local NAME_MAX = 60
+
+local asking       -- my question: { q, r, at, answers = { [nameKey] = answer }, order = { nameKey, ... } }
+local listeners = {}
+local answered = {} -- [asker's nameKey .. "#" .. q] = when I answered (once per question)
+local lastAsked = {} -- [asker's nameKey] = when they last asked
+
+function Recipes:IsSharing() return Store().share ~= false end
+function Recipes:SetSharing(on) Store().share = on and true or false end
+function Recipes:IsHelping() return Store().help == true end
+function Recipes:SetHelping(on) Store().help = on and true or nil end
+
+function Recipes:OnChange(fn) listeners[#listeners + 1] = fn end
+local function Changed()
+    for _, fn in ipairs(listeners) do fn() end
+end
+
+-- Seconds before this recipe can be made again (transmutes, Mooncloth...), or nil when ready or
+-- unknown. In a fight the game may give values an addon can't use: then nil.
+local function CooldownLeft(id)
+    if not (C_Spell and C_Spell.GetSpellCooldown) then return nil end
+    local ok, left = pcall(function()
+        local info = C_Spell.GetSpellCooldown(id)
+        if type(info) ~= "table" then return nil end
+        local start, duration = info.startTime, info.duration
+        if type(start) ~= "number" or type(duration) ~= "number" or start <= 0 or duration <= 2 then return nil end
+        local rest = start + duration - GetTime()
+        return rest > 0 and math.floor(rest) or nil
+    end)
+    return ok and left or nil
+end
+
+-- The question I asked last, while it's on screen: { r = recipe ID, at = GetTime() when asked,
+-- answers = { [nameKey] = answer }, order = { nameKey, ... } in the order they came }. An answer:
+-- { from = who answered (the character to whisper), guild, chars = { { name, alt, readyAt } },
+-- help, after = seconds after asking, mine = true for my own characters }.
+function Recipes:GetQuestion() return asking end
+
+local function AddAnswer(key, answer)
+    if not asking.answers[key] then asking.order[#asking.order + 1] = key end
+    asking.answers[key] = answer
+end
+
+-- Ask my guild and the allied guilds who can make this recipe. My own characters are listed at
+-- once, with no message. Returns false, "wait" within ASK_EVERY of my last question; otherwise
+-- true, and whether the question could go out (false: no guild or alliance channel ready).
+function Recipes:Ask(id)
+    if not byID[id] then return false, "unknown" end
+    local now = GetTime()
+    if asking and now - asking.at < ASK_EVERY then return false, "wait" end
+    asking = { q = math.random(1, 1000000000), r = id, at = now, answers = {}, order = {} }
+    local me = ns.FullName("player")
+    local chars = {}
+    local cooldown = CooldownLeft(id)
+    for _, w in ipairs(self:WhoKnows(id)) do
+        chars[#chars + 1] = { name = w.name, alt = w.alt or false,
+            readyAt = not w.alt and cooldown and now + cooldown or nil }
+    end
+    if #chars > 0 then
+        AddAnswer(ns.NameKey(me), { from = me, guild = ns.Guild:GetName(), chars = chars,
+            help = self:IsHelping(), after = 0, mine = true })
+    end
+    local sent = false
+    if ns.Comm:IsReady() then
+        sent = ns.Comm:Send("RQ", { v = VERSION, q = asking.q, r = id, b = Build() }, "NORMAL", true) or sent
+    end
+    if ns.Alliance:IsActive() and ns.Comm:IsAllyReady() then
+        sent = ns.Comm:SendAlly("RQ", { v = VERSION, q = asking.q, r = id, b = Build() }, "NORMAL", true,
+            ns.Comm.RECIPE_PREFIX) or sent
+    end
+    Changed()
+    return true, sent
+end
+
+-- Close the question (the page closed): later answers are ignored.
+function Recipes:Forget()
+    asking = nil
+    Changed()
+end
+
+local function Prune(list, now, keep)
+    for key, t in pairs(list) do
+        if now - t > keep then list[key] = nil end
+    end
+end
+
+local function OnQuestion(scope, sender, p, isSelf)
+    if isSelf or not ready or not Recipes:IsSharing() then return end
+    local id, q = tonumber(p.r), tonumber(p.q)
+    if not id or not q or not byID[id] then return end -- (a recipe this game version doesn't have)
+    local now = GetTime()
+    local key = ns.NameKey(sender)
+    Prune(lastAsked, now, 60)
+    Prune(answered, now, 120)
+    if lastAsked[key] and now - lastAsked[key] < ASK_EVERY - 1 then
+        ns.Comm:LogNote("recipe question from " .. tostring(sender) .. " ignored: asked again too soon", "recipe questions too fast")
+        return
+    end
+    lastAsked[key] = now
+    local done = key .. "#" .. q
+    if answered[done] then return end
+    local who = Recipes:WhoKnows(id)
+    if #who == 0 then return end
+    answered[done] = now
+    C_Timer.After(ANSWER_WAIT[1] + math.random() * (ANSWER_WAIT[2] - ANSWER_WAIT[1]), function()
+        if not Recipes:IsSharing() then return end
+        local k = {}
+        for i, w in ipairs(who) do
+            if i > MAX_CHARS then break end
+            k[#k + 1] = { c = w.name, a = w.alt or nil, cd = not w.alt and CooldownLeft(id) or nil }
+        end
+        local answer = { v = VERSION, to = sender, q = q, r = id, k = k, h = Recipes:IsHelping() or nil }
+        if scope == "guild" then
+            ns.Comm:Send("RA", answer, "BULK", true)
+        else
+            ns.Comm:SendAlly("RA", answer, "BULK", true, ns.Comm.RECIPE_PREFIX)
+        end
+    end)
+end
+
+local function OnAnswer(scope, sender, p, isSelf)
+    if isSelf or not asking then return end
+    if not ns.IsMe(p.to) or tonumber(p.q) ~= asking.q or tonumber(p.r) ~= asking.r then return end
+    if type(p.k) ~= "table" then return end
+    local now = GetTime()
+    local chars = {}
+    for i, c in ipairs(p.k) do
+        if i > MAX_CHARS then break end
+        if type(c) == "table" and type(c.c) == "string" and c.c ~= "" and #c.c <= NAME_MAX then
+            local cd = tonumber(c.cd)
+            chars[#chars + 1] = { name = c.c, alt = c.a and true or false, readyAt = cd and cd > 0 and now + cd or nil }
+        end
+    end
+    if #chars == 0 then return end
+    AddAnswer(ns.NameKey(sender), { from = sender, guild = scope == "guild" and ns.Guild:GetName() or p.g,
+        chars = chars, help = p.h and true or false, after = now - asking.at })
+    Changed()
+end
+
+ns.Comm:On("RQ", function(sender, p, isSelf) OnQuestion("guild", sender, p, isSelf) end)
+ns.Comm:OnAlly("RQ", function(sender, p, isSelf) OnQuestion("ally", sender, p, isSelf) end)
+ns.Comm:On("RA", function(sender, p, isSelf) OnAnswer("guild", sender, p, isSelf) end)
+ns.Comm:OnAlly("RA", function(sender, p, isSelf) OnAnswer("ally", sender, p, isSelf) end)
+
 -- Login ---------------------------------------------------------------------------
 
 function Recipes:OnLogin()
@@ -314,11 +472,58 @@ function Recipes:OnLogin()
     end)
 end
 
+-- /taverne recipes ask: each answer printed as it comes (until the next question).
+local printed = {}
+local watching, hold = false, false
+local function PrintAnswers()
+    if not asking or hold then return end
+    for _, key in ipairs(asking.order) do
+        local a = asking.answers[key]
+        local line = key .. "#" .. asking.q
+        if a and not printed[line] then
+            printed[line] = true
+            local names = {}
+            for _, c in ipairs(a.chars) do
+                local left = c.readyAt and c.readyAt - GetTime()
+                names[#names + 1] = c.name .. (c.alt and " (alt)" or "")
+                    .. (left and left > 0 and string.format(" (ready in %d min)", math.ceil(left / 60)) or "")
+            end
+            ns.Print(string.format("%s%s, %s: %s%s (after %.1f s)", a.mine and "me: " or "", a.from, tostring(a.guild),
+                table.concat(names, ", "), a.help and ", available to help" or "", a.after))
+        end
+    end
+end
+
 -- /taverne recipes: what the catalog and my characters hold (test and diagnostics).
 ns.commands.recipes = function(arg)
     local sub, rest = strtrim(arg or ""):match("^(%S*)%s*(.-)$")
     sub = (sub or ""):lower()
-    if sub == "sweep" then
+    if sub == "ask" and rest ~= "" then
+        local entry = Recipes:Get(tonumber(rest)) or Recipes:Search(rest, 1)[1]
+        if not entry then
+            ns.Print("no recipe found for \"" .. rest .. "\"")
+            return
+        end
+        if not watching then
+            watching = true
+            Recipes:OnChange(PrintAnswers)
+        end
+        hold = true -- (my own characters come with the question: printed after the line saying it went)
+        local ok, sent = Recipes:Ask(entry.id)
+        hold = false
+        if not ok then
+            ns.Print(sent == "wait" and "one question every " .. ASK_EVERY .. " s" or "can't ask about that recipe")
+        else
+            ns.Print("asked who can make " .. entry.name .. " (" .. entry.id .. ")"
+                .. (sent and ": answers below as they come" or ": nothing sent, no guild or alliance channel ready"))
+            PrintAnswers()
+        end
+    elseif sub == "share" or sub == "help" then
+        local on = rest:lower() ~= "off"
+        if sub == "share" then Recipes:SetSharing(on) else Recipes:SetHelping(on) end
+        ns.Print(sub == "share" and ("answering questions about my recipes: " .. (on and "on" or "off"))
+            or ("available to help: " .. (on and "on" or "off")))
+    elseif sub == "sweep" then
         ns.Print(Recipes:StartSweep() and "recipe catalog: sweeping again..." or "recipe catalog: already sweeping, or not possible here")
     elseif sub == "find" and rest ~= "" then
         local found = Recipes:Search(rest, 20)
@@ -362,6 +567,8 @@ ns.commands.recipes = function(arg)
                     .. tostring(char.guild) .. (char.test and " (test)" or "") .. ", saved " .. date("%Y-%m-%d %H:%M", char.t or 0))
             end
         end
-        ns.Print("/taverne recipes find <text> | save | sweep")
+        ns.Print("answering questions: " .. (Recipes:IsSharing() and "on" or "off") .. ", available to help: "
+            .. (Recipes:IsHelping() and "on" or "off"))
+        ns.Print("/taverne recipes find <text> | ask <id or text> | share on|off | help on|off | save | sweep")
     end
 end
