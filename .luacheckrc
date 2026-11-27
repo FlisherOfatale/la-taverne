@@ -32,11 +32,11 @@ read_globals = {
     -- Namespaces
     "C_AddOns", "C_BattleNet", "C_ChatInfo", "C_ClassColor", "C_Club", "C_EventUtils",
     "C_FriendList", "C_GuildInfo", "C_Item", "C_LFGList", "C_Map", "C_PartyInfo",
-    "C_RestrictedActions", "C_Texture", "C_Timer", "C_XMLUtil", "Enum", "EventRegistry",
+    "C_RestrictedActions", "C_Spell", "C_Texture", "C_TradeSkillUI", "C_Timer", "C_XMLUtil", "Enum", "EventRegistry",
     "Settings", "MenuUtil", "ScrollUtil", "ScrollBoxConstants", "InputUtil", "ChatFrameUtil",
 
     -- Functions
-    "Ambiguate", "BetterDate", "CanEditGuildInfo", "CanViewOfficerNote",
+    "Ambiguate", "BetterDate", "debugprofilestop", "CanEditGuildInfo", "CanViewOfficerNote",
     "ChatFrame_AddMessageEventFilter", "ChatFrame_MessageEventHandler", "ChatFrame_OnEvent",
     "ChatFrame_RemoveChannel", "ChatFrame_SendTell", "ClearOverrideBindings",
     "CreateAtlasMarkup", "CreateDataProvider", "CreateFrame", "CreateFramePool",
@@ -52,7 +52,7 @@ read_globals = {
     "GetSubZoneText", "GetTime", "GetUnitName", "GetZoneText", "GuildControlGetNumRanks",
     "GuildControlGetRankName", "GuildRoster", "InCombatLockdown", "InterfaceOptions_AddCategory",
     "InviteUnit", "IsAddOnLoaded", "IsAltKeyDown", "IsControlKeyDown", "IsInGroup", "IsInGuild",
-    "IsInInstance", "IsInRaid", "IsMouseButtonDown", "IsResting", "IsShiftKeyDown",
+    "IsInInstance", "IsInRaid", "IsPlayerSpell", "IsMouseButtonDown", "IsResting", "IsShiftKeyDown",
     "JoinTemporaryChannel", "LeaveChannelByName", "PlaySound", "QueryGuildEventLog", "ReloadUI",
     "SaveBindings", "SendChatMessage", "SendWho", "SetBinding", "SetItemRef",
     "SetOverrideBindingClick", "SetPortraitToTexture", "StaticPopup_Hide",
