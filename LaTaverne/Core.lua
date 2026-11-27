@@ -135,16 +135,38 @@ function ns.IsIgnored(name)
     return false
 end
 
--- Versions: -1, 0 or 1 when a is older, the same, or newer than b ("0.21.0").
+-- A version's numbers ("1.4.0") and its test-build suffix ("beta1", or "" for a release).
+local function SplitVersion(v)
+    v = tostring(v)
+    local base = v:match("^[%d%.]*") or ""
+    local nums = {}
+    for n in base:gmatch("%d+") do nums[#nums + 1] = tonumber(n) end
+    return nums, (v:sub(#base + 1):gsub("^[%-%.%s]+", ""):lower())
+end
+
+-- A test build ("1.4.0-beta1", "1.4.0-alpha"): true when the version has a suffix after its numbers.
+function ns.IsTestVersion(v)
+    local _, suffix = SplitVersion(v)
+    return suffix ~= ""
+end
+
+-- Versions: -1, 0 or 1 when a is older, the same, or newer than b ("0.21.0"). A test build comes
+-- before its release: 1.3.2 < 1.4.0-alpha < 1.4.0-beta1 < 1.4.0-beta2 < 1.4.0-rc1 < 1.4.0.
 function ns.CompareVersions(a, b)
-    local pa, pb = {}, {}
-    for n in tostring(a):gmatch("%d+") do pa[#pa + 1] = tonumber(n) end
-    for n in tostring(b):gmatch("%d+") do pb[#pb + 1] = tonumber(n) end
+    local pa, sa = SplitVersion(a)
+    local pb, sb = SplitVersion(b)
     for i = 1, math.max(#pa, #pb) do
         local x, y = pa[i] or 0, pb[i] or 0
         if x ~= y then return x < y and -1 or 1 end
     end
-    return 0
+    if sa == sb then return 0 end
+    if sa == "" then return 1 end
+    if sb == "" then return -1 end
+    local wa, wb = sa:match("^%a*"), sb:match("^%a*")
+    if wa ~= wb then return wa < wb and -1 or 1 end
+    local na, nb = tonumber(sa:match("%d+")) or 0, tonumber(sb:match("%d+")) or 0
+    if na ~= nb then return na < nb and -1 or 1 end
+    return sa < sb and -1 or 1
 end
 
 -- Events and modules -----------------------------------------------------------

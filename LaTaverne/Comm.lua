@@ -243,7 +243,8 @@ end
 
 -- Versions: every message carries the sender's La Taverne version (payload.ver), so a player on
 -- an old version hears that a newer one is in use (once per session), and the Players page can
--- show who's behind.
+-- show who's behind. A test build ("1.4.0-beta1") is never announced to a player on a release:
+-- most can't get it (their CurseForge app only offers releases).
 local versions = {}  -- [name key] = "0.21.0"
 local newerSeen
 
@@ -255,6 +256,7 @@ local function NoteVersion(sender, v)
     if type(v) ~= "string" or #v > 16 or not v:match("^%d+%.%d+") then return end
     versions[ns.NameKey(sender)] = v
     if ns.version == "?" or ns.CompareVersions(v, ns.version) <= 0 then return end
+    if ns.IsTestVersion(v) and not ns.IsTestVersion(ns.version) then return end
     if not newerSeen or ns.CompareVersions(v, newerSeen) > 0 then
         newerSeen = v
         ns.Print(format(ns.L["A newer La Taverne (%s) is in use. You have %s: ask for the new version, so everything keeps working together."], v, ns.version))
