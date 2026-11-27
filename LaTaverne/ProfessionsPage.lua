@@ -20,6 +20,7 @@ local SUGGEST_MAX = 50
 local panel
 local selected            -- the recipe picked (ID)
 local itemIndex           -- [item ID] = { recipe ID, ... }, built the first time an item is shift-clicked
+local itemIndexOf         -- the recipe list it was built from (Recipes.loads): built again after a new one
 local Fill                -- (below)
 
 -- A recipe's icon: the item it makes (many recipe spells only have the game's placeholder icon),
@@ -100,8 +101,10 @@ end
 -- Which recipes make this item: from the recipe list, the item each one makes (read from the
 -- client, no server request: the item's ID only). Built once, the first time.
 local function RecipesMaking(itemID)
-    if not itemIndex then
+    if not ns.Recipes:IsReady() then return nil end -- (nothing cached before the list is there)
+    if not itemIndex or itemIndexOf ~= ns.Recipes.loads then
         itemIndex = {}
+        itemIndexOf = ns.Recipes.loads
         for _, entry in ipairs(ns.Recipes:All()) do
             local ok, out = pcall(C_TradeSkillUI.GetRecipeOutputItemData, entry.id)
             local made = ok and type(out) == "table" and out.itemID
@@ -115,8 +118,11 @@ local function RecipesMaking(itemID)
 end
 
 -- A link put in the search box (shift-click on an item, an enchant, a recipe): its recipes picked.
+local lastLink, lastLinkAt
 local function TakeLink(link)
     if not (panel and panel.search and panel.search:HasFocus()) or type(link) ~= "string" then return end
+    if link == lastLink and GetTime() - lastLinkAt < 0.2 then return end -- (the same click, by the other hook)
+    lastLink, lastLinkAt = link, GetTime()
     local name = link:match("|h%[(.-)%]|h") or ""
     local itemID = tonumber(link:match("|Hitem:(%d+)"))
     local spellID = tonumber(link:match("|Henchant:(%d+)") or link:match("|Hspell:(%d+)"))
@@ -138,7 +144,9 @@ local hooked = false
 local function HookLinks()
     if hooked then return end
     hooked = true
-    -- Whichever the game has: the item link goes to the chat box (or ours, while it has the focus).
+    -- Whichever the game has: the item link goes to the chat box (or ours, while it has the
+    -- focus). Both when both exist (which one a shift-click calls isn't known); one may call the
+    -- other, so TakeLink ignores the same link twice in a moment.
     if type(_G.ChatEdit_InsertLink) == "function" then hooksecurefunc("ChatEdit_InsertLink", TakeLink) end
     if ChatFrameUtil and type(ChatFrameUtil.InsertLink) == "function" then hooksecurefunc(ChatFrameUtil, "InsertLink", TakeLink) end
 end
@@ -304,7 +312,7 @@ FillLive = function()
     local q = R:GetQuestion()
     local mineAsked = q and entry and q.r == entry.id
     local now = GetTime()
-    local wait = q and (q.at + R.ASK_EVERY - now) or 0
+    local wait = R:AskWait()
     p.ask:SetEnabled(entry ~= nil and R:IsReady() and wait <= 0)
     local answers = mineAsked and SortedAnswers(q) or {}
     K.SetListData(p.answers, answers)
@@ -321,7 +329,8 @@ FillLive = function()
         elseif #answers == 0 then
             p.status:SetText(L["Nobody online knows it, or nobody who can answer."])
         else
-            p.status:SetText(format(L["%d answers, asked %s ago"], others, Duration(ago)))
+            p.status:SetText(format(L["%d answers, asked %s ago"], others,
+                ago < 60 and format(L["%d s"], math.floor(ago)) or Duration(ago)))
         end
     end
 
@@ -432,7 +441,8 @@ function ns.BuildProfessionsPanel()
     K.WithTooltip(p.help, { L["Available to help"],
         L["Your answers say you're happy to craft for others, and come first in their list."] })
 
-    ns.Recipes:OnChange(function() FillLive() end)
+    -- (The recipe list loaded, a question, an answer: the whole page, suggestions included.)
+    ns.Recipes:OnChange(function() Fill() end)
     p.Refresh = Fill
     -- Live: "Searching...", the times, the Ask button's 5 seconds.
     local wait = 0

@@ -91,6 +91,13 @@ local function Store()
     return ns.db.recipes
 end
 
+-- Who wants to know when something changes: the catalog loaded, my question, its answers.
+local listeners = {}
+function Recipes:OnChange(fn) listeners[#listeners + 1] = fn end
+local function Changed()
+    for _, fn in ipairs(listeners) do fn() end
+end
+
 local function ProfessionOf(id)
     local info = C_TradeSkillUI.GetProfessionInfoByRecipeID(id)
     local prof = info and info.parentProfessionID
@@ -123,6 +130,9 @@ local function Load(catalog)
         return a.id < b.id
     end)
     ready = true
+    -- (Counted: what's built from the catalog, the page's item index, is built again.)
+    Recipes.loads = (Recipes.loads or 0) + 1
+    Changed()
 end
 
 local function CatalogCurrent(catalog)
@@ -258,7 +268,14 @@ end
 -- Save the recipes this character knows, for answering for it from my other characters. With its
 -- guild (the test guild's in test mode, marked), so it answers only to its own guild and allies.
 function Recipes:SaveMine()
-    if not ready then return false end
+    if not ready then return false, "not ready" end
+    -- In a guild whose name the game hasn't given yet (a slow login): saved a little later, not
+    -- without its guild (an alt saved with no guild never answers).
+    local guild = ns.Guild:InGuild() and ns.Guild:GetName() or nil
+    if ns.Guild:InGuild() and not guild then
+        ScheduleSave(10)
+        return false, "no guild yet"
+    end
     local mine = {}
     for _, entry in ipairs(entries) do
         if IsPlayerSpell(entry.id) then mine[#mine + 1] = entry.id end
@@ -266,7 +283,6 @@ function Recipes:SaveMine()
     table.sort(mine)
     local store = Store()
     store.chars = store.chars or {}
-    local guild = ns.Guild:InGuild() and ns.Guild:GetName() or nil
     store.chars[ns.FullName("player")] = { guild = guild, test = ns.Guild:IsSandbox() or nil,
         build = Build(), t = Now(), ids = Encode(mine), count = #mine }
     return true, #mine
@@ -311,7 +327,8 @@ local MAX_CHARS = 20           -- characters in one answer, at most
 local NAME_MAX = 60
 
 local asking       -- my question: { q, r, at, answers = { [nameKey] = answer }, order = { nameKey, ... } }
-local listeners = {}
+local lastAskAt    -- GetTime() of my last question (kept when the question is forgotten: the others
+                   -- ignore a question that comes too soon after the one before)
 local answered = {} -- [asker's nameKey .. "#" .. q] = when I answered (once per question)
 local lastAsked = {} -- [asker's nameKey] = when they last asked
 
@@ -320,9 +337,9 @@ function Recipes:SetSharing(on) Store().share = on and true or false end
 function Recipes:IsHelping() return Store().help == true end
 function Recipes:SetHelping(on) Store().help = on and true or nil end
 
-function Recipes:OnChange(fn) listeners[#listeners + 1] = fn end
-local function Changed()
-    for _, fn in ipairs(listeners) do fn() end
+-- Seconds before I can ask again (0: now).
+function Recipes:AskWait()
+    return lastAskAt and math.max(0, lastAskAt + ASK_EVERY - GetTime()) or 0
 end
 
 -- Seconds before this recipe can be made again (transmutes, Mooncloth...), or nil when ready or
@@ -357,7 +374,8 @@ end
 function Recipes:Ask(id)
     if not byID[id] then return false, "unknown" end
     local now = GetTime()
-    if asking and now - asking.at < ASK_EVERY then return false, "wait" end
+    if self:AskWait() > 0 then return false, "wait" end
+    lastAskAt = now
     asking = { q = math.random(1, 1000000000), r = id, at = now, answers = {}, order = {} }
     local me = ns.FullName("player")
     local chars = {}
@@ -436,7 +454,9 @@ local function OnAnswer(scope, sender, p, isSelf)
     local chars = {}
     for i, c in ipairs(p.k) do
         if i > MAX_CHARS then break end
-        if type(c) == "table" and type(c.c) == "string" and c.c ~= "" and #c.c <= NAME_MAX then
+        -- A character's name: no "|" (no colors, icons or links in someone else's list).
+        if type(c) == "table" and type(c.c) == "string" and c.c ~= "" and #c.c <= NAME_MAX
+            and not c.c:find("|", 1, true) then
             local cd = tonumber(c.cd)
             chars[#chars + 1] = { name = c.c, alt = c.a and true or false, readyAt = cd and cd > 0 and now + cd or nil }
         end
@@ -485,8 +505,10 @@ function Recipes:OnLogin()
 end
 
 -- /taverne recipes ask: each answer printed as it comes (until the next question).
+local L = ns.L
 local printed = {}
 local watching, hold = false, false
+local function OnOff(on) return on and L["on"] or L["off"] end
 local function PrintAnswers()
     if not asking or hold then return end
     for _, key in ipairs(asking.order) do
@@ -497,11 +519,11 @@ local function PrintAnswers()
             local names = {}
             for _, c in ipairs(a.chars) do
                 local left = c.readyAt and c.readyAt - GetTime()
-                names[#names + 1] = c.name .. (c.alt and " (alt)" or "")
-                    .. (left and left > 0 and string.format(" (ready in %d min)", math.ceil(left / 60)) or "")
+                names[#names + 1] = c.name .. (c.alt and (" " .. L["(alt)"]) or "")
+                    .. (left and left > 0 and (" " .. format(L["(ready in %d min)"], math.ceil(left / 60))) or "")
             end
-            ns.Print(string.format("%s%s, %s: %s%s (after %.1f s)", a.mine and "me: " or "", a.from, tostring(a.guild),
-                table.concat(names, ", "), a.help and ", available to help" or "", a.after))
+            ns.Print(format(L["%s%s, %s: %s%s (after %.1f s)"], a.mine and L["me: "] or "", a.from, tostring(a.guild),
+                table.concat(names, ", "), a.help and (", " .. L["available to help"]) or "", a.after))
         end
     end
 end
@@ -513,7 +535,7 @@ ns.commands.recipes = function(arg)
     if sub == "ask" and rest ~= "" then
         local entry = Recipes:Get(tonumber(rest)) or Recipes:Search(rest, 1)[1]
         if not entry then
-            ns.Print("no recipe found for \"" .. rest .. "\"")
+            ns.Print(format(L["No recipe found for \"%s\"."], rest))
             return
         end
         if not watching then
@@ -524,42 +546,45 @@ ns.commands.recipes = function(arg)
         local ok, sent = Recipes:Ask(entry.id)
         hold = false
         if not ok then
-            ns.Print(sent == "wait" and "one question every " .. ASK_EVERY .. " s" or "can't ask about that recipe")
+            ns.Print(sent == "wait" and format(L["One question every %d seconds."], ASK_EVERY) or L["Can't ask about that recipe."])
         else
-            ns.Print("asked who can make " .. entry.name .. " (" .. entry.id .. ")"
-                .. (sent and ": answers below as they come" or ": nothing sent, no guild or alliance channel ready"))
+            ns.Print(format(sent and L["Asked who can make %s (%d): answers below as they come."]
+                or L["Asked who can make %s (%d): nothing sent, no guild or alliance channel ready."], entry.name, entry.id))
             PrintAnswers()
         end
     elseif sub == "share" or sub == "help" then
         local on = rest:lower() ~= "off"
         if sub == "share" then Recipes:SetSharing(on) else Recipes:SetHelping(on) end
-        ns.Print(sub == "share" and ("answering questions about my recipes: " .. (on and "on" or "off"))
-            or ("available to help: " .. (on and "on" or "off")))
+        ns.Print(format(sub == "share" and L["Answering questions about my recipes: %s"] or L["Available to help: %s"], OnOff(on)))
     elseif sub == "sweep" then
-        ns.Print(Recipes:StartSweep() and "recipe catalog: sweeping again..." or "recipe catalog: already sweeping, or not possible here")
+        ns.Print(Recipes:StartSweep() and L["Recipe list: building it again..."] or L["Recipe list: already being built, or not possible here."])
     elseif sub == "find" and rest ~= "" then
         local found = Recipes:Search(rest, 20)
-        ns.Print(#found .. " recipe(s) for \"" .. rest .. "\":")
+        ns.Print(format(L["%d recipe(s) for \"%s\":"], #found, rest))
         for _, entry in ipairs(found) do
-            local who = Recipes:WhoKnows(entry.id)
             local names = {}
-            for _, w in ipairs(who) do names[#names + 1] = w.name .. (w.alt and " (alt)" or "") end
+            for _, w in ipairs(Recipes:WhoKnows(entry.id)) do names[#names + 1] = w.name .. (w.alt and (" " .. L["(alt)"]) or "") end
             ns.Print(entry.id, entry.name, "-", Recipes:ProfessionName(entry.prof) or entry.prof,
-                #names > 0 and ("- known by " .. table.concat(names, ", ")) or "")
+                #names > 0 and ("- " .. format(L["known by %s"], table.concat(names, ", "))) or "")
         end
     elseif sub == "save" then
         local ok, n = Recipes:SaveMine()
-        ns.Print(ok and ("saved: this character knows " .. n .. " recipe(s)") or "the catalog isn't ready yet")
+        if ok then
+            ns.Print(format(L["Saved: this character knows %d recipe(s)."], n))
+        else
+            ns.Print(n == "no guild yet" and L["Your guild isn't known yet: saved again in a few seconds."]
+                or L["The recipe list isn't ready yet."])
+        end
     else
         local sweeping, at, last = Recipes:IsSweeping()
         local catalog = Store().catalog
         if sweeping then
-            ns.Print(string.format("recipe catalog: sweeping, %d%%", math.floor(at / last * 100)))
+            ns.Print(format(L["Recipe list: being built, %d%%"], math.floor(at / last * 100)))
         elseif not ready then
-            ns.Print("recipe catalog: not built yet (starts " .. SWEEP_AFTER .. " s after login, out of combat)")
+            ns.Print(format(L["Recipe list: not built yet (starts %d s after login, out of combat)."], SWEEP_AFTER))
         else
             local total, per = Recipes:Counts()
-            ns.Print("recipe catalog: " .. total .. " recipes, game build " .. tostring(catalog and catalog.build))
+            ns.Print(format(L["Recipe list: %d recipes, game build %s"], total, tostring(catalog and catalog.build)))
             local lines = {}
             for prof, n in pairs(per) do lines[#lines + 1] = (profNames[prof] or prof) .. " " .. n end
             table.sort(lines)
@@ -569,18 +594,18 @@ ns.commands.recipes = function(arg)
         if s then
             local skipped = {}
             for prof, n in pairs(s.skipped) do skipped[#skipped + 1] = prof .. ":" .. n end
-            ns.Print(string.format("last sweep: %d recipes, %.2f s of work over %d frames, %.1f s in all; other skill lines skipped: %s",
-                s.count, s.work / 1000, s.frames, s.seconds, #skipped > 0 and table.concat(skipped, " ") or "none"))
+            ns.Print(format(L["Last build: %d recipes, %.2f s of work over %d frames, %.1f s in all; other skill lines left out: %s"],
+                s.count, s.work / 1000, s.frames, s.seconds, #skipped > 0 and table.concat(skipped, " ") or L["none"]))
         end
         local me = ns.FullName("player")
         for name, char in pairs(Store().chars or {}) do
             if type(char) == "table" then
-                ns.Print((name == me and "this character" or name) .. ": " .. tostring(char.count) .. " recipe(s), guild "
-                    .. tostring(char.guild) .. (char.test and " (test)" or "") .. ", saved " .. date("%Y-%m-%d %H:%M", char.t or 0))
+                ns.Print(format(L["%s: %s recipe(s), guild %s%s, saved %s"], name == me and L["this character"] or name,
+                    tostring(char.count), tostring(char.guild), char.test and (" " .. L["(test)"]) or "",
+                    date("%Y-%m-%d %H:%M", char.t or 0)))
             end
         end
-        ns.Print("answering questions: " .. (Recipes:IsSharing() and "on" or "off") .. ", available to help: "
-            .. (Recipes:IsHelping() and "on" or "off"))
-        ns.Print("/taverne recipes find <text> | ask <id or text> | share on|off | help on|off | save | sweep")
+        ns.Print(format(L["Answering questions: %s, available to help: %s"], OnOff(Recipes:IsSharing()), OnOff(Recipes:IsHelping())))
+        ns.Print(L["/taverne recipes find <text> | ask <id or text> | share on|off | help on|off | save | sweep"])
     end
 end
