@@ -27,7 +27,12 @@ local PROBE_PREFIX = "LaTaverneProbe"
 -- OpenMap without La Taverne) has its own too, so it never slows the relayed chat down.
 Comm.RELAY_PREFIX = "LaTaverneR"
 Comm.MAP_PREFIX = "LaTaverneM"
-local ALLY_PREFIXES = { [ALLY_PREFIX] = true, [Comm.RELAY_PREFIX] = true, [Comm.MAP_PREFIX] = true }
+-- Profession recipes (Recipes.lua): the questions to the allied guilds and their answers, on
+-- their own prefix too, so a burst of answers never slows the allied chat or the relay. (In my
+-- guild they go on the guild prefix: few, and small.)
+Comm.RECIPE_PREFIX = "LaTaverneT"
+local ALLY_PREFIXES = { [ALLY_PREFIX] = true, [Comm.RELAY_PREFIX] = true, [Comm.MAP_PREFIX] = true,
+    [Comm.RECIPE_PREFIX] = true }
 local PROTOCOL = 1
 local JOIN_DELAY = 8   -- seconds after login, so the game's own channels (General, Trade...) keep their numbers
 local MAX_QUEUE = 50
@@ -1129,8 +1134,8 @@ end
 local allySerial = 0
 
 -- Send to the allied guilds. Payload always gets the sender's guild name.
--- noQueue: as for Comm:Send. prefix: Comm.RELAY_PREFIX or Comm.MAP_PREFIX for the relay, nil
--- otherwise. retry: send it once more if the game's channel throttle refuses it (chat lines).
+-- noQueue: as for Comm:Send. prefix: Comm.RELAY_PREFIX or Comm.MAP_PREFIX for the relay,
+-- Comm.RECIPE_PREFIX for the recipes, nil otherwise. retry: send it once more if the game's channel throttle refuses it (chat lines).
 function Comm:SendAlly(msgType, payload, priority, noQueue, prefix, retry)
     if ns.reloadPending then return false end
     payload = payload or {}

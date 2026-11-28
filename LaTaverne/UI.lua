@@ -4921,6 +4921,11 @@ local SECTIONS = {
       icon = { "Interface\\Icons\\Spell_Fire_Flare", "Interface\\Icons\\Spell_Holy_MindVision",
           "Interface\\Icons\\INV_Torch_Lit" },
       pages = { "relay" } },
+    -- Professions (ProfessionsPage.lua): who can make a recipe. An anvil, then a recipe book.
+    { key = "professions", label = "Professions",
+      icon = { "Interface\\Icons\\Trade_BlackSmithing", "Interface\\Icons\\INV_Misc_Book_11",
+          "Interface\\Icons\\INV_Hammer_20" },
+      pages = { "professions" } },
     -- Auto-invite: a horn, calling people in.
     { key = "autoinvite", label = "Auto-invite",
       icon = { "Interface\\Icons\\INV_Misc_Horn_01", "Interface\\Icons\\Ability_Warrior_BattleShout" },
@@ -5246,6 +5251,7 @@ local function CreateMainFrame()
         autoinviteSettings = ns.BuildInvitesSettingsPanel,
         network = BuildNetworkPanel,
         relay = ns.BuildRelayPanel,
+        professions = ns.BuildProfessionsPanel,
         officers = BuildOfficerPanel,
         options = BuildOptionsPanel,
         debug = ns.BuildDebugPanel,

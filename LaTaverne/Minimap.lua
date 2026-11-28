@@ -65,6 +65,11 @@ local function QuickMenu(owner)
             end
             Divider(root)
         end
+        -- Professions: its page (its settings are there).
+        if ns.Recipes then
+            root:CreateButton(L["Professions"], function() OpenPage("professions") end)
+            Divider(root)
+        end
         -- Auto-invite: start it, or (running) its page, where the Stop button is. Not at all
         -- when the officers turned it off for my rank.
         if not ns.Invites:IsAllowed() then

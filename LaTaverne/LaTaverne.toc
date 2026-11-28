@@ -28,6 +28,7 @@ Alliance.lua
 Vouch.lua
 AllyChat.lua
 AllyMap.lua
+Recipes.lua
 Relay.lua
 
 Invites.lua
@@ -36,6 +37,7 @@ Lynx.lua
 
 UI.lua
 RelayPage.lua
+ProfessionsPage.lua
 Gamepad.lua
 Minimap.lua
 InviteCard.lua
