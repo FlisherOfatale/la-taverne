@@ -1,8 +1,8 @@
 -- The Professions page: who in my guild or the allied guilds can make a recipe.
 -- - Left: a search box (a recipe's name, or shift-click an item into it) and the recipes that
 --   match, from this client's own recipe list (Recipes.lua: nothing is asked while typing).
--- - Right: the recipe picked, Search, then the answers as they come: who answered,
---   which of their characters know it (an alt is named), available to help,
+-- - Right: the recipe picked, Search, then the answers as they come: who answered and their
+--   zone when they share it on the map (or the guild roster shows it), which of their characters know it (an alt is named), available to help,
 --   cooldown, and Whisper (the chat box opened on them, a short text with the item's link,
 --   not sent). My own characters are listed at once.
 -- - Bottom: share my recipes (answer the questions), available to help.
@@ -223,6 +223,15 @@ local function KnowsLine(answer)
     return table.concat(parts, ", ")
 end
 
+-- Where the one who answered is: the zone they share on the map (AllyMap.lua), else, for a
+-- guildmate, the one the guild roster shows. Nil when neither says.
+local function ZoneOf(name)
+    local zone = ns.AllyMap and ns.AllyMap.ZoneOf and ns.AllyMap:ZoneOf(name)
+    if zone then return zone end
+    local member = ns.Guild:GetMember(name)
+    return member and member.zone
+end
+
 local function InitAnswer(row, answer)
     local K = Kit()
     if not row.init then
@@ -245,7 +254,9 @@ local function InitAnswer(row, answer)
         end)
     end
     row.answer = answer
-    row.name:SetText((answer.mine and ("|cff808080" .. L["You"] .. ":|r ") or "") .. "|cffffd100" .. answer.from .. "|r")
+    local zone = not answer.mine and ZoneOf(answer.from)
+    row.name:SetText((answer.mine and ("|cff808080" .. L["You"] .. ":|r ") or "") .. "|cffffd100" .. answer.from .. "|r"
+        .. (zone and ("  |cff808080" .. zone:gsub("|", "||") .. "|r") or ""))
     row.badge:SetText(answer.help and ("|cff20ff20" .. L["Available to help"] .. "|r") or "")
     local bits = { KnowsLine(answer) }
     for _, c in ipairs(answer.chars) do
