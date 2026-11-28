@@ -1229,7 +1229,7 @@ if GetLocale() == "frFR" then
     -- /taverne recipes (Recipes.lua, test and diagnostics)
     L["(alt)"] = "(alt)"
     L["(ready in %d min)"] = "(prête dans %d min)"
-    L["%s%s, %s: %s%s (after %.1f s)"] = "%s%s, %s : %s%s (après %.1f s)"
+    L["%s%s: %s%s (after %.1f s)"] = "%s%s : %s%s (après %.1f s)"
     L["me: "] = "moi : "
     L["available to help"] = "disponible pour aider"
     L["No recipe found for \"%s\"."] = "Aucune recette trouvée pour « %s »."

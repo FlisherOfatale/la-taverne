@@ -2,7 +2,7 @@
 -- - Left: a search box (a recipe's name, or shift-click an item into it) and the recipes that
 --   match, from this client's own recipe list (Recipes.lua: nothing is asked while typing).
 -- - Right: the recipe picked, Ask the alliance, then the answers as they come: who answered,
---   which of their characters know it (an alt is named), their guild, available to help,
+--   which of their characters know it (an alt is named), available to help,
 --   cooldown, and Whisper (the chat box opened on them, a short text with the item's link,
 --   not sent). My own characters are listed at once.
 -- - Bottom: share my recipes (answer the questions), available to help.
@@ -234,7 +234,6 @@ local function InitAnswer(row, answer)
     row.name:SetText((answer.mine and ("|cff808080" .. L["You"] .. ":|r ") or "") .. "|cffffd100" .. answer.from .. "|r")
     row.badge:SetText(answer.help and ("|cff20ff20" .. L["Available to help"] .. "|r") or "")
     local bits = { KnowsLine(answer) }
-    if answer.guild then bits[#bits + 1] = "|cff8fb8e8" .. answer.guild .. "|r" end
     for _, c in ipairs(answer.chars) do
         local left = c.readyAt and c.readyAt - GetTime()
         if left and left > 0 then

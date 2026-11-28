@@ -300,7 +300,7 @@ function Recipes:WhoKnows(id)
             and (ns.Guild:IsMyGuild(char.guild) or ns.Alliance:IsAllied(char.guild)) then
             for _, known in ipairs(Decode(char.ids)) do
                 if known == id then
-                    who[#who + 1] = { name = name, alt = true, guild = char.guild }
+                    who[#who + 1] = { name = name, alt = true }
                     break
                 end
             end
@@ -359,7 +359,7 @@ end
 
 -- The question I asked last, while it's on screen: { r = recipe ID, at = GetTime() when asked,
 -- answers = { [nameKey] = answer }, order = { nameKey, ... } in the order they came }. An answer:
--- { from = who answered (the character to whisper), guild, chars = { { name, alt, readyAt } },
+-- { from = who answered (the character to whisper), chars = { { name, alt, readyAt } },
 -- help, after = seconds after asking, mine = true for my own characters }.
 function Recipes:GetQuestion() return asking end
 
@@ -385,7 +385,7 @@ function Recipes:Ask(id)
             readyAt = not w.alt and cooldown and now + cooldown or nil }
     end
     if #chars > 0 then
-        AddAnswer(ns.NameKey(me), { from = me, guild = ns.Guild:GetName(), chars = chars,
+        AddAnswer(ns.NameKey(me), { from = me, chars = chars,
             help = self:IsHelping(), after = 0, mine = true })
     end
     local sent = false
@@ -462,8 +462,9 @@ local function OnAnswer(scope, sender, p, isSelf)
         end
     end
     if #chars == 0 then return end
-    AddAnswer(ns.NameKey(sender), { from = sender, guild = scope == "guild" and ns.Guild:GetName() or p.g,
-        chars = chars, help = p.h and true or false, after = now - asking.at })
+    -- (No guild: the one who answered may answer for an alt in another guild, and the asker only
+    -- needs who to whisper. The alliance messages' g stays, Comm.lua checks the sender with it.)
+    AddAnswer(ns.NameKey(sender), { from = sender, chars = chars, help = p.h and true or false, after = now - asking.at })
     Changed()
 end
 
@@ -522,7 +523,7 @@ local function PrintAnswers()
                 names[#names + 1] = c.name .. (c.alt and (" " .. L["(alt)"]) or "")
                     .. (left and left > 0 and (" " .. format(L["(ready in %d min)"], math.ceil(left / 60))) or "")
             end
-            ns.Print(format(L["%s%s, %s: %s%s (after %.1f s)"], a.mine and L["me: "] or "", a.from, tostring(a.guild),
+            ns.Print(format(L["%s%s: %s%s (after %.1f s)"], a.mine and L["me: "] or "", a.from,
                 table.concat(names, ", "), a.help and (", " .. L["available to help"]) or "", a.after))
         end
     end
