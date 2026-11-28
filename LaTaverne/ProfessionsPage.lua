@@ -66,9 +66,11 @@ local function RecipeLink(id, done)
             return
         end
     end
+    -- (Two lookups, not a list: Forever has no C_TradeSkillUI.GetRecipeLink, and a nil first in a
+    -- list stops ipairs before C_Spell.GetSpellLink.)
     local link
-    for _, get in ipairs({ C_TradeSkillUI.GetRecipeLink, C_Spell.GetSpellLink }) do
-        if not link and get then
+    for _, get in pairs({ recipe = C_TradeSkillUI.GetRecipeLink, spell = C_Spell.GetSpellLink }) do
+        if not link then
             local got, value = pcall(get, id)
             if got and type(value) == "string" and value ~= "" then link = value end
         end

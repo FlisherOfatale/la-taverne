@@ -329,7 +329,7 @@ local NAME_MAX = 60
 local asking       -- my question: { q, r, at, answers = { [nameKey] = answer }, order = { nameKey, ... } }
 local lastAskAt    -- GetTime() of my last question (kept when the question is forgotten: the others
                    -- ignore a question that comes too soon after the one before)
-local answered = {} -- [asker's nameKey .. "#" .. q] = when I answered (once per question)
+local heard = {} -- [asker's nameKey .. "#" .. q] = when I heard that question (answered once at most)
 local lastAsked = {} -- [asker's nameKey] = when they last asked
 
 function Recipes:IsSharing() return Store().share ~= false end
@@ -419,17 +419,19 @@ local function OnQuestion(scope, sender, p, isSelf)
     local now = GetTime()
     local key = ns.NameKey(sender)
     Prune(lastAsked, now, 60)
-    Prune(answered, now, 120)
+    Prune(heard, now, 120)
+    -- The same question again: it comes on both sides, the guild and the alliance (my guildmates
+    -- hear the alliance channel too). Not a new question, nothing to log.
+    local done = key .. "#" .. q
+    if heard[done] then return end
     if lastAsked[key] and now - lastAsked[key] < ASK_EVERY - 1 then
         ns.Comm:LogNote("recipe question from " .. tostring(sender) .. " ignored: asked again too soon", "recipe questions too fast")
         return
     end
     lastAsked[key] = now
-    local done = key .. "#" .. q
-    if answered[done] then return end
+    heard[done] = now
     local who = Recipes:WhoKnows(id)
     if #who == 0 then return end
-    answered[done] = now
     C_Timer.After(ANSWER_WAIT[1] + math.random() * (ANSWER_WAIT[2] - ANSWER_WAIT[1]), function()
         if not Recipes:IsSharing() then return end
         local k = {}
@@ -495,9 +497,12 @@ function Recipes:OnLogin()
         C_Timer.After(SWEEP_AFTER, function() Recipes:StartSweep() end)
     end
     -- A recipe learned: saved again a moment later. Which event the game sends isn't known yet
-    -- (to check in game): every likely one, those it doesn't have are skipped.
+    -- (to check in game): every likely one, those it doesn't have are skipped. (Forever's API
+    -- documentation has NEW_RECIPE_LEARNED, LEARNED_SPELL_IN_SKILL_LINE and SKILL_LINES_CHANGED;
+    -- LEARNED_SPELL_IN_TAB is the older name, kept in case.)
     local f = CreateFrame("Frame")
-    for _, event in ipairs({ "LEARNED_SPELL_IN_TAB", "NEW_RECIPE_LEARNED", "SKILL_LINES_CHANGED" }) do
+    for _, event in ipairs({ "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_SKILL_LINE", "LEARNED_SPELL_IN_TAB",
+        "SKILL_LINES_CHANGED" }) do
         pcall(f.RegisterEvent, f, event)
     end
     f:SetScript("OnEvent", function()
