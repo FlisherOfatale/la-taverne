@@ -1,12 +1,11 @@
-# La Taverne 1.4.0-beta1
+# La Taverne 1.4.0
 
 *2026-11-27*
 
 ## English
 
-A test build of 1.4.0, for players whose CurseForge app is set to Beta or Alpha.
-
 ### New
+- A **Professions** tab: find who in your guild or the allied guilds can make a recipe. Type its name or shift-click an item, then ask: every La Taverne whose character, or one of its alts, knows it answers within a few seconds, with the cooldown if it has one and whether they're available to help. Whisper opens the chat box on them with the item ready, not sent. Your recipes are shared the same way: untick Share my recipes on the page to stop.
 - The guild relay page says, for each of your guild's relays, when it was last heard on the guild channel and on the alliance channel, and warns when the allied guilds may not be seeing it.
 - The guild relay checks itself while it runs (a job nobody takes, two relays at once, a late signal, a relay the allied guilds may not see) and says so in the relay page's events and the copied report.
 
@@ -18,12 +17,12 @@ A test build of 1.4.0, for players whose CurseForge app is set to Beta or Alpha.
 
 ### Fixes
 - Guild relay: lines written in a guild's linked Discord are no longer passed on to the allied guilds. They showed as a code like |Kx4|k: the game never gives addons their words.
+- The "a newer La Taverne is in use" line no longer points players to test versions they can't get.
 
 ## Français
 
-Une version de test de la 1.4.0, pour les joueurs dont l'application CurseForge est réglée sur Beta ou Alpha.
-
 ### Nouveautés
+- Un onglet **Métiers** : trouvez qui, dans votre guilde ou les guildes alliées, peut fabriquer une recette. Tapez son nom ou faites Maj-clic sur un objet, puis demandez : chaque La Taverne dont le personnage, ou un de ses alts, la connaît répond en quelques secondes, avec le temps de recharge s'il y en a un et s'il est disponible pour aider. Chuchoter ouvre la boîte de discussion sur lui avec l'objet prêt, sans l'envoyer. Vos recettes sont partagées de la même façon : décochez Partager mes recettes sur la page pour arrêter.
 - La page du relais de guilde indique, pour chaque relais de votre guilde, quand il a été entendu pour la dernière fois sur le canal de guilde et sur le canal de l'alliance, et avertit quand les guildes alliées risquent de ne pas le voir.
 - Le relais de guilde se vérifie lui-même pendant qu'il fonctionne (une tâche que personne ne prend, deux relais à la fois, un signal en retard, un relais que les guildes alliées ne voient peut-être pas) et le signale dans les événements de la page du relais et dans le rapport copié.
 
@@ -35,3 +34,4 @@ Une version de test de la 1.4.0, pour les joueurs dont l'application CurseForge 
 
 ### Corrections
 - Relais de guilde : les lignes écrites dans le Discord lié à une guilde ne sont plus transmises aux guildes alliées. Elles s'affichaient comme un code du genre |Kx4|k : le jeu ne donne jamais leurs mots aux add-ons.
+- La ligne « une version plus récente de La Taverne est utilisée » n'envoie plus les joueurs vers des versions de test qu'ils ne peuvent pas obtenir.
